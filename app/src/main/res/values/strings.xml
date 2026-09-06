@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Linux - Dsu</string>
+    <string name="terminal_tile_label">终端</string>
+    <string name="terminal_prompt_label">Ubuntu</string>
+</resources>

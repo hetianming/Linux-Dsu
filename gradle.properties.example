@@ -1,0 +1,10 @@
+org.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+android.nonTransitiveRClass=true
+android.checkReleaseBuilds=false
+org.gradle.workers.max=2
+
+# Optional release signing. Keep the keystore and passwords outside Git.
+RELEASE_KEY_ALIAS=release
+RELEASE_STORE_PASSWORD=your-store-password
+RELEASE_KEY_PASSWORD=your-key-password

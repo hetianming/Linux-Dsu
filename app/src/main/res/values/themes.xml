@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.App" parent="Theme.Material3.Light.NoActionBar">
+        <item name="android:forceDarkAllowed">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">#F5F6FB</item>
+    </style>
+
+    <style name="Theme.App.Terminal" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:forceDarkAllowed">true</item>
+        <item name="android:windowBackground">#241F1B</item>
+        <item name="android:colorBackground">#241F1B</item>
+        <item name="android:navigationBarColor">#241F1B</item>
+        <item name="android:statusBarColor">#241F1B</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>
