@@ -27,6 +27,7 @@ object ChrootRunner {
             set +x
             ROOTFS=${q(rootfs.path)}
             MOUNT_LIST="${'$'}ROOTFS/.xsh_mounts"
+            HOST_FILES="${'$'}{ROOTFS%/rootfs/ubuntu}"
 
             cleanup() {
               if [ -f "${'$'}MOUNT_LIST" ]; then
@@ -41,6 +42,7 @@ object ChrootRunner {
               /system/bin/toybox umount "${'$'}ROOTFS/sys" 2>/dev/null
               /system/bin/toybox umount "${'$'}ROOTFS/tmp" 2>/dev/null
               /system/bin/toybox umount "${'$'}ROOTFS/etc/resolv.conf" 2>/dev/null
+              /system/bin/toybox umount "${'$'}ROOTFS/run/android-audio.pcm" 2>/dev/null
             }
 
             trap cleanup EXIT INT TERM HUP
@@ -55,6 +57,11 @@ object ChrootRunner {
 
             : > "${'$'}MOUNT_LIST" || exit 1
             /system/bin/toybox mkdir -p "${'$'}ROOTFS/dev/pts" "${'$'}ROOTFS/proc" "${'$'}ROOTFS/sys" "${'$'}ROOTFS/tmp" "${'$'}ROOTFS/root"
+            /system/bin/toybox mkdir -p "${'$'}ROOTFS/run"
+            /system/bin/toybox rm -f "${'$'}ROOTFS/run/android-audio.pcm"
+            /system/bin/toybox mkfifo "${'$'}ROOTFS/run/android-audio.pcm" || { echo "音频错误: 无法创建 rootfs FIFO" >&2; exit 124; }
+            /system/bin/toybox chmod 0666 "${'$'}ROOTFS/run/android-audio.pcm" || { echo "音频错误: 无法设置 FIFO 权限" >&2; exit 124; }
+            /system/bin/toybox test -p "${'$'}ROOTFS/run/android-audio.pcm" || { echo "音频错误: chroot 路径不是 FIFO" >&2; exit 124; }
 
             /system/bin/toybox mount --bind /dev "${'$'}ROOTFS/dev" || { echo "挂载 /dev 失败" >&2; exit 125; }
             echo "${'$'}ROOTFS/dev" >> "${'$'}MOUNT_LIST"
@@ -81,6 +88,7 @@ object ChrootRunner {
               'if [ -r /usr/lib/os-release ]; then . /usr/lib/os-release; else . /etc/os-release 2>/dev/null; fi' \
               'export PS1="root@${'$'}{PRETTY_NAME:-Linux}:\\w# "' \
               'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' \
+              'export XDG_RUNTIME_DIR=/run/user/0; mkdir -p /run/user/0 /run/pulse; export PULSE_SERVER=unix:/run/pulse/native; if command -v pulseaudio >/dev/null 2>&1 && ! pulseaudio --check >/dev/null 2>&1; then pulseaudio --daemonize=true --exit-idle-time=-1 --load="module-native-protocol-unix socket=/run/pulse/native auth-anonymous=1" >/dev/null 2>&1 || true; fi; if command -v pactl >/dev/null 2>&1; then for attempt in 1 2 3 4 5; do pactl --server=unix:/run/pulse/native info >/dev/null 2>&1 && break; sleep 0.2; done; pactl --server=unix:/run/pulse/native load-module module-pipe-sink sink_name=android_audio format=s16le rate=44100 channels=2 file=/run/android-audio.pcm >/dev/null 2>&1 || true; pactl --server=unix:/run/pulse/native set-default-sink android_audio >/dev/null 2>&1 || true; fi; export PULSE_SINK=android_audio' \
               > "${'$'}ROOTFS/root/.bashrc"
             /system/bin/toybox printf '%s\n' \
               '. /root/.bashrc' \

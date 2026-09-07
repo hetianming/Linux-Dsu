@@ -23,6 +23,7 @@ import java.net.Socket
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.mcai.ubuntudsu.core.ChrootRunner
+import com.mcai.ubuntudsu.core.AudioBridge
 import com.mcai.ubuntudsu.core.Env
 import com.mcai.ubuntudsu.core.TerminalSessionStore
 import com.mcai.ubuntudsu.ui.Ui
@@ -43,10 +44,11 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
     private val desktopOptions = listOf(
         DesktopOption("xfce", "XFCE4", "xfce4 xfce4-goodies xfce4-terminal", "startxfce4", "exec startxfce4"),
         DesktopOption("kde", "KDE Plasma", "kde-full konsole", "startplasma-x11", "exec startplasma-x11"),
-        DesktopOption("gnome", "GNOME", "ubuntu-desktop gnome-terminal", "gnome-session", "exec gnome-session"),
+        DesktopOption("gnome", "GNOME", "ubuntu-desktop gnome-terminal", "gnome-shell", "exec env GNOME_SHELL_SESSION_MODE=ubuntu XDG_CURRENT_DESKTOP=ubuntu:GNOME XDG_SESSION_DESKTOP=ubuntu XDG_SESSION_TYPE=x11 dbus-run-session -- gnome-shell --x11"),
     )
     private var session: TerminalSession? = null
     private lateinit var terminalView: TerminalView
+    private var audioBridge: AudioBridge? = null
 
     @SuppressLint("MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -202,8 +204,8 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
     }
 
     private fun installVncDesktop(option: DesktopOption) {
-        val script = "export DEBIAN_FRONTEND=noninteractive; export LANG=C.UTF-8; export LC_ALL=C.UTF-8; . /etc/os-release >/dev/null 2>&1; result=0; if [ \"${'$'}ID\" = ubuntu ]; then DESKTOP_EXTRA='language-pack-zh-hans language-pack-zh-hans-base language-pack-gnome-zh-hans language-pack-kde-zh-hans'; elif [ \"${'$'}ID\" = debian ]; then DESKTOP_EXTRA=''; else result=1; fi; if [ \"${'$'}result\" -eq 0 ]; then dpkg --configure -a >/dev/null 2>&1 || true; apt-get update >/dev/null 2>&1 || result=1; apt-get install -y --fix-broken ${option.packages} dbus-x11 dbus-user-session locales ${'$'}DESKTOP_EXTRA fonts-noto-cjk fonts-wqy-microhei tigervnc-standalone-server tigervnc-common >/dev/null 2>&1 || result=1; dpkg --configure -a >/dev/null 2>&1 || result=1; sed -i 's/^# *zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen >/dev/null 2>&1 || result=1; grep -q '^zh_CN.UTF-8 UTF-8' /etc/locale.gen >/dev/null 2>&1 || printf '%s\\n' 'zh_CN.UTF-8 UTF-8' >> /etc/locale.gen; locale-gen zh_CN.UTF-8 >/dev/null 2>&1 || result=1; printf '%s\\n' '127.0.0.1 localhost localhost.localdomain Ubuntu' '127.0.1.1 Ubuntu' '::1 localhost localhost.localdomain ip6-localhost ip6-loopback' > /etc/hosts 2>/dev/null || result=1; mkdir -p /root/.vnc >/dev/null 2>&1 || result=1; printf '%s\\n' '#!/bin/sh' 'unset SESSION_MANAGER' 'unset DBUS_SESSION_BUS_ADDRESS' 'exec ${option.startup.removePrefix("exec ")}' > /root/.vnc/xstartup 2>/dev/null || result=1; chmod +x /root/.vnc/xstartup >/dev/null 2>&1 || result=1; printf '123456\\n123456\\nn\\n' | vncpasswd >/dev/null 2>&1 || result=1; fi; stty echo 2>/dev/null; if [ \"${'$'}result\" -eq 0 ]; then echo '[成功] ${option.name} 桌面和 VNC 安装完成'; else echo '[失败] ${option.name} 桌面和 VNC 安装'; fi"
-        sendHiddenCommand(script)
+         val script = "export DEBIAN_FRONTEND=noninteractive; export LANG=C.UTF-8; export LC_ALL=C.UTF-8; . /etc/os-release 2>/dev/null; result=0; if [ \"${'$'}ID\" = ubuntu ]; then DESKTOP_EXTRA='language-pack-zh-hans language-pack-zh-hans-base language-pack-gnome-zh-hans language-pack-kde-zh-hans'; elif [ \"${'$'}ID\" = debian ]; then DESKTOP_EXTRA=''; else echo \"[错误] 不支持的系统: ${'$'}ID\"; result=1; fi; if [ \"${'$'}result\" -eq 0 ]; then echo '[1/8] 修复 dpkg 状态'; dpkg --configure -a || true; echo '[2/8] 更新软件包索引'; apt-get update || result=1; echo '[3/8] 安装桌面、VNC 和音频组件'; apt-get install -y --fix-broken ${option.packages} dbus-x11 dbus-user-session locales ${'$'}DESKTOP_EXTRA fonts-noto-cjk fonts-wqy-microhei tigervnc-standalone-server tigervnc-common pulseaudio pulseaudio-utils || result=1; echo '[4/8] 完成 dpkg 配置'; dpkg --configure -a || result=1; echo '[5/8] 生成中文 locale'; sed -i 's/^# *zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen || result=1; grep -q '^zh_CN.UTF-8 UTF-8' /etc/locale.gen || printf '%s\\n' 'zh_CN.UTF-8 UTF-8' >> /etc/locale.gen; locale-gen zh_CN.UTF-8 || result=1; echo '[6/8] 配置 hosts'; printf '%s\\n' '127.0.0.1 localhost localhost.localdomain Ubuntu' '127.0.1.1 Ubuntu' '::1 localhost localhost.localdomain ip6-localhost ip6-loopback' > /etc/hosts || result=1; echo '[7/8] 配置 VNC 启动脚本'; mkdir -p /root/.vnc || result=1; printf '%s\\n' '#!/bin/sh' 'unset SESSION_MANAGER' 'unset DBUS_SESSION_BUS_ADDRESS' 'exec ${option.startup.removePrefix("exec ")}' > /root/.vnc/xstartup || result=1; chmod +x /root/.vnc/xstartup || result=1; echo '[8/8] 设置 VNC 密码'; printf '123456\\n123456\\nn\\n' | vncpasswd || result=1; fi; if [ \"${'$'}result\" -eq 0 ]; then echo '[成功] ${option.name} 桌面、VNC 和音频支持安装完成'; else echo '[失败] ${option.name} 桌面、VNC 或音频安装'; fi"
+         sendVisibleCommand(script)
         Toast.makeText(this, "已发送 ${option.name} 和中文环境安装脚本", Toast.LENGTH_SHORT).show()
         focusTerminalAndShowKeyboard()
     }
@@ -230,7 +232,9 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
 
     private fun startVnc(width: Int, height: Int, orientation: String, option: DesktopOption) {
         terminalView.postDelayed({
-            val startupCommand = "result=0; command -v ${option.commandCheck} >/dev/null 2>&1 || result=1; command -v vncserver >/dev/null 2>&1 || result=1; if [ \"${'$'}result\" -eq 0 ]; then vncserver -kill :1 >/dev/null 2>&1 || true; mkdir -p ~/.vnc >/dev/null 2>&1 || result=1; printf '%s\\n' '#!/bin/sh' 'unset SESSION_MANAGER' 'unset DBUS_SESSION_BUS_ADDRESS' 'exec ${option.startup.removePrefix("exec ")}' > ~/.vnc/xstartup 2>/dev/null || result=1; chmod +x ~/.vnc/xstartup >/dev/null 2>&1 || result=1; vncserver :1 -geometry ${width}x${height} -depth 24 >/dev/null 2>&1 || result=1; fi; stty echo 2>/dev/null; if [ \"${'$'}result\" -eq 0 ]; then echo '[成功] ${option.name} 桌面已启动'; else echo '[失败] ${option.name} 桌面启动'; fi"
+         audioBridge?.stop()
+         audioBridge = AudioBridge(Env.audioPipe(this)).also { it.start() }
+         val startupCommand = "result=0; audio=0; command -v ${option.commandCheck} >/dev/null 2>&1 || { echo '[错误] 找不到桌面启动命令'; result=1; }; command -v vncserver >/dev/null 2>&1 || { echo '[错误] 找不到 vncserver'; result=1; }; if [ \"${'$'}result\" -eq 0 ]; then export XDG_RUNTIME_DIR=/run/user/0; export PULSE_SERVER=unix:/run/pulse/native; mkdir -p \"${'$'}XDG_RUNTIME_DIR\" /run/pulse; echo '[音频] 检查 Android PCM FIFO'; if [ ! -p /run/android-audio.pcm ]; then echo '[音频错误] /run/android-audio.pcm 不是 FIFO'; audio=1; fi; echo '[音频] 启动 PulseAudio 用户模式'; command -v pulseaudio >/dev/null 2>&1 || { echo '[音频错误] 找不到 pulseaudio'; audio=1; }; if [ \"${'$'}audio\" -eq 0 ]; then pulseaudio --check >/dev/null 2>&1 || pulseaudio --daemonize=true --exit-idle-time=-1 --load='module-native-protocol-unix socket=/run/pulse/native auth-anonymous=1' 2>&1 || { echo '[音频错误] PulseAudio 启动失败'; audio=1; }; echo '[音频] 等待 PulseAudio socket'; ready=0; for attempt in 1 2 3 4 5; do pactl --server=unix:/run/pulse/native info >/dev/null 2>&1 && ready=1 && break; sleep 0.2; done; if [ \"${'$'}ready\" -eq 0 ]; then echo '[音频错误] pactl 无法连接 PulseAudio'; audio=1; else echo '[音频] 创建 android_audio sink'; pactl --server=unix:/run/pulse/native list short sinks; pactl --server=unix:/run/pulse/native load-module module-pipe-sink sink_name=android_audio format=s16le rate=44100 channels=2 file=/run/android-audio.pcm || audio=1; pactl --server=unix:/run/pulse/native set-default-sink android_audio || audio=1; echo '[音频] 当前 sink'; pactl --server=unix:/run/pulse/native list short sinks; fi; fi; echo '[VNC] 清理旧的 :1 display'; vncserver -kill :1 || true; rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 ~/.vnc/*:1.log ~/.vnc/*:1.pid; mkdir -p ~/.vnc || result=1; printf '%s\\n' '#!/bin/sh' 'unset SESSION_MANAGER' 'unset DBUS_SESSION_BUS_ADDRESS' 'export PULSE_SERVER=unix:/run/pulse/native' 'export PULSE_SINK=android_audio' 'exec ${option.startup.removePrefix("exec ")}' > ~/.vnc/xstartup || result=1; chmod +x ~/.vnc/xstartup || result=1; echo '[VNC] 启动 display :1'; vncserver :1 -geometry ${width}x${height} -depth 24 || result=1; fi; if [ \"${'$'}result\" -eq 0 ]; then echo '[成功] ${option.name} 桌面已启动'; [ \"${'$'}audio\" -eq 0 ] && echo '[成功] 音频桥接已启用' || echo '[警告] 桌面已启动，但 PulseAudio 音频桥接失败'; else echo '[失败] ${option.name} 桌面启动'; fi"
             sendHiddenCommand(startupCommand)
             Toast.makeText(this, "正在启动 ${option.name} VNC", Toast.LENGTH_SHORT).show()
             return@postDelayed
@@ -252,11 +256,11 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
                 if (attempt < 29) Thread.sleep(500)
             }
             runOnUiThread {
-                if (!ready) {
+                 if (!ready) {
                     Toast.makeText(this, "VNC 服务未监听 5901 端口，请查看终端错误信息", Toast.LENGTH_LONG).show()
                     return@runOnUiThread
-                }
-                val profile = com.gaurav.avnc.model.ServerProfile(
+                 }
+                 val profile = com.gaurav.avnc.model.ServerProfile(
                     name = "Ubuntu DSU",
                     host = "127.0.0.1",
                      port = 5901,
@@ -280,6 +284,11 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
             val commandBytes = (clearPreviousLine + command + "\n").toByteArray()
             session?.write(commandBytes, 0, commandBytes.size)
         }, 150)
+    }
+
+    private fun sendVisibleCommand(command: String) {
+        val commandBytes = (command + "\n").toByteArray()
+        session?.write(commandBytes, 0, commandBytes.size)
     }
 
     private var ctrlKeyActive = false
@@ -349,6 +358,7 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
     }
 
     override fun onDestroy() {
+        audioBridge?.stop()
         TerminalSessionStore.setTarget(null)
         super.onDestroy()
     }

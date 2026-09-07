@@ -28,6 +28,11 @@ class UbuntuInstallActivity : AppCompatActivity() {
     private lateinit var urlInput: EditText
     private lateinit var logText: TextView
     private lateinit var logScroll: ScrollView
+    private lateinit var backupButton: Button
+
+    private val createBackup = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/x-xz"),
+    ) { uri -> uri?.let { backupRootfs(it) } }
 
     private val pickArchive =
         registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
@@ -74,6 +79,18 @@ class UbuntuInstallActivity : AppCompatActivity() {
             pickArchive.launch(arrayOf("application/x-gzip", "application/x-xz", "application/octet-stream", "*/*"))
         })
         root.addView(localCard)
+
+        root.addView(spacer(14))
+        val backupCard = card()
+        backupCard.addView(title("备份 rootfs"))
+        backupCard.addView(TextView(this).apply {
+            text = "将已安装的 Ubuntu rootfs 打包为 .tar.xz 文件"
+            textSize = 12f
+            setTextColor(Ui.secondaryText(this@UbuntuInstallActivity))
+        })
+        backupButton = button("选择位置并备份") { createBackup.launch("ubuntu-rootfs.tar.xz") }
+        backupCard.addView(backupButton)
+        root.addView(backupCard)
 
         root.addView(spacer(14))
         val cloudCard = card()
@@ -186,6 +203,29 @@ class UbuntuInstallActivity : AppCompatActivity() {
                     log("云端安装失败: ${result.exceptionOrNull()?.message}")
                     Toast.makeText(this, "下载/安装失败", Toast.LENGTH_SHORT).show()
                 }
+                setBusy(false)
+            }
+        }
+    }
+
+    private fun backupRootfs(uri: Uri) {
+        setBusy(true)
+        backupButton.isEnabled = false
+        log("开始备份 rootfs: $uri")
+        executor.execute {
+            val result = RootfsInstaller.backup(this, uri) { progress -> updateProgress(progress) }
+            runOnUiThread {
+                if (result.isSuccess) {
+                    log("rootfs 备份完成")
+                    progressBar.progress = 10000
+                    progressText.text = "备份完成 100%"
+                    Toast.makeText(this, "备份完成", Toast.LENGTH_SHORT).show()
+                } else {
+                    val error = result.exceptionOrNull()
+                    log("rootfs 备份失败: ${error?.javaClass?.simpleName}: ${error?.message}")
+                    Toast.makeText(this, "备份失败: ${error?.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
+                }
+                backupButton.isEnabled = true
                 setBusy(false)
             }
         }

@@ -21,10 +21,10 @@ Clone the repository, then configure `local.properties` with the local Android S
 
 ### Release APK
 
-Release signing is optional. Copy `gradle.properties.example` to a local Gradle properties file, provide the signing properties, and place the keystore at `keystore/release.jks`.
+Release signing is required. Copy `gradle.properties.example` to a local Gradle properties file, provide the signing properties, and place the keystore at `keystore/release.jks`.
 
 ```bash
 ./gradlew assembleRelease
 ```
 
-The unsigned release variant remains buildable when the local keystore and signing properties are unavailable.
+The release task fails when the local keystore or signing properties are unavailable, preventing an unsigned release APK.

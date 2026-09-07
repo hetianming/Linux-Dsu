@@ -40,8 +40,14 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            if (hasReleaseSigning) {
-                signingConfig = signingConfigs.getByName("release")
+            if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
+        }
+    }
+
+    tasks.matching { it.name == "assembleRelease" }.configureEach {
+        doFirst {
+            check(hasReleaseSigning) {
+                "Release 构建需要 keystore/release.jks 以及 RELEASE_STORE_PASSWORD、RELEASE_KEY_ALIAS、RELEASE_KEY_PASSWORD"
             }
         }
     }

@@ -11,6 +11,7 @@ object Env {
     fun downloads(ctx: Context): File = File(ctx.filesDir, "downloads").apply { mkdirs() }
     fun logs(ctx: Context): File = File(ctx.filesDir, "logs").apply { mkdirs() }
     fun background(ctx: Context): File = File(ctx.filesDir, "card_bg.jpg")
+    fun audioPipe(ctx: Context): File = File(rootfs(ctx), "run/android-audio.pcm")
 
     fun ubuntuInstalled(ctx: Context): Boolean =
         File(rootfs(ctx), "bin/bash").isFile || File(rootfs(ctx), "usr/bin/bash").isFile

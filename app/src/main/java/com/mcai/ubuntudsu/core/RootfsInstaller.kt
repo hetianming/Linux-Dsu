@@ -8,6 +8,11 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
+import java.io.OutputStream
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import org.tukaani.xz.LZMA2Options
+import org.tukaani.xz.XZOutputStream
 
 data class InstallProgress(val phase: String, val current: Long, val total: Long) {
     private fun percent(): String = if (total > 0) " ${((current * 100) / total).toInt().coerceIn(0, 100)}%" else ""
@@ -16,6 +21,7 @@ data class InstallProgress(val phase: String, val current: Long, val total: Long
         "download" -> String.format("下载中%s  %s / %s", percent(), Env.formatSize(current), if (total > 0) Env.formatSize(total) else "?")
         "read" -> String.format("读取中%s  %s / %s", percent(), Env.formatSize(current), if (total > 0) Env.formatSize(total) else "?")
         "extract" -> String.format("解压中%s  %s / %s", percent(), Env.formatSize(current), if (total > 0) Env.formatSize(total) else "?")
+        "backup" -> if (total > 0) String.format("备份中%s  %s / %s", percent(), Env.formatSize(current), Env.formatSize(total)) else "准备备份 rootfs..."
         else -> phase
     }
 }
@@ -81,6 +87,57 @@ object RootfsInstaller {
         extractTo(target, Env.rootfs(ctx), onProgress).getOrThrow()
         validateRootfs(ctx, target.name)
         check(target.delete()) { "安装成功，但无法删除安装包" }
+    }
+
+    fun backup(
+        ctx: Context,
+        destination: Uri,
+        onProgress: (InstallProgress) -> Unit,
+    ): Result<Unit> = runCatching {
+        cancelled.set(false)
+        val root = Env.rootfs(ctx)
+        check(Env.ubuntuInstalled(ctx)) { "请先安装 Ubuntu rootfs" }
+        val total = Env.dirSize(root)
+        val process = ProcessBuilder(
+            "/system/bin/su", "0", "/system/bin/toybox", "tar", "-c",
+            "-C", root.path, "--exclude=proc", "--exclude=sys",
+            "--exclude=dev", "--exclude=run", ".",
+        ).redirectErrorStream(false).start()
+        val errorOutput = java.io.ByteArrayOutputStream()
+        val errorReader = Thread {
+            process.errorStream.use { it.copyTo(errorOutput) }
+        }.apply { start() }
+        var completed = false
+        try {
+            ctx.contentResolver.openOutputStream(destination, "wt")?.use { output ->
+                XZOutputStream(output, LZMA2Options(1)).use { xz ->
+                    process.inputStream.use { input ->
+                        val buffer = ByteArray(256 * 1024)
+                        var written = 0L
+                        while (true) {
+                            if (cancelled.get()) error("已取消")
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            xz.write(buffer, 0, count)
+                            written += count
+                            onProgress(InstallProgress("backup", written, total))
+                        }
+                    }
+                }
+            } ?: error("无法创建备份文件，请确认目标存储仍可写")
+            completed = true
+        } finally {
+            if (!completed && process.isAlive) process.destroyForcibly()
+        }
+        val exitCode = process.waitFor()
+        errorReader.join(5000)
+        if (exitCode != 0) {
+            val detail = errorOutput.toString(Charsets.UTF_8.name()).trim()
+            error("root 权限打包失败${if (detail.isEmpty()) "" else ": $detail"}")
+        }
+        if (total > 0) {
+            onProgress(InstallProgress("backup", total, total))
+        }
     }
 
     private fun extractTo(archive: File, dest: File, onProgress: (InstallProgress) -> Unit): Result<Unit> {
@@ -152,5 +209,84 @@ object RootfsInstaller {
             else -> false
         }
         check(deleted) { "安装成功，但无法删除安装包" }
+    }
+
+    private class TarWriter(
+        private val output: OutputStream,
+        private val root: File,
+        private val total: Long,
+        private val onProgress: (InstallProgress) -> Unit,
+    ) {
+        private var written = 0L
+        private val excluded = setOf("proc", "sys", "dev", "run")
+
+        fun write() {
+            root.listFiles()?.sortedBy { it.name }?.forEach { writeEntry(it, it.name) }
+            output.write(ByteArray(1024))
+            onProgress(InstallProgress("backup", total, total))
+        }
+
+        private fun writeEntry(file: File, name: String) {
+            if (file.parentFile == root && file.name in excluded) return
+            if (cancelled.get()) error("已取消")
+            val path = file.toPath()
+            val relative = name.trimStart('/')
+            when {
+                Files.isSymbolicLink(path) -> {
+                    val link = Files.readSymbolicLink(path).toString()
+                    writeHeader(relative, 0, '2', link)
+                }
+                file.isDirectory -> {
+                    writeHeader("$relative/", 0, '5', "")
+                    file.listFiles()?.sortedBy { it.name }?.forEach { child ->
+                        writeEntry(child, "$relative/${child.name}")
+                    }
+                }
+                Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) -> {
+                    writeHeader(relative, file.length(), '0', "")
+                    file.inputStream().use { input ->
+                        val buffer = ByteArray(256 * 1024)
+                        while (true) {
+                            if (cancelled.get()) error("已取消")
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            output.write(buffer, 0, count)
+                            written += count
+                            onProgress(InstallProgress("backup", written, total))
+                        }
+                    }
+                    pad(file.length())
+                }
+            }
+        }
+
+        private fun writeHeader(name: String, size: Long, type: Char, link: String) {
+            val header = ByteArray(512)
+            putString(header, 0, 100, name)
+            putString(header, 100, 8, "0000755\u0000")
+            putString(header, 108, 8, "0000000\u0000")
+            putString(header, 116, 8, "0000000\u0000")
+            putString(header, 124, 12, "%011o\u0000".format(size))
+            putString(header, 136, 12, "%011o\u0000".format(System.currentTimeMillis() / 1000))
+            putString(header, 148, 8, "        ")
+            header[156] = type.code.toByte()
+            putString(header, 157, 100, link)
+            putString(header, 257, 6, "ustar\u0000")
+            putString(header, 263, 2, "00")
+            putString(header, 265, 32, "root")
+            putString(header, 297, 32, "root")
+            val checksum = header.sumOf { it.toInt() and 0xff }
+            putString(header, 148, 8, "%06o\u0000 ".format(checksum))
+            output.write(header)
+        }
+
+        private fun putString(target: ByteArray, offset: Int, length: Int, value: String) {
+            value.toByteArray(Charsets.UTF_8).copyInto(target, offset, 0, minOf(value.toByteArray(Charsets.UTF_8).size, length))
+        }
+
+        private fun pad(size: Long) {
+            val padding = ((512 - size % 512) % 512).toInt()
+            if (padding > 0) output.write(ByteArray(padding))
+        }
     }
 }
