@@ -39,18 +39,16 @@ object TarExtractor {
         }
     }
 
-    fun extract(archive: File, dest: File, progress: (Long, Long) -> Unit = { _, _ -> }): Result<Unit> =
-        extract(openStream(archive), archive.length(), dest, progress)
+    fun extract(archive: File, dest: File): Result<Unit> =
+        extract(openStream(archive), dest)
 
+    // 进度由调用方在压缩源流上计数（与压缩包大小同基准），此处不做进度统计
     fun extract(
         source: InputStream,
-        total: Long,
         dest: File,
-        progress: (Long, Long) -> Unit = { _, _ -> },
     ): Result<Unit> = runCatching {
         dest.mkdirs()
         val reader = TarReader(source)
-        var consumed = 0L
         val buffer = ByteArray(256 * 1024)
         var longName: String? = null
         var longLink: String? = null
@@ -58,7 +56,6 @@ object TarExtractor {
         try {
             while (true) {
                 val header = reader.readBlock() ?: break
-                consumed += 512
                 if (header.all { it.toInt() == 0 }) break
 
                 var name = readString(header, 0, 100)
@@ -74,12 +71,12 @@ object TarExtractor {
                 when (type) {
                     'L' -> {
                         longName = reader.readDataString(size)
-                        consumed += size + reader.skipPadding(size)
+                        reader.skipPadding(size)
                         continue
                     }
                     'K' -> {
                         longLink = reader.readDataString(size)
-                        consumed += size + reader.skipPadding(size)
+                        reader.skipPadding(size)
                         continue
                     }
                 }
@@ -92,15 +89,15 @@ object TarExtractor {
                 if (cleanName.startsWith("./")) cleanName = cleanName.substring(2)
                 while (cleanName.startsWith("/")) cleanName = cleanName.substring(1)
                 if (cleanName.isEmpty() || cleanName == ".") {
-                    consumed += reader.skipData(size)
-                    consumed += reader.skipPadding(size)
+                    reader.skipData(size)
+                    reader.skipPadding(size)
                     continue
                 }
 
                 val relative = cleanName.split('/').filter { it.isNotEmpty() && it != "." && it != ".." }.joinToString("/")
                 if (relative.isEmpty()) {
-                    consumed += reader.skipData(size)
-                    consumed += reader.skipPadding(size)
+                    reader.skipData(size)
+                    reader.skipPadding(size)
                     continue
                 }
                 val target = File(dest, relative)
@@ -127,15 +124,13 @@ object TarExtractor {
                                 if (n <= 0) break
                                 output.write(buffer, 0, n)
                                 remaining -= n
-                                consumed += n
-                                progress(consumed, total)
                             }
                         }
-                        consumed += reader.skipPadding(size)
+                        reader.skipPadding(size)
                     }
                     else -> {
-                        consumed += reader.skipData(size)
-                        consumed += reader.skipPadding(size)
+                        reader.skipData(size)
+                        reader.skipPadding(size)
                     }
                 }
                 if (mode != 0L) runCatching { Os.chmod(target.path, (mode and 0xFFF).toInt()) }

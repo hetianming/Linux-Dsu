@@ -25,6 +25,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.mcai.ubuntudsu.core.ChrootRunner
 import com.mcai.ubuntudsu.core.AudioBridge
 import com.mcai.ubuntudsu.core.Env
+import com.mcai.ubuntudsu.core.RootShell
 import com.mcai.ubuntudsu.core.TerminalSessionStore
 import com.mcai.ubuntudsu.ui.Ui
 import com.termux.terminal.TerminalSession
@@ -33,6 +34,10 @@ import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
 
 class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalViewClient {
+    companion object {
+        const val EXTRA_DESKTOP = "extra_desktop"
+    }
+
     private data class DesktopOption(
         val id: String,
         val name: String,
@@ -60,8 +65,7 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
         window.decorView.systemUiVisibility = window.decorView.systemUiVisibility and
             (View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR).inv()
         if (!Env.ubuntuInstalled(this)) {
-            Toast.makeText(this, "请先安装 Ubuntu rootfs", Toast.LENGTH_SHORT).show()
-            startActivity(Intent(this, UbuntuInstallActivity::class.java))
+            Toast.makeText(this, "请先安装 Ubuntu rootfs，请回到主页 Linux 页签完成安装", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -86,6 +90,20 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
 
         terminalView.post {
             startSession()
+        }
+        // 从 Linux 页"桌面环境"入口进入时：已装桌面则直接弹启动菜单，未装才弹安装菜单
+        if (intent.getBooleanExtra(EXTRA_DESKTOP, false)) {
+            terminalView.postDelayed({
+                Thread {
+                    val installed = runCatching {
+                        val xstartup = java.io.File(Env.rootfs(this), "root/.vnc/xstartup")
+                        RootShell.exec("test -f '${xstartup.absolutePath}' && test -x '${xstartup.absolutePath}'", timeoutMs = 15000).success
+                    }.getOrDefault(false)
+                    runOnUiThread {
+                        if (installed) startVnc() else installVncDesktop()
+                    }
+                }.start()
+            }, 600)
         }
     }
 

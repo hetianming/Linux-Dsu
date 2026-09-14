@@ -37,21 +37,33 @@ object Ui {
         }
         window.decorView.systemUiVisibility =
             View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-        val left = content.paddingLeft
-        val top = content.paddingTop
-        val right = content.paddingRight
-        val bottom = content.paddingBottom
-        ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(left + bars.left, top + bars.top, right + bars.right, bottom + bars.bottom)
-            insets
-        }
-        ViewCompat.requestApplyInsets(content)
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
         WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
             isAppearanceLightStatusBars = !isDark(activity)
             isAppearanceLightNavigationBars = !isDark(activity)
+        }
+    }
+
+    // 背景铺满全屏，内容避让 systemBars 并留出呼吸间距：给页面容器（通常是 ScrollView）挂 insets 监听
+    fun applyContentInsets(view: View, extraTopDp: Int = 12, extraBottomDp: Int = 0) {
+        val density = view.resources.displayMetrics.density
+        val baseBottom = view.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(v.paddingLeft, bars.top + dp(extraTopDp, density), v.paddingRight, baseBottom + dp(extraBottomDp, density))
+            insets
+        }
+        // 动态添加的页面不会经历首次 insets 遍历，attach 后主动请求一次分发
+        if (view.isAttachedToWindow) {
+            ViewCompat.requestApplyInsets(view)
+        } else {
+            view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: View) {
+                    ViewCompat.requestApplyInsets(v)
+                }
+                override fun onViewDetachedFromWindow(v: View) {}
+            })
         }
     }
 
@@ -163,6 +175,116 @@ object Ui {
         }
     }
 
+    // 高模糊磨砂面板：比 glassSurface 更不透明，用于小窗口等需要强遮挡的场景
+    // stroke=false 时无外层描边（如文件管理器底部工具条）
+    fun frostedSurface(
+        context: android.content.Context,
+        radiusDp: Float = 24f,
+        stroke: Boolean = true,
+    ): GradientDrawable {
+        val density = context.resources.displayMetrics.density
+        val dark = isDark(context)
+        return GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(
+                if (dark) Color.argb(240, 33, 40, 52) else Color.argb(242, 250, 252, 255),
+                if (dark) Color.argb(238, 28, 35, 46) else Color.argb(240, 244, 248, 252),
+                if (dark) Color.argb(238, 24, 30, 40) else Color.argb(240, 240, 245, 250),
+            ),
+        ).apply {
+            cornerRadius = dp(radiusDp.toInt(), density).toFloat()
+            if (stroke) {
+                setStroke(dp(1, density), if (dark) Color.argb(120, 255, 255, 255) else Color.argb(200, 210, 224, 240))
+            }
+        }
+    }
+
+    // 水晶玻璃分隔条：拼接卡内分区之间的横向高光玻璃线
+    fun crystalDivider(context: android.content.Context, density: Float): View {
+        val dark = isDark(context)
+        val track = if (dark) Color.argb(56, 255, 255, 255) else Color.argb(150, 255, 255, 255)
+        val highlight = if (dark) Color.argb(140, 235, 245, 255) else Color.argb(230, 255, 255, 255)
+        return View(context).apply {
+            layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(2, density),
+            )
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(track, highlight, track)).apply {
+                cornerRadius = dp(1, density).toFloat()
+            }
+        }
+    }
+
+    // 页面标题行右侧的设置入口图标：与 ROOT 徽章同款底，点击弹主题选择
+    fun settingsIconButton(activity: android.app.Activity, onPick: () -> Unit): View =
+        ImageView(activity).apply {
+            setImageResource(com.mcai.ubuntudsu.R.drawable.ic_settings)
+            imageTintList = android.content.res.ColorStateList.valueOf(secondaryText(activity))
+            background = rounded(
+                if (isDark(activity)) Color.argb(68, 0, 0, 0) else Color.argb(78, 255, 255, 255),
+                8f,
+                activity.resources.displayMetrics.density,
+            )
+            val d = activity.resources.displayMetrics.density
+            setPadding(dp(5, d), dp(5, d), dp(5, d), dp(5, d))
+            layoutParams = android.widget.LinearLayout.LayoutParams(dp(28, d), dp(28, d)).apply {
+                marginStart = dp(6, d)
+                gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+            }
+            pressAnimation(this)
+            setOnClickListener { onPick() }
+        }
+
+    // 设置弹层（各页设置入口共用）：关于信息（主题切换入口在「更多」页）
+    fun showThemeDialog(activity: android.app.Activity, onThemeChanged: () -> Unit) {
+        val density = activity.resources.displayMetrics.density
+        val aboutPanel = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20, density), dp(4, density), dp(20, density), dp(6, density))
+        }
+        aboutPanel.addView(TextView(activity).apply {
+            text = "关于"
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(primaryText(activity))
+        })
+        aboutPanel.addView(TextView(activity).apply {
+            text = "Linux - Dsu"
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(primaryText(activity))
+            setPadding(0, dp(6, density), 0, dp(2, density))
+        })
+        aboutPanel.addView(TextView(activity).apply {
+            text = "版本 1.0  ·  天明构建  ·  Copyright © 2026"
+            textSize = 11f
+            setTextColor(secondaryText(activity))
+            setPadding(0, 0, 0, dp(6, density))
+        })
+        aboutPanel.addView(TextView(activity).apply {
+            text = "功能简介"
+            textSize = 12f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(primaryText(activity))
+            setPadding(0, 0, 0, dp(3, density))
+        })
+        aboutPanel.addView(TextView(activity).apply {
+            text = "· DSU：通过 ROOT 调用系统 dynamic_system 服务安装 GSI 镜像，支持自定义 userdata 容量、一键重启进入\n" +
+                "· Linux：Chroot 方式安装运行 Ubuntu rootfs（本地 / TUNA 云端镜像），root 权限直通\n" +
+                "· 终端：Termux 风格 Chroot 终端，支持 apt 安装软件包\n" +
+                "· 桌面：XFCE / KDE / GNOME + VNC 远程桌面与音频桥接\n" +
+                "· 文件管理：内置 rootfs 文件浏览器，支持编辑 / 重命名 / 新建删除"
+            textSize = 11f
+            setTextColor(secondaryText(activity))
+            setLineSpacing(dp(3, density).toFloat(), 1f)
+        })
+        androidx.appcompat.app.AlertDialog.Builder(activity)
+            .setTitle("设置")
+            .setView(aboutPanel)
+            .setPositiveButton("关闭", null)
+            .show()
+    }
+
     fun pressAnimation(view: View) {
         view.setOnTouchListener { target, event ->
             when (event.actionMasked) {
@@ -203,33 +325,52 @@ object Ui {
         badge: String,
         colorHex: String,
         imageRes: Int? = null,
+        framed: Boolean = true,
         onClick: () -> Unit,
     ): View {
         val density = context.resources.displayMetrics.density
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(20, density), dp(18, density), dp(20, density), dp(18, density))
+            setPadding(dp(14, density), dp(11, density), dp(14, density), dp(11, density))
             background = glassButton(context)
-            elevation = dp(5, density).toFloat()
+            elevation = dp(3, density).toFloat()
             isClickable = true
             isFocusable = true
             setOnClickListener { onClick() }
         }
         pressAnimation(row)
-        val icon: View = if (imageRes != null) ImageView(context).apply {
-            setImageResource(imageRes)
-            scaleType = ImageView.ScaleType.CENTER_CROP
+        val icon: View = if (imageRes != null) LinearLayout(context).apply {
+            // 图标容器：默认圆角玻璃底 + 细描边，内衬图标 FIT_CENTER；framed=false 时裸图无边框
+            if (framed) {
+                background = strokeRounded(
+                    if (isDark(context)) Color.argb(46, 255, 255, 255) else Color.argb(235, 255, 255, 255),
+                    if (isDark(context)) Color.argb(150, 255, 255, 255) else Color.argb(200, 255, 255, 255),
+                    1.5f,
+                    density,
+                    radiusDp = 11f,
+                )
+                setPadding(dp(2, density), dp(2, density), dp(2, density), dp(2, density))
+            }
+            gravity = Gravity.CENTER
             clipToOutline = true
             outlineProvider = object : android.view.ViewOutlineProvider() {
                 override fun getOutline(view: View, outline: android.graphics.Outline) {
-                    outline.setRoundRect(0, 0, view.width, view.height, dp(14, density).toFloat())
+                    outline.setRoundRect(0, 0, view.width, view.height, dp(11, density).toFloat())
                 }
             }
-            layoutParams = LinearLayout.LayoutParams(dp(48, density), dp(48, density))
+            layoutParams = LinearLayout.LayoutParams(dp(36, density), dp(36, density))
+            addView(ImageView(context).apply {
+                setImageResource(imageRes)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                )
+            })
         } else TextView(context).apply {
             text = badge
-            textSize = 20f
+            textSize = 16f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
@@ -237,23 +378,23 @@ object Ui {
                 shape = GradientDrawable.OVAL
                 setColor(Color.parseColor(colorHex))
             }
-            layoutParams = LinearLayout.LayoutParams(dp(48, density), dp(48, density))
+            layoutParams = LinearLayout.LayoutParams(dp(36, density), dp(36, density))
         }
         val column = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginStart = dp(16, density)
+                marginStart = dp(10, density)
             }
         }
         column.addView(TextView(context).apply {
             text = title
-            textSize = 17f
+            textSize = 14f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(primaryText(context))
         })
         column.addView(TextView(context).apply {
             text = subtitle
-            textSize = 12f
+            textSize = 11f
             setTextColor(secondaryText(context))
         })
         row.addView(icon)
@@ -264,5 +405,50 @@ object Ui {
             setTextColor(secondaryText(context))
         })
         return row
+    }
+
+    // 胶囊进度条样式：圆角轨道（低饱和实底、无描边）+ 渐变绿胶囊填充（配合下方居中百分比文字）
+    fun pillProgressDrawable(context: android.content.Context): android.graphics.drawable.Drawable {
+        val density = context.resources.displayMetrics.density
+        val dark = isDark(context)
+        val track = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(99, density).toFloat()
+            setColor(if (dark) Color.parseColor("#39404C") else Color.parseColor("#DFE6EF"))
+        }
+        // 渐变绿：亮薄荷绿 -> 翠绿，横向过渡
+        val fill = GradientDrawable(
+            GradientDrawable.Orientation.LEFT_RIGHT,
+            intArrayOf(Color.parseColor("#7CE8B5"), Color.parseColor("#2BB673")),
+        ).apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(99, density).toFloat()
+        }
+        val clip = android.graphics.drawable.ClipDrawable(
+            fill,
+            Gravity.START,
+            android.graphics.drawable.ClipDrawable.HORIZONTAL,
+        )
+        return android.graphics.drawable.LayerDrawable(arrayOf(track, clip)).apply {
+            setId(0, android.R.id.background)
+            setId(1, android.R.id.progress)
+        }
+    }
+
+    // 进度条下方居中的百分比文字
+    fun percentTextView(context: android.content.Context): TextView = TextView(context).apply {
+        textSize = 13f
+        setTypeface(typeface, Typeface.BOLD)
+        gravity = Gravity.CENTER
+        setTextColor(primaryText(context))
+    }
+
+    // 不确定进度时的来回扫动动画（自定义 drawable 无系统 indeterminate 动画，用扫动模拟）
+    fun scanAnimator(bar: android.widget.ProgressBar): ValueAnimator = ValueAnimator.ofInt(0, bar.max).apply {
+        duration = 1500L
+        repeatCount = ValueAnimator.INFINITE
+        repeatMode = ValueAnimator.RESTART
+        interpolator = android.view.animation.LinearInterpolator()
+        addUpdateListener { bar.progress = it.animatedValue as Int }
     }
 }

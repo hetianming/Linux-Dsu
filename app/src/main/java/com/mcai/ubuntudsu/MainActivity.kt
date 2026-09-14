@@ -1,70 +1,49 @@
 package com.mcai.ubuntudsu
 
-import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Color
-import android.graphics.Outline
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.RectF
-import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.ViewOutlineProvider
+import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
-import android.widget.ImageView
-import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
-import androidx.appcompat.app.AlertDialog
-import com.mcai.ubuntudsu.core.Env
-import com.mcai.ubuntudsu.core.StatusDetector
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.mcai.ubuntudsu.ui.Ui
+import com.mcai.ubuntudsu.ui.pages.DsuPage
+import com.mcai.ubuntudsu.ui.pages.HomePage
+import com.mcai.ubuntudsu.ui.pages.LinuxPage
+import com.mcai.ubuntudsu.ui.pages.SettingsPage
 import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
+    private val lifecycleStopHooks = mutableListOf<Runnable>()
+    fun addLifecycleStopHook(hook: Runnable) { lifecycleStopHooks.add(hook) }
     private val executor = Executors.newSingleThreadExecutor()
-    private lateinit var cardRoot: FrameLayout
-    private lateinit var bgView: ImageView
-    private lateinit var deviceText: TextView
-    private lateinit var gsiText: TextView
-    private lateinit var ubuntuText: TextView
-    private lateinit var titleGlass: LinearLayout
-    private lateinit var cardTitle: TextView
-    private lateinit var copyrightText: TextView
-    private lateinit var rootBadge: LinearLayout
-    private lateinit var rootDot: View
-    private lateinit var rootLabel: TextView
-    private lateinit var metricsTitle: TextView
-    private lateinit var cpuGauge: UsageGauge
-    private lateinit var gpuGauge: UsageGauge
-    private lateinit var storageValue: TextView
-    private lateinit var storageDetail: TextView
-    private lateinit var memoryValue: TextView
-    private lateinit var memoryDetail: TextView
-    private val metricsHandler = Handler(Looper.getMainLooper())
-    private var cpuSample: Any? = null
-    private val metricsUpdater = object : Runnable {
-        override fun run() {
-            updateMetrics()
-            metricsHandler.postDelayed(this, 2000L)
-        }
-    }
+    private val tabs = listOf("首页", "Linux", "DSU", "更多")
+    private var currentTab = 0
+    private lateinit var pageHost: FrameLayout
+    private val navItems = mutableListOf<TextView>()
+    private var homePage: HomePage? = null
+    private var linuxPage: LinuxPage? = null
+    private var dsuPage: DsuPage? = null
+    private var settingsPage: SettingsPage? = null
+    private val pageCache = mutableMapOf<Int, View>()
+    private var navBar: LinearLayout? = null
+    private var swipeDownX = 0f
+    private var swipeDownY = 0f
+    private var swipeTracked = false
+    private val swipeThresholdDp = 48
 
-    private val pickBackground =
-        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
-            uri?.let { saveBackground(it) }
+    private val pickZipLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+            val path = result.data?.getStringExtra(RootfsFilesActivity.RESULT_FILE_PATH)
+            if (path != null) dsuPage?.onZipPicked(android.net.Uri.fromFile(java.io.File(path)))
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,527 +51,289 @@ class MainActivity : AppCompatActivity() {
         AppCompatDelegate.setDefaultNightMode(
             getPreferences(MODE_PRIVATE).getInt("theme_mode", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
         )
+        requestStoragePermission()
         buildUi()
-        loadBackground()
-        refreshStatus()
+        // 进程被杀重建时恢复上次所在 tab（如 DSU 页选择 GSI 后返回）
+        selectTab(savedInstanceState?.getInt("last_tab")?.takeIf { it in tabs.indices } ?: 0)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt("last_tab", currentTab)
+    }
+
+    // 内置文件选择器需要读 /sdcard：向用户申请存储权限
+    private fun requestStoragePermission() {
+        val permissions = if (android.os.Build.VERSION.SDK_INT >= 33) {
+            arrayOf(android.Manifest.permission.READ_MEDIA_IMAGES)
+        } else {
+            arrayOf(
+                android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            )
+        }
+        val needed = permissions.filter { checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
+        if (needed.isNotEmpty()) {
+            requestPermissions(needed.toTypedArray(), 1001)
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        metricsHandler.removeCallbacks(metricsUpdater)
-        metricsHandler.post(metricsUpdater)
+        homePage?.refreshStatus()
+        linuxPage?.refreshInfo()
     }
 
-    override fun onPause() {
-        metricsHandler.removeCallbacks(metricsUpdater)
-        super.onPause()
+    override fun onDestroy() {
+        dsuPage?.unbindRootService()
+        lifecycleStopHooks.forEach { it.run() }
+        super.onDestroy()
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                swipeDownX = event.x
+                swipeDownY = event.y
+                swipeTracked = false
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (!swipeTracked) {
+                    val dx = event.x - swipeDownX
+                    val dy = event.y - swipeDownY
+                    val thresholdPx = swipeThresholdDp * resources.displayMetrics.density
+                    if (kotlin.math.abs(dx) > thresholdPx && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 2) {
+                        swipeTracked = true
+                        val next = if (dx < 0) currentTab + 1 else currentTab - 1
+                        if (next in tabs.indices) selectTab(next)
+                    }
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> swipeTracked = false
+        }
+        return super.dispatchTouchEvent(event)
     }
 
     private fun buildUi() {
         val d = resources.displayMetrics.density
-        val scroll = ScrollView(this).apply { Ui.animateLiquidBackground(this) }
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(Ui.dp(16, d), Ui.dp(24, d), Ui.dp(16, d), Ui.dp(24, d))
-        }
-
-        cardRoot = FrameLayout(this).apply {
-             background = Ui.glassSurface(this@MainActivity, 20f)
-            clipToOutline = true
-            outlineProvider = object : ViewOutlineProvider() {
-                override fun getOutline(view: View, outline: Outline) {
-                     outline.setRoundRect(0, 0, view.width, view.height, Ui.dp(20, d).toFloat())
-                }
-            }
-            layoutParams = Ui.layoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                Ui.dp(200, d),
-            )
-        }
-        bgView = ImageView(this).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            visibility = View.GONE
-        }
-        val cardContent = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(Ui.dp(22, d), Ui.dp(20, d), Ui.dp(22, d), Ui.dp(18, d))
-        }
-        deviceText = TextView(this).apply {
-            textSize = 12f
-             setTextColor(Ui.secondaryText(this@MainActivity))
-        }
-        cardTitle = TextView(this).apply {
-            text = "Linux - Dsu"
-            textSize = 18f
-            setTypeface(typeface, Typeface.BOLD)
-             setTextColor(Ui.primaryText(this@MainActivity))
-        }
-        titleGlass = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(Ui.dp(12, d), Ui.dp(4, d), Ui.dp(12, d), Ui.dp(4, d))
-            background = Ui.glassSurface(this@MainActivity, 20f)
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(54, d)).apply {
-                topMargin = Ui.dp(8, d)
-                bottomMargin = Ui.dp(6, d)
-            }
-        }
-        titleGlass.addView(cardTitle)
-        copyrightText = TextView(this).apply {
-            text = "天明构建  ·  Copyright © 2026"
-            textSize = 8f
-            gravity = Gravity.CENTER
-             setTextColor(if (Ui.isDark(this@MainActivity)) Color.WHITE else Color.rgb(74, 85, 104))
-            setPadding(0, Ui.dp(1, d), 0, 0)
-        }
-        titleGlass.addView(copyrightText)
-        val statusColumn = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = Ui.layoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = Ui.dp(4, d)
-            }
-        }
-        gsiText = statusRow(context = this, label = "GSI 系统", value = "检测中...")
-        ubuntuText = statusRow(context = this, label = "Linux", value = "检测中...")
-        statusColumn.addView(gsiText)
-        statusColumn.addView(ubuntuText)
-
-        rootBadge = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = glassStatusBackground(Ui.isDark(this@MainActivity), d)
-            setPadding(Ui.dp(10, d), 0, Ui.dp(12, d), 0)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply {
-                gravity = Gravity.END
-            }
-        }
-        rootDot = Ui.statusDot(this, Color.parseColor("#B0B0B0")).apply {
-            val size = Ui.dp(12, d)
-            layoutParams = LinearLayout.LayoutParams(size, size)
-        }
-        rootLabel = TextView(this).apply {
-            text = "ROOT 检测中"
-            textSize = 14f
-            setTypeface(typeface, Typeface.BOLD)
-             setTextColor(Ui.secondaryText(this@MainActivity))
-            layoutParams = Ui.layoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                marginStart = Ui.dp(6, d)
-            }
-        }
-        rootBadge.addView(rootDot)
-        rootBadge.addView(rootLabel)
-
-        cardContent.addView(deviceText)
-        cardContent.addView(titleGlass)
-        cardContent.addView(statusColumn)
-        cardRoot.addView(bgView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        cardRoot.addView(cardContent, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        val bottomRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+        val root = FrameLayout(this)
+        // 根布局承接全屏液体渐变背景（含状态栏区域），页面自身保持透明
+        Ui.animateLiquidBackground(root)
+        pageHost = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM or Gravity.END,
-            ).apply {
-                 bottomMargin = Ui.dp(2, d)
-                 marginEnd = Ui.dp(8, d)
-            }
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
         }
-        rootBadge.layoutParams = LinearLayout.LayoutParams(
+        root.addView(pageHost)
+
+        val navLayoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
-            Ui.dp(32, d),
+            Gravity.BOTTOM,
         )
-        bottomRow.addView(smallButton(R.drawable.ic_refresh, "刷新") { refreshStatus() })
-        bottomRow.addView(smallButton(R.drawable.ic_palette, "背景") { pickBackground.launch("image/*") })
-        bottomRow.addView(smallButton(R.drawable.ic_dark_mode, "夜间模式") { showThemeDialog() })
-        cardRoot.addView(bottomRow)
-        root.addView(cardRoot)
-        root.addView(rootBadge, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(36, d)).apply {
-            topMargin = Ui.dp(6, d)
-            gravity = Gravity.END
-        })
-
-        ubuntuText.text = if (Env.ubuntuInstalled(this)) "Linux：已安装（大小计算中...）" else "Linux：未安装"
-
-        val spacer = View(this)
-        root.addView(spacer, Ui.layoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(6, d)))
-
-        root.addView(
-            Ui.entryButton(this, "Linux", "Rootfs 安装 · 终端 · Chroot 运行", "L", "#E95420", R.drawable.icon_linux_modern) {
-                startActivity(Intent(this, UbuntuActivity::class.java))
-            },
-        )
-        root.addView(spacerView(this, 6))
-        root.addView(
-            Ui.entryButton(this, "DSU 管理", "GSI 安装 · 镜像管理 · 状态检测", "D", "#1A73E8", R.drawable.icon_dsu_modern) {
-                startActivity(Intent(this, DsuActivity::class.java))
-            },
-        )
-        root.addView(spacerView(this, 10))
-        root.addView(createMetricsSection(d))
-        scroll.addView(root)
-        setContentView(scroll)
-        Ui.enableEdgeToEdge(this, scroll)
-    }
-
-    private fun createMetricsSection(density: Float): View {
-        val section = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(Ui.dp(12, density), Ui.dp(10, density), Ui.dp(12, density), Ui.dp(10, density))
-            background = Ui.glassSurface(this@MainActivity, 18f)
-            elevation = Ui.dp(3, density).toFloat()
-        }
-        metricsTitle = TextView(this).apply {
-            text = "实时状态"
-            textSize = 15f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Ui.primaryText(this@MainActivity))
-            setPadding(0, 0, 0, Ui.dp(4, density))
-        }
-        section.addView(metricsTitle)
-        val gauges = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-        cpuGauge = UsageGauge(this, "CPU", Ui.buttonPrimary(this))
-        gpuGauge = UsageGauge(this, "GPU", Ui.buttonSecondary(this))
-        gauges.addView(cpuGauge, LinearLayout.LayoutParams(0, Ui.dp(86, density), 1f).apply { marginEnd = Ui.dp(4, density) })
-        gauges.addView(gpuGauge, LinearLayout.LayoutParams(0, Ui.dp(86, density), 1f).apply { marginStart = Ui.dp(4, density) })
-        section.addView(gauges)
-
-        val details = LinearLayout(this).apply {
+        val navBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            // item 之间留出间距：外边距 + item 内边距形成呼吸感
+            setPadding(Ui.dp(14, d), Ui.dp(8, d), Ui.dp(14, d), Ui.dp(8, d))
+            layoutParams = navLayoutParams
         }
-        val storageCard = detailMetric("存储", "读取中...", "", Ui.buttonPrimary(this))
-        val memoryCard = detailMetric("内存", "读取中...", "", Ui.buttonSecondary(this))
-        storageValue = storageCard.first
-        storageDetail = storageCard.second
-        memoryValue = memoryCard.first
-        memoryDetail = memoryCard.second
-        details.addView(storageCard.third, LinearLayout.LayoutParams(0, Ui.dp(60, density), 1f).apply { marginEnd = Ui.dp(4, density) })
-        details.addView(memoryCard.third, LinearLayout.LayoutParams(0, Ui.dp(60, density), 1f).apply { marginStart = Ui.dp(4, density) })
-        section.addView(details)
-        return section
-    }
-
-    private fun detailMetric(title: String, value: String, detail: String, color: Int): Triple<TextView, TextView, View> {
-        val d = resources.displayMetrics.density
-        val valueView = TextView(this).apply {
-            text = value
-            textSize = 16f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Ui.primaryText(this@MainActivity))
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
-                this, 8, 16, 1, android.util.TypedValue.COMPLEX_UNIT_SP
-            )
-        }
-        val detailView = TextView(this).apply {
-            text = detail
-            textSize = 9f
-            setTextColor(Ui.secondaryText(this@MainActivity))
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
-                this, 7, 9, 1, android.util.TypedValue.COMPLEX_UNIT_SP
-            )
-        }
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(Ui.dp(10, d), Ui.dp(5, d), Ui.dp(10, d), Ui.dp(4, d))
-            background = Ui.glassSurface(this@MainActivity, 14f)
-            addView(TextView(this@MainActivity).apply {
-                text = title
-                textSize = 11f
-                setTextColor(Ui.secondaryText(this@MainActivity))
-            })
-            addView(valueView)
-            addView(detailView)
-        }
-        return Triple(valueView, detailView, card)
-    }
-
-    private fun updateMetrics() {
-        executor.execute {
-            val result = StatusDetector.deviceMetrics(this@MainActivity, cpuSample)
-            runOnUiThread {
-                cpuSample = result.second
-                val metrics = result.first
-                cpuGauge.value = metrics.cpuPercent
-                gpuGauge.value = metrics.gpuPercent
-                storageValue.text = "${metrics.storagePercent}%"
-                storageDetail.text = "${metrics.storageUsed} / ${metrics.storageTotal}"
-                memoryValue.text = "${metrics.memoryPercent}%"
-                memoryDetail.text = "${metrics.memoryUsed} / ${metrics.memoryTotal}"
-            }
-        }
-    }
-
-    private class UsageGauge(
-        context: android.content.Context,
-        private val name: String,
-        private val accent: Int,
-    ) : View(context) {
-        var value: Int? = null
-            set(newValue) {
-                field = newValue
-                invalidate()
-            }
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        override fun onDraw(canvas: Canvas) {
-            super.onDraw(canvas)
-            val cx = width / 2f
-            val cy = height / 2f
-            val size = minOf(width, height).toFloat()
-            val radius = size * 0.40f
-            val stroke = size * 0.09f
-            val ring = RectF(cx - radius, cy - radius, cx + radius, cy + radius)
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = stroke
-            paint.strokeCap = Paint.Cap.ROUND
-            val dark = Ui.isDark(context)
-            paint.color = if (dark) {
-                Color.argb(120, 255, 255, 255)
-            } else {
-                Color.argb(110, Color.red(accent), Color.green(accent), Color.blue(accent))
-            }
-            canvas.drawArc(ring, -90f, 360f, false, paint)
-            val percent = value
-            if (percent != null && percent > 0) {
-                paint.color = accent
-                canvas.drawArc(ring, -90f, 3.6f * percent, false, paint)
-            }
-            paint.style = Paint.Style.FILL
-            paint.textAlign = Paint.Align.CENTER
-            val secondary = Ui.secondaryText(context)
-            paint.typeface = Typeface.DEFAULT
-            paint.textSize = radius * 0.36f
-            paint.color = secondary
-            val nameBaseline = cy - radius * 0.52f - (paint.ascent() + paint.descent()) / 2f
-            canvas.drawText(name, cx, nameBaseline, paint)
-            paint.typeface = Typeface.DEFAULT_BOLD
-            paint.textSize = radius * 0.52f
-            paint.color = if (percent != null) accent else secondary
-            val valueBaseline = cy + radius * 0.48f - (paint.ascent() + paint.descent()) / 2f
-            canvas.drawText(percent?.let { "$it%" } ?: "--", cx, valueBaseline, paint)
-        }
-    }
-
-    private fun spacerView(context: android.content.Context, height: Int): View {
-        val d = context.resources.displayMetrics.density
-        return View(context).also { v ->
-            v.layoutParams = Ui.layoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(height, d))
-        }
-    }
-
-    private fun statusRow(context: android.content.Context, label: String, value: String): TextView =
-        TextView(context).apply {
-            text = "$label：$value"
-            textSize = 14f
-            setTextColor(Ui.primaryText(context))
-            val d = context.resources.displayMetrics.density
-            setPadding(Ui.dp(10, d), Ui.dp(4, d), Ui.dp(10, d), Ui.dp(4, d))
-            background = glassStatusBackground(Ui.isDark(context), d)
-            layoutParams = Ui.layoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply {
-                bottomMargin = Ui.dp(6, context.resources.displayMetrics.density)
-            }
-        }
-
-    private fun smallButton(iconRes: Int, desc: String, onClick: () -> Unit): ImageButton {
-        val d = resources.displayMetrics.density
-        val button = ImageButton(this).apply {
-            setImageResource(iconRes)
-            contentDescription = desc
-            scaleType = ImageView.ScaleType.CENTER
-            setPadding(Ui.dp(6, d), Ui.dp(6, d), Ui.dp(6, d), Ui.dp(6, d))
-            background = Ui.glassButton(this@MainActivity)
-            elevation = Ui.dp(4, d).toFloat()
-            imageTintList = android.content.res.ColorStateList.valueOf(Color.rgb(35, 40, 48))
-            layoutParams = LinearLayout.LayoutParams(Ui.dp(32, d), Ui.dp(32, d)).apply {
-                marginStart = Ui.dp(5, d)
-            }
-            setOnClickListener { onClick() }
-        }
-        Ui.pressAnimation(button)
-        return button
-    }
-
-    private fun isDarkMode(): Boolean =
-        resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
-            android.content.res.Configuration.UI_MODE_NIGHT_YES
-
-     private fun surfaceColor(): Int = Ui.surface(this)
-
-    private fun controlColor(): Int = if (isDarkMode()) Color.parseColor("#3A3D40") else Color.parseColor("#EEF0F2")
-
-    private fun glassStatusBackground(dark: Boolean, density: Float): GradientDrawable =
-        Ui.rounded(
-            if (dark) Color.argb(68, 0, 0, 0) else Color.argb(78, 255, 255, 255),
-            8f,
-            density,
-        )
-
-    private fun primaryTextColor(): Int = if (isDarkMode()) Color.WHITE else Color.parseColor("#444444")
-
-    private fun showThemeDialog() {
-        val modes = arrayOf("跟随系统", "浅色", "深色")
-        val current = getPreferences(MODE_PRIVATE).getInt("theme_mode", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-        val checked = when (current) {
-            AppCompatDelegate.MODE_NIGHT_NO -> 1
-            AppCompatDelegate.MODE_NIGHT_YES -> 2
-            else -> 0
-        }
-        AlertDialog.Builder(this)
-            .setTitle("夜间模式")
-            .setSingleChoiceItems(modes, checked) { dialog, which ->
-                val mode = when (which) {
-                    1 -> AppCompatDelegate.MODE_NIGHT_NO
-                    2 -> AppCompatDelegate.MODE_NIGHT_YES
-                    else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        tabs.forEachIndexed { tab, label ->
+            val item = TextView(this).apply {
+                text = label
+                textSize = 13f
+                gravity = Gravity.CENTER
+                setTypeface(typeface, if (tab == 0) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                setTextColor(if (tab == 0) Ui.buttonText(this@MainActivity) else Ui.secondaryText(this@MainActivity))
+                background = Ui.glassButton(this@MainActivity, if (tab == 0) Ui.buttonPrimary(this@MainActivity) else null)
+                // 胶囊形 item，前后留间距
+                layoutParams = LinearLayout.LayoutParams(0, Ui.dp(40, d), 1f).apply {
+                    marginStart = if (tab == 0) 0 else Ui.dp(6, d)
+                    marginEnd = if (tab == tabs.lastIndex) 0 else Ui.dp(6, d)
                 }
-                getPreferences(MODE_PRIVATE).edit().putInt("theme_mode", mode).apply()
-                AppCompatDelegate.setDefaultNightMode(mode)
-                dialog.dismiss()
+                setOnClickListener { selectTab(tab) }
             }
-            .show()
+            Ui.pressAnimation(item)
+            navItems.add(item)
+            navBar.addView(item)
+        }
+        root.addView(navBar, navLayoutParams)
+        this.navBar = navBar
+
+        setContentView(root)
+        Ui.enableEdgeToEdge(this, root)
+        // 沉浸式适配统一在根布局处理：
+        // 1. 顶部留出状态栏高度 + 呼吸间距，页面内容整体下移
+        // 2. 底部导航栏避开手势条，页面内容底部避让导航栏 + 手势条
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(bars.left, bars.top + Ui.dp(2, d), bars.right, 0)
+            pageHost.setPadding(0, 0, 0, Ui.dp(56 + 16 + 12, d) + bars.bottom)
+            (navBar.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
+                lp.bottomMargin = bars.bottom
+                navBar.layoutParams = lp
+            }
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
     }
 
-    private fun refreshStatus() {
-        val ctx = this
-        gsiText.text = "GSI 系统：检测中..."
-        ubuntuText.text = "Linux：检测中..."
-        rootLabel.text = "ROOT 检测中"
-        rootDot.background = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(Color.parseColor("#B0B0B0"))
-            setStroke(Ui.dp(1, resources.displayMetrics.density), Color.WHITE)
+    private fun selectTab(tab: Int) {
+        if (tab == currentTab && pageHost.childCount > 0) return
+        val previousTab = currentTab
+        currentTab = tab
+        for (index in navItems.indices) {
+            val item = navItems[index]
+            val active = index == tab
+            item.setTypeface(item.typeface, if (active) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            item.setTextColor(if (active) Ui.buttonText(this) else Ui.secondaryText(this))
+            item.background = Ui.glassButton(this, if (active) Ui.buttonPrimary(this) else null)
         }
-        executor.execute {
-            val device = StatusDetector.deviceSummary()
-            val (gsiState, _) = StatusDetector.gsiState()
-            val rootOk = StatusDetector.rootAvailable()
-            val gsiLabel = when (gsiState) {
-                com.mcai.ubuntudsu.core.GsiState.RUNNING -> "运行中"
-                com.mcai.ubuntudsu.core.GsiState.INSTALLED -> "已安装"
-                com.mcai.ubuntudsu.core.GsiState.ENABLED -> "已启用"
-                com.mcai.ubuntudsu.core.GsiState.DISABLED -> "已停用"
-                com.mcai.ubuntudsu.core.GsiState.NORMAL -> "未安装"
-                com.mcai.ubuntudsu.core.GsiState.UNKNOWN -> "未检测到"
-            }
-            runOnUiThread {
-                deviceText.text = device
-                gsiText.text = "GSI 系统：$gsiLabel"
-                ubuntuText.text = if (Env.ubuntuInstalled(ctx)) "Linux：已安装（大小计算中...）" else "Linux：未安装"
-                rootLabel.text = if (rootOk) "ROOT 已授权" else "ROOT 未授权"
-                rootDot.background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(Color.parseColor(if (rootOk) "#5CE1A5" else "#FF756F"))
-                    setStroke(Ui.dp(1, resources.displayMetrics.density), Color.WHITE)
-                }
-            }
-            if (Env.ubuntuInstalled(ctx)) {
-                val ubuntuSize = runCatching { Env.formatSize(Env.dirSize(Env.rootfs(ctx))) }
-                    .getOrElse { "读取失败" }
-                runOnUiThread { ubuntuText.text = "Linux：已安装 ($ubuntuSize)" }
-            }
+        // 水滴切换动画：旧 tab 按钮位置泛起涟漪水滴，向新 tab 方向飞溅
+        if (previousTab != tab && previousTab in navItems.indices) {
+            spawnNavDrop(navItems[previousTab], navItems[tab])
         }
-    }
-
-    private fun loadBackground() {
-        val file = Env.background(this)
-        if (file.isFile) {
-            runCatching {
-                val bitmap = BitmapFactory.decodeFile(file.path)
-                if (bitmap != null) {
-                    bgView.setImageBitmap(bitmap)
-                    bgView.visibility = View.VISIBLE
-                    applyBackgroundContrast(bitmap)
-                }
-            }
-        }
-    }
-
-    private fun saveBackground(uri: Uri) {
-        runCatching {
-            val target = Env.background(this)
-            contentResolver.openInputStream(uri)?.use { input ->
-                target.outputStream().use { output -> input.copyTo(output, 128 * 1024) }
-            }
-            val options = BitmapFactory.Options().apply { inSampleSize = 2 }
-            BitmapFactory.decodeFile(target.path, options)?.let { bitmap ->
-                bgView.setImageBitmap(bitmap)
-                bgView.visibility = View.VISIBLE
-                applyBackgroundContrast(bitmap)
-            }
-            Toast.makeText(this, "背景已更新", Toast.LENGTH_SHORT).show()
-        }.onFailure {
-            Toast.makeText(this, "背景设置失败: ${it.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun applyBackgroundContrast(bitmap: Bitmap) {
-        val sample = Bitmap.createScaledBitmap(bitmap, 1, 1, true)
-        val pixel = sample.getPixel(0, 0)
-        sample.recycle()
-        val luminance = (Color.red(pixel) * 299 + Color.green(pixel) * 587 + Color.blue(pixel) * 114) / 1000
-        val foreground = if (luminance < 150) Color.WHITE else Color.rgb(20, 20, 20)
-        deviceText.setTextColor(foreground)
-        gsiText.setTextColor(foreground)
-        setTextColorRecursively(cardRoot, foreground)
-        titleGlass.background = Ui.rounded(
-            if (luminance < 150) Color.argb(125, 0, 0, 0) else Color.argb(125, 255, 255, 255),
-            10f,
-            resources.displayMetrics.density,
-        )
-        val darkBackground = luminance < 150
-        gsiText.background = glassStatusBackground(darkBackground, resources.displayMetrics.density)
-        ubuntuText.background = glassStatusBackground(darkBackground, resources.displayMetrics.density)
-        rootBadge.background = glassStatusBackground(darkBackground, resources.displayMetrics.density)
-        rootLabel.setTextColor(foreground)
-        val buttonIcon = if (luminance < 150) Color.rgb(30, 35, 42) else Color.WHITE
-        val buttonFill = if (luminance < 150) {
-            Color.argb(190, 255, 255, 255)
+        val cached = pageCache[tab]
+        val wrapped: View
+        if (cached != null) {
+            wrapped = cached
         } else {
-            Color.argb(150, 20, 26, 34)
-        }
-        val buttonEdge = if (luminance < 150) {
-            Color.argb(225, 255, 255, 255)
-        } else {
-            Color.argb(220, 255, 255, 255)
-        }
-        for (index in 0 until cardRoot.childCount) {
-            val child = cardRoot.getChildAt(index)
-            if (child is ViewGroup) {
-                for (childIndex in 0 until child.childCount) {
-                    (child.getChildAt(childIndex) as? ImageButton)?.apply {
-                        background = GradientDrawable().apply {
-                            setColor(buttonFill)
-                            cornerRadius = Ui.dp(10, resources.displayMetrics.density).toFloat()
-                            setStroke(Ui.dp(1, resources.displayMetrics.density), buttonEdge)
-                        }
-                        elevation = Ui.dp(4, resources.displayMetrics.density).toFloat()
-                        imageTintList = android.content.res.ColorStateList.valueOf(buttonIcon)
-                    }
-                }
+            if (tab == 1 && linuxPage == null) {
+                linuxPage = LinuxPage(this, executor)
             }
+            if (tab == 2 && dsuPage == null) {
+                dsuPage = DsuPage(this, executor, pickZipLauncher)
+                dsuPage?.bindRootService()
+            }
+            if (tab == 3 && settingsPage == null) {
+                settingsPage = SettingsPage(this, { recreate() })
+            }
+            if (tab == 0 && homePage == null) {
+                homePage = HomePage(this, executor)
+            }
+            val page: View = when (tab) {
+                1 -> linuxPage!!.build()
+                2 -> dsuPage!!.build()
+                3 -> settingsPage!!.build()
+                else -> homePage!!.build()
+            }
+            wrapped = ScrollView(this).apply {
+                addView(page)
+            }
+            pageCache[tab] = wrapped
+        }
+        pageHost.removeAllViews()
+        pageHost.addView(
+            wrapped,
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+        )
+        // 页面水感入场：轻弹落下（水滴落入页面的弹性）
+        wrapped.alpha = 0f
+        wrapped.scaleX = 0.92f
+        wrapped.scaleY = 0.92f
+        wrapped.translationY = Ui.dp(14, resources.displayMetrics.density).toFloat()
+        wrapped.pivotY = (resources.displayMetrics.heightPixels * 0.85).toFloat()
+        wrapped.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .translationY(0f)
+            .setDuration(420)
+            .setInterpolator(android.view.animation.OvershootInterpolator(0.9f))
+            .start()
+        when (tab) {
+            0 -> homePage?.refreshStatus()
         }
     }
 
-    private fun setTextColorRecursively(view: View, color: Int) {
-        if (view is TextView) view.setTextColor(color)
-        if (view is ViewGroup) {
-            for (index in 0 until view.childCount) {
-                setTextColorRecursively(view.getChildAt(index), color)
+    // 导航水滴动画：从旧按钮中心溅起水滴，弧线飞向新按钮落点
+    private fun spawnNavDrop(from: View, to: View) {
+        val root = (navBar?.parent as? ViewGroup) ?: return
+        val d = resources.displayMetrics.density
+        val accent = android.graphics.Color.parseColor(if (Ui.isDark(this)) "#66EAF4FF" else "#995B6CFF")
+        val glow = android.graphics.Color.parseColor(if (Ui.isDark(this)) "#99FFFFFF" else "#CCFFFFFF")
+        fun centerInView(v: View): Pair<Float, Float> {
+            val fromLoc = IntArray(2)
+            val rootLoc = IntArray(2)
+            v.getLocationOnScreen(fromLoc)
+            root.getLocationOnScreen(rootLoc)
+            return (fromLoc[0] - rootLoc[0] + v.width / 2).toFloat() to
+                (fromLoc[1] - rootLoc[1] + v.height / 2).toFloat()
+        }
+        val (sx, sy) = centerInView(from)
+        val (ex, ey) = centerInView(to)
+        repeat(5) { index ->
+            // 水滴更小更轻：6/9/12dp；自定义绘制带高光的球体水滴
+            val size = Ui.dp(6 + (index % 3) * 3, d)
+            val drop = object : android.view.View(this) {
+                override fun onDraw(canvas: android.graphics.Canvas) {
+                    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+                    paint.shader = android.graphics.RadialGradient(
+                        width * 0.35f, height * 0.3f, size.toFloat(),
+                        glow, accent, android.graphics.Shader.TileMode.CLAMP,
+                    )
+                    canvas.drawCircle(width / 2f, height / 2f, width / 2f, paint)
+                }
+            }.apply {
+                layoutParams = FrameLayout.LayoutParams(size, size).apply {
+                    leftMargin = sx.toInt() - size / 2
+                    topMargin = sy.toInt() - size / 2
+                }
             }
+            root.addView(drop, drop.layoutParams)
+            // 弧线飞溅：水平线性位移 + 垂直先上抛后落下（两次动画拼接）
+            val dx = (ex - sx) * (0.75f + 0.12f * index)
+            val rise = -(28 + index * 12) * d
+            val upDur = 170L + index * 22L
+            val downDur = 210L + index * 22L
+            drop.animate()
+                .translationX(dx)
+                .translationY(rise)
+                .setDuration(upDur)
+                .setInterpolator(DecelerateInterpolator())
+                .withEndAction {
+                    drop.animate()
+                        .translationY(ey - sy)
+                        .alpha(0f)
+                        .setDuration(downDur)
+                        .setInterpolator(android.view.animation.AccelerateInterpolator())
+                        .withEndAction { root.removeView(drop) }
+                        .start()
+                }
+                .start()
+        }
+        // 新按钮涟漪扩散：两圈水波环依次荡开（外圈更大更慢，水纹荡漾感）
+        val rippleStroke = android.graphics.Color.parseColor(if (Ui.isDark(this)) "#80EAF4FF" else "#995B6CFF")
+        repeat(2) { round ->
+            val ripple = android.view.View(this).apply {
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(android.graphics.Color.TRANSPARENT)
+                    setStroke(Ui.dp(2 - round, d), rippleStroke)
+                }
+                layoutParams = FrameLayout.LayoutParams(Ui.dp(20, d), Ui.dp(20, d)).apply {
+                    leftMargin = ex.toInt() - Ui.dp(10, d)
+                    topMargin = ey.toInt() - Ui.dp(10, d)
+                }
+            }
+            root.addView(ripple, ripple.layoutParams)
+            ripple.alpha = 0f
+            // 第二圈延迟触发，形成荡漾节奏
+            ripple.animate()
+                .alpha(if (round == 0) 0.9f else 0.6f)
+                .setDuration(80)
+                .withEndAction {
+                    ripple.animate()
+                        .scaleX(6.5f - round)
+                        .scaleY(6.5f - round)
+                        .alpha(0f)
+                        .setDuration(540L - round * 120L)
+                        .setInterpolator(DecelerateInterpolator())
+                        .withEndAction { root.removeView(ripple) }
+                        .start()
+                }
+                .start()
         }
     }
 }

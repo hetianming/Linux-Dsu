@@ -65,4 +65,20 @@ object RootShell {
 
     fun getprop(name: String): String =
         exec("getprop $name", timeoutMs = 10000).stdout.trim()
+
+    // root 流式读取文件（su cat）：app 无直读权限的大文件（GSI zip 等）零拷贝读取
+    // 关闭流时同时结束 su 进程，避免残留
+    fun openStream(path: String): java.io.InputStream {
+        val process = ProcessBuilder("su").start()
+        process.outputStream.use { output ->
+            output.write("cat \"$path\"\n".toByteArray())
+            output.flush()
+        }
+        return object : java.io.FilterInputStream(process.inputStream) {
+            override fun close() {
+                runCatching { super.close() }
+                runCatching { process.destroy() }
+            }
+        }
+    }
 }
