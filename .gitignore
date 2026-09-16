@@ -1,0 +1,15 @@
+*.iml
+.gradle/
+build/
+.idea/
+local.properties
+*.apk
+*.aab
+*.keystore
+*.jks
+.cxx/
+keystore/
+rootfs下载检测参考脚本.sh
+底部导航水滴切换特效.zip
+.monkeycode/
+gradle.properties

@@ -1,0 +1,49 @@
+<!--
+  ~ Copyright (c) 2020  Gaurav Ujjwal.
+  ~
+  ~ SPDX-License-Identifier:  GPL-3.0-or-later
+  ~
+  ~ See COPYING.txt for more details.
+  -->
+
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto"
+    app:title="@string/pref_servers">
+
+
+    <SwitchPreference
+        app:defaultValue="true"
+        app:key="clipboard_sync"
+        app:title="@string/pref_clipboard_sync" />
+
+    <SwitchPreference
+        app:defaultValue="false"
+        app:key="lock_saved_server"
+        app:summary="@string/pref_saved_server_lock_summary"
+        app:title="@string/pref_saved_server_lock" />
+
+    <SwitchPreference
+        app:defaultValue="false"
+        app:key="auto_reconnect"
+        app:title="@string/pref_auto_reconnect" />
+
+    <Preference
+        app:key="forget_known_hosts"
+        app:title="@string/pref_forget_known_hosts" />
+
+    <PreferenceCategory
+        app:icon="@drawable/ic_search"
+        app:title="@string/pref_discovery">
+
+        <SwitchPreference
+            app:defaultValue="true"
+            app:key="discovery_autorun"
+            app:summary="@string/pref_discovery_autorun_summary"
+            app:title="@string/pref_discovery_autorun" />
+
+        <SwitchPreference
+            app:defaultValue="true"
+            app:key="rediscovery_indicator"
+            app:title="@string/pref_rediscovery_indicator" />
+    </PreferenceCategory>
+
+</PreferenceScreen>
