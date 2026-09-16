@@ -496,38 +496,110 @@ class SettingsPage(
 
     /**
      * 将系统壁纸设置为更多页面的背景（仅此页面，不影响其他界面）
+     * 多种方式降级获取壁纸，确保兼容性
      */
     private fun applyWallpaperBackground(page: View) {
-        runCatching {
-            val wm = android.app.WallpaperManager.getInstance(activity)
-            val wallpaperDrawable = wm.drawable
+        val dm = activity.resources.displayMetrics
+        val screenW = dm.widthPixels
+        val screenH = dm.heightPixels
 
-            if (wallpaperDrawable != null && wallpaperDrawable.intrinsicWidth > 0) {
-                val dm = activity.resources.displayMetrics
-                val screenW = dm.widthPixels
-                val screenH = dm.heightPixels
+        // 方式1：通过 WallpaperManager.getDrawable() 获取
+        val bmp = tryGetWallpaperFromDrawable(screenW, screenH)
+            // 方式2：通过 getWallpaperFile 获取文件并解码
+            ?: tryGetWallpaperFromFile(screenW, screenH)
 
-                // 把壁纸绘制到 Bitmap（原始尺寸）
-                val srcW = wallpaperDrawable.intrinsicWidth
-                val srcH = wallpaperDrawable.intrinsicHeight
-                val srcBmp = android.graphics.Bitmap.createBitmap(srcW, srcH, android.graphics.Bitmap.Config.ARGB_8888)
-                val canvas = android.graphics.Canvas(srcBmp)
-                wallpaperDrawable.setBounds(0, 0, srcW, srcH)
-                wallpaperDrawable.draw(canvas)
-
-                // CENTER_CROP 缩放：填满屏幕，保持比例，裁剪多余
-                val scale = maxOf(screenW.toFloat() / srcW, screenH.toFloat() / srcH)
-                val scaledW = (srcW * scale).toInt()
-                val scaledH = (srcH * scale).toInt()
-                val scaledBmp = android.graphics.Bitmap.createScaledBitmap(srcBmp, scaledW, scaledH, true)
-                srcBmp.recycle()
-
-                val bd = android.graphics.drawable.BitmapDrawable(activity.resources, scaledBmp)
-                bd.gravity = android.view.Gravity.CENTER
-                page.background = bd
-            }
-        }.onFailure {
-            // 失败时保持默认透明背景
+        if (bmp != null) {
+            val bd = android.graphics.drawable.BitmapDrawable(activity.resources, bmp)
+            bd.gravity = android.view.Gravity.CENTER
+            page.background = bd
+        } else {
+            // 方式3：全部失败时使用深色背景
+            page.setBackgroundColor(android.graphics.Color.parseColor("#1A1A2E"))
         }
+    }
+
+    /**
+     * 方式1：从 WallpaperManager.drawable 获取壁纸
+     */
+    private fun tryGetWallpaperFromDrawable(screenW: Int, screenH: Int): android.graphics.Bitmap? {
+        return runCatching {
+            val wm = android.app.WallpaperManager.getInstance(activity)
+            val drawable = wm.drawable ?: return@runCatching null
+
+            // drawable 的 intrinsicWidth 可能为 -1（未知尺寸），需特殊处理
+            val srcW: Int
+            val srcH: Int
+            if (drawable.intrinsicWidth > 0 && drawable.intrinsicHeight > 0) {
+                srcW = drawable.intrinsicWidth
+                srcH = drawable.intrinsicHeight
+            } else {
+                // 尺寸未知时使用屏幕尺寸
+                srcW = screenW
+                srcH = screenH
+            }
+
+            val bmp = android.graphics.Bitmap.createBitmap(srcW, srcH, android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bmp)
+            drawable.setBounds(0, 0, srcW, srcH)
+            drawable.draw(canvas)
+
+            // 检查 bitmap 是否全透明（空壁纸）
+            if (bmp.sameAs(android.graphics.Bitmap.createBitmap(srcW, srcH, android.graphics.Bitmap.Config.ARGB_8888))) {
+                bmp.recycle()
+                return@runCatching null
+            }
+
+            centerCropScale(bmp, screenW, screenH)
+        }.getOrNull()
+    }
+
+    /**
+     * 方式2：从 WallpaperManager.getWallpaperFile 获取壁纸文件并解码
+     */
+    private fun tryGetWallpaperFromFile(screenW: Int, screenH: Int): android.graphics.Bitmap? {
+        return runCatching {
+            val wm = android.app.WallpaperManager.getInstance(activity)
+            val wallFile = wm.getWallpaperFile(android.app.WallpaperManager.FLAG_SYSTEM) ?: return@runCatching null
+
+            val opts = android.graphics.BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            android.graphics.BitmapFactory.decodeFileDescriptor(wallFile.fileDescriptor, null, opts)
+
+            // 计算 inSampleSize
+            val imgW = opts.outWidth
+            val imgH = opts.outHeight
+            if (imgW <= 0 || imgH <= 0) return@runCatching null
+
+            var sampleSize = 1
+            var maxDim = maxOf(imgW, imgH)
+            val targetMax = maxOf(screenW, screenH) * 2
+            while (maxDim / (sampleSize * 2) > targetMax) {
+                sampleSize *= 2
+            }
+
+            val decodeOpts = android.graphics.BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+            }
+            val bmp = android.graphics.BitmapFactory.decodeFileDescriptor(wallFile.fileDescriptor, null, decodeOpts)
+            wallFile.close()
+
+            if (bmp == null || bmp.width <= 0) return@runCatching null
+
+            centerCropScale(bmp, screenW, screenH)
+        }.getOrNull()
+    }
+
+    /**
+     * CENTER_CROP 缩放：填满屏幕，保持比例，裁剪多余
+     */
+    private fun centerCropScale(src: android.graphics.Bitmap, targetW: Int, targetH: Int): android.graphics.Bitmap {
+        val scale = maxOf(targetW.toFloat() / src.width, targetH.toFloat() / src.height)
+        val scaledW = (src.width * scale).toInt().coerceAtLeast(1)
+        val scaledH = (src.height * scale).toInt().coerceAtLeast(1)
+        val scaled = android.graphics.Bitmap.createScaledBitmap(src, scaledW, scaledH, true)
+        if (scaled !== src) src.recycle()
+        return scaled
     }
 }
