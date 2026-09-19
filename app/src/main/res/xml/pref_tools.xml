@@ -1,0 +1,32 @@
+<!--
+  ~ Copyright (c) 2020  Gaurav Ujjwal.
+  ~
+  ~ SPDX-License-Identifier:  GPL-3.0-or-later
+  ~
+  ~ See COPYING.txt for more details.
+  -->
+
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto"
+    app:title="@string/pref_tools">
+
+    <Preference
+        app:fragment="com.gaurav.avnc.ui.prefs.ImportExportFragment"
+        app:title="@string/pref_import_export" />
+
+    <PreferenceCategory
+        app:icon="@drawable/ic_bug"
+        app:title="@string/pref_debugging">
+
+        <Preference
+            app:fragment="com.gaurav.avnc.ui.prefs.LogsFragment"
+            app:title="@string/pref_logs" />
+
+        <Preference
+            app:fragment="com.gaurav.avnc.ui.prefs.TouchTestFragment"
+            app:title="@string/pref_touch_test" />
+
+        <Preference
+            app:fragment="com.gaurav.avnc.ui.prefs.KeyTestFragment"
+            app:title="@string/pref_key_test" />
+    </PreferenceCategory>
+</PreferenceScreen>

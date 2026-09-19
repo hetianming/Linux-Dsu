@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- 小米橙色圆角方形背景 -->
+    <path
+        android:fillColor="#FF6900"
+        android:pathData="M0,12C0,5.4 5.4,0 12,0h24c6.6,0 12,5.4 12,12v24c0,6.6 -5.4,12 -12,12H12C5.4,48 0,42.6 0,36z" />
+    <!-- MI logo - 字母 M (两根竖柱 + 顶部V形缺口, 底部平整) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M10,14h4l6,12 6,-12h4v20h-4V20l-4,8h-4l-4,-8v14h-4z" />
+    <!-- MI logo - 字母 I -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,14h4v20h-4z" />
+</vector>
