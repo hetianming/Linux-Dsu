@@ -5,7 +5,6 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
@@ -24,6 +23,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.mcai.ubuntudsu.IPrivilegedService
 import com.mcai.ubuntudsu.PrivilegedRootService
+import com.mcai.ubuntudsu.R
 import com.mcai.ubuntudsu.core.DsuManager
 import com.mcai.ubuntudsu.ui.Ui
 import com.topjohnwu.superuser.ipc.RootService
@@ -54,7 +54,7 @@ class DsuPage(
     private lateinit var installProgressLabel: TextView
     private lateinit var installProgressBar: ProgressBar
     private lateinit var installPercentText: TextView
-    private lateinit var customCapacityText: TextView
+    private lateinit var customCapacityInput: EditText
 
     fun onZipPicked(uri: Uri?) {
         uri?.let {
@@ -141,25 +141,41 @@ class DsuPage(
                 setOnClickListener {
                     selectedUserdataGB = size
                     selectSizeChip(sizeRow, size)
+                    // 点选预设时清空自定义输入，保证「唯一生效值」清晰
+                    customCapacityInput.setText("")
                 }
             }
             sizeRow.addView(chip)
         }
         parameterCard.addView(sizeRow)
+        // 自定义容量：输入框 + 确定按钮二合一（免弹框，直接输入 GB 数）
         val customRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, Ui.dp(5, d), 0, 0)
         }
-        customCapacityText = label("自定义容量 GB", 11f).apply {
-            setTextColor(Ui.secondaryText(activity))
-            gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, Ui.dp(30, d), 1f)
+        customCapacityInput = EditText(activity).apply {
+            hint = "自定义容量（GB）"
+            textSize = 12f
+            setTextColor(Ui.primaryText(activity))
+            setHintTextColor(Ui.secondaryText(activity))
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            maxLines = 1
             background = Ui.glassButton(activity)
-            setPadding(Ui.dp(10, d), 0, 0, 0)
+            setPadding(Ui.dp(10, d), 0, Ui.dp(10, d), 0)
+            layoutParams = LinearLayout.LayoutParams(0, Ui.dp(30, d), 1f)
         }
-        customRow.addView(customCapacityText)
+        customRow.addView(customCapacityInput)
         customRow.addView(
-            smallAction("自定义", Ui.buttonPrimary(activity), minWidthDp = 64) { showCustomSizeDialog() },
+            smallAction("确定容量", Ui.buttonPrimary(activity), minWidthDp = 72) {
+                val value = customCapacityInput.text.toString().toIntOrNull()
+                if (value != null && value > 0) {
+                    selectedUserdataGB = value
+                    selectSizeChip(sizeRow, value)
+                    Toast.makeText(activity, "已设定 userdata 容量：${value} GB", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(activity, "请输入有效容量", Toast.LENGTH_SHORT).show()
+                }
+            },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(30, d)).apply {
                 marginStart = Ui.dp(8, d)
             },
@@ -207,46 +223,72 @@ class DsuPage(
         )
         page.addView(parameterCard)
 
-        // 工具区
-        page.addView(actionCard("⚒", Ui.buttonSuccess(activity), "修复环境", "清理 DSU 元数据后重新准备安装") {
-            confirmAction(
-                "修复 DSU 环境",
-                "将删除 /metadata/gsi/dsu 和 /metadata/vold/metadata_encryption/dsu。该操作用于清理上一次失败安装留下的状态，不会删除已选择的 GSI 文件。",
-            ) {
-                executor.execute {
-                    val result = DsuManager.restartDsuService(::log)
-                    log(if (result.success) "DSU 环境修复完成" else "DSU 环境修复失败：${result.stderr}")
-                }
-            }
-        })
-        page.addView(spacer(6))
-        page.addView(actionCard("↻", Ui.buttonWarning(activity), "重启到 DSU", "重启进入已安装的 GSI 系统") {
-            confirmAction("重启进入 DSU", "设备将立即重启并进入 GSI 系统。") {
-                executor.execute {
-                    val service = privilegedService
-                    if (service == null) {
-                        log("ROOT DSU 服务尚未连接")
-                    } else if (!service.setEnable(true, true)) {
-                        log("设置一次性 DSU 启动失败")
-                    } else if (!service.boot()) {
-                        log("请求重启到 DSU 失败")
+        // 工具入口：2x2 大图标网格（重启到 DSU / 修复环境 / 撤销已安装 / 清理 userdata）
+        page.addView(
+            label("DSU 工具", 12f, bold = true).apply { setTextColor(Ui.secondaryText(activity)) },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = Ui.dp(10, d); bottomMargin = Ui.dp(8, d) },
+        )
+        val toolsRow1 = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+        toolsRow1.addView(
+            Ui.iconTile(activity, "重启到 DSU", "重启进入 GSI 系统", R.drawable.icon_dsu_modern, Ui.buttonWarning(activity)) {
+                confirmAction("重启进入 DSU", "设备将立即重启并进入 GSI 系统。") {
+                    executor.execute {
+                        val service = privilegedService
+                        if (service == null) {
+                            log("ROOT DSU 服务尚未连接")
+                        } else if (!service.setEnable(true, true)) {
+                            log("设置一次性 DSU 启动失败")
+                        } else if (!service.boot()) {
+                            log("请求重启到 DSU 失败")
+                        }
                     }
                 }
-            }
-        })
-        page.addView(spacer(6))
-        page.addView(actionCard("▣", Ui.buttonDanger(activity), "撤销已安装", "移除当前 GSI 及其数据，回到原系统") {
-            confirmAction("撤销 GSI", "删除 /data/gsi/dsu/dsu，移除已安装的 GSI。") { executor.execute { DsuManager.wipe(::log) } }
-        })
-        page.addView(spacer(6))
-        page.addView(actionCard("⌫", Ui.buttonSecondary(activity), "清理 userdata", "保留 GSI 但清空用户数据分区") {
-            confirmAction("清理 userdata", "执行 gsi_tool wipe-data，仅清空 userdata 分区数据。") {
-                executor.execute {
-                    val result = DsuManager.wipeData(::log)
-                    log(if (result.success) "userdata 已清理" else "userdata 清理失败：${result.stderr}")
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        toolsRow1.addView(
+            Ui.iconTile(activity, "修复环境", "清理元数据重新准备", R.drawable.ic_tools, Ui.buttonSuccess(activity), Ui.buttonSuccess(activity)) {
+                confirmAction(
+                    "修复 DSU 环境",
+                    "将删除 /metadata/gsi/dsu 和 /metadata/vold/metadata_encryption/dsu。该操作用于清理上一次失败安装留下的状态，不会删除已选择的 GSI 文件。",
+                ) {
+                    executor.execute {
+                        val result = DsuManager.restartDsuService(::log)
+                        log(if (result.success) "DSU 环境修复完成" else "DSU 环境修复失败：${result.stderr}")
+                    }
                 }
-            }
-        })
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = Ui.dp(8, d) },
+        )
+        page.addView(toolsRow1)
+        val toolsRow2 = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = Ui.dp(8, d) }
+        }
+        toolsRow2.addView(
+            Ui.iconTile(activity, "撤销已安装", "移除 GSI 回到原系统", R.drawable.icon_trash_rootfs, Ui.buttonDanger(activity)) {
+                confirmAction("撤销 GSI", "删除 /data/gsi/dsu/dsu，移除已安装的 GSI。") { executor.execute { DsuManager.wipe(::log) } }
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        toolsRow2.addView(
+            Ui.iconTile(activity, "清理 userdata", "清空用户数据分区", R.drawable.ic_clear, Ui.buttonSecondary(activity), Ui.buttonSecondary(activity)) {
+                confirmAction("清理 userdata", "执行 gsi_tool wipe-data，仅清空 userdata 分区数据。") {
+                    executor.execute {
+                        val result = DsuManager.wipeData(::log)
+                        log(if (result.success) "userdata 已清理" else "userdata 清理失败：${result.stderr}")
+                    }
+                }
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = Ui.dp(8, d) },
+        )
+        page.addView(toolsRow2)
 
         return page
     }
@@ -255,16 +297,12 @@ class DsuPage(
         orientation = LinearLayout.VERTICAL
         setPadding(Ui.dp(14, d), Ui.dp(12, d), Ui.dp(14, d), Ui.dp(12, d))
         background = Ui.glassSurface(activity, 18f)
-        elevation = Ui.dp(3, d).toFloat()
+        // 圆角 outline 投影：裸 elevation 对 LayerDrawable 背景会渲染成方形影子
+        Ui.applyNeuShadow(this, 3f, 18f)
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { bottomMargin = Ui.dp(8, d) }
-    }
-
-    private fun spacer(height: Int): View {
-        val d = activity.resources.displayMetrics.density
-        return View(activity).also { it.layoutParams = Ui.layoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(height, d)) }
     }
 
     private fun label(text: String, size: Float, bold: Boolean = false): TextView = TextView(activity).apply {
@@ -287,47 +325,6 @@ class DsuPage(
         setOnClickListener { onClick() }
     }
 
-    private fun actionCard(icon: String, iconColor: Int, heading: String, detail: String, onClick: () -> Unit): View {
-        val d = activity.resources.displayMetrics.density
-        return LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(Ui.dp(12, d), Ui.dp(9, d), Ui.dp(10, d), Ui.dp(9, d))
-            background = Ui.glassSurface(activity, 18f)
-            elevation = Ui.dp(3, d).toFloat()
-            setOnClickListener { onClick() }
-            Ui.pressAnimation(this)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            )
-            addView(TextView(activity).apply {
-                text = icon
-                textSize = 18f
-                gravity = Gravity.CENTER
-                setTextColor(Color.WHITE)
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.RECTANGLE
-                    setColor(iconColor)
-                    cornerRadius = Ui.dp(11, d).toFloat()
-                }
-                layoutParams = LinearLayout.LayoutParams(Ui.dp(36, d), Ui.dp(36, d))
-            })
-            addView(LinearLayout(activity).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                    marginStart = Ui.dp(10, d)
-                }
-                addView(label(heading, 14f, bold = true))
-                addView(label(detail, 11f).apply {
-                    setTextColor(Ui.secondaryText(activity))
-                    setPadding(0, Ui.dp(1, d), 0, 0)
-                })
-            })
-            addView(label("›", 22f).apply { setTextColor(Ui.secondaryText(activity)) })
-        }
-    }
-
     private fun selectSizeChip(row: LinearLayout, selected: Int) {
         for (index in 0 until row.childCount) {
             val chip = row.getChildAt(index) as? TextView ?: continue
@@ -341,28 +338,6 @@ class DsuPage(
                 15f,
             )
         }
-    }
-
-    private fun showCustomSizeDialog() {
-        val input = EditText(activity).apply {
-            hint = "userdata 容量（GB）"
-            inputType = android.text.InputType.TYPE_CLASS_NUMBER
-        }
-        showDialog(
-            AlertDialog.Builder(activity)
-                .setTitle("自定义 userdata 容量")
-                .setView(input)
-                .setPositiveButton("确定") { _, _ ->
-                    val value = input.text.toString().toIntOrNull()
-                    if (value != null && value > 0) {
-                        selectedUserdataGB = value
-                        customCapacityText.text = "${value}GB"
-                    } else {
-                        Toast.makeText(activity, "请输入有效容量", Toast.LENGTH_SHORT).show()
-                    }
-                }
-                .setNegativeButton("取消", null)
-        )
     }
 
     private fun confirmAction(title: String, message: String, action: () -> Unit) {

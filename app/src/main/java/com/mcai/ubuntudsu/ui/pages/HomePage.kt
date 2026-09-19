@@ -7,10 +7,13 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.mcai.ubuntudsu.MainActivity
+import com.mcai.ubuntudsu.R
 import com.mcai.ubuntudsu.core.Env
 import com.mcai.ubuntudsu.ui.Ui
 import java.util.concurrent.Executor
@@ -21,7 +24,9 @@ class HomePage(
 ) {
     private lateinit var deviceText: TextView
     private lateinit var gsiText: TextView
+    private lateinit var gsiDot: View
     private lateinit var ubuntuText: TextView
+    private lateinit var ubuntuDot: View
     private lateinit var rootDot: View
     private lateinit var rootLabel: TextView
     private lateinit var storageValue: TextView
@@ -33,6 +38,11 @@ class HomePage(
     private var unifiedCard: LinearLayout? = null
     // 当前渐变档位；默认 0 = 薄荷绿渐变
     private var gradientIndex = 0
+    // 顶部头图卡片：自定义背景图（Env.background），自动居中裁切适配
+    private var heroImage: ImageView? = null
+    private var heroScrim: View? = null
+    private var heroTitle: TextView? = null
+    private var heroSubtitle: TextView? = null
 
     fun build(): View {
         val d = activity.resources.displayMetrics.density
@@ -40,7 +50,7 @@ class HomePage(
             orientation = LinearLayout.VERTICAL
             setPadding(Ui.dp(16, d), Ui.dp(12, d), Ui.dp(16, d), Ui.dp(16, d))
         }
-        // 标题行：左侧"首页"，ROOT 徽章居中，右侧设置图标
+        // 标题行：左侧"首页"，右侧设置图标（置于最顶部）
         val titleRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -53,15 +63,11 @@ class HomePage(
             setTextColor(Ui.primaryText(activity))
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
-        titleRow.addView(buildRootBadge(d))
-        // 右侧 weight 容器包设置图标（gravity END）：固定空间只剩徽章宽度，徽章真正居中
-        titleRow.addView(LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            addView(Ui.settingsIconButton(activity) { Ui.showThemeDialog(activity) { activity.recreate() } })
-        })
+        titleRow.addView(Ui.settingsIconButton(activity) { Ui.showThemeDialog(activity) { activity.recreate() } })
         page.addView(titleRow)
+
+        // 顶部头图卡片：支持自定义背景图，长按恢复默认拟态底
+        page.addView(buildHeroCard(d))
 
         // 上次崩溃信息（若有）
         showCrashIfAny(page)
@@ -130,6 +136,7 @@ class HomePage(
     }
 
     // 按当前档位应用渐变；-1 恢复默认 glassSurface
+    // 渐变档位同样叠加拟态高光/阴影环，保持全局拟态质感
     private fun applyGradient() {
         val card = unifiedCard ?: return
         if (gradientIndex < 0) {
@@ -137,9 +144,32 @@ class HomePage(
             return
         }
         val (top, bottom) = gradientPresets()[gradientIndex]
-        card.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(top, bottom)).apply {
-            cornerRadius = Ui.dp(20, activity.resources.displayMetrics.density).toFloat()
-        }
+        card.background = android.graphics.drawable.LayerDrawable(
+            arrayOf(
+                // 用户选择的渐变填充
+                GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(top, bottom)).apply {
+                    cornerRadius = Ui.dp(20, activity.resources.displayMetrics.density).toFloat()
+                },
+                // 左上高光内环（拟态受光边）
+                GradientDrawable().apply {
+                    cornerRadius = Ui.dp(20, activity.resources.displayMetrics.density).toFloat()
+                    setColor(Color.TRANSPARENT)
+                    setStroke(
+                        Ui.dp(1, activity.resources.displayMetrics.density),
+                        if (Ui.isDark(activity)) Color.argb(62, 168, 214, 255) else Color.argb(200, 255, 255, 255),
+                    )
+                },
+                // 右下阴影外环（拟态背光边）
+                GradientDrawable().apply {
+                    cornerRadius = Ui.dp(21, activity.resources.displayMetrics.density).toFloat()
+                    setColor(Color.TRANSPARENT)
+                    setStroke(
+                        Ui.dp(2, activity.resources.displayMetrics.density),
+                        if (Ui.isDark(activity)) Color.argb(120, 6, 10, 24) else Color.argb(70, 150, 168, 198),
+                    )
+                },
+            ),
+        )
     }
 
     private class ViewOutlineProviderRounded(private val radiusPx: Int) : android.view.ViewOutlineProvider() {
@@ -156,7 +186,8 @@ class HomePage(
             orientation = LinearLayout.VERTICAL
             setPadding(Ui.dp(18, d), Ui.dp(14, d), Ui.dp(18, d), Ui.dp(12, d))
             background = Ui.glassSurface(activity, 18f)
-            elevation = Ui.dp(3, d).toFloat()
+            // 圆角 outline 投影：裸 elevation 对 LayerDrawable 背景会渲染成方形影子
+            Ui.applyNeuShadow(this, 3f, 18f)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -213,7 +244,8 @@ class HomePage(
             orientation = LinearLayout.VERTICAL
             setPadding(Ui.dp(18, d), Ui.dp(14, d), Ui.dp(18, d), Ui.dp(14, d))
             background = Ui.glassSurface(activity, 20f)
-            elevation = Ui.dp(4, d).toFloat()
+            // 圆角 outline 投影：裸 elevation 对 LayerDrawable 背景会渲染成方形影子
+            Ui.applyNeuShadow(this, 4f, 20f)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -304,21 +336,47 @@ class HomePage(
             setTextColor(Ui.secondaryText(activity))
         }
         card.addView(deviceText)
-        card.addView(TextView(activity).apply {
-            text = "Linux - Dsu"
-            textSize = 18f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        // ROOT 权限状态行：与 GSI/Linux 行同款边框胶囊 + 14f 字号，前置状态点
+        val rootRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(Ui.dp(10, d), Ui.dp(4, d), Ui.dp(10, d), Ui.dp(4, d))
+            background = Ui.rounded(
+                if (Ui.isDark(activity)) android.graphics.Color.argb(68, 0, 0, 0) else android.graphics.Color.argb(78, 255, 255, 255),
+                8f,
+                d,
+            )
+            layoutParams = Ui.layoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        rootDot = Ui.statusDot(activity, android.graphics.Color.parseColor("#B0B0B0")).apply {
+            val size = Ui.dp(8, d)
+            layoutParams = LinearLayout.LayoutParams(size, size)
+        }
+        rootLabel = TextView(activity).apply {
+            text = "ROOT：检测中…"
+            textSize = 14f
             setTextColor(Ui.primaryText(activity))
-            setPadding(0, Ui.dp(6, d), 0, Ui.dp(2, d))
-        })
+            layoutParams = Ui.layoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = Ui.dp(6, d)
+            }
+        }
+        rootRow.addView(rootDot)
+        rootRow.addView(rootLabel)
+        card.addView(rootRow)
+        // 与下方状态行保持相同行距
+        (rootRow.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = Ui.dp(6, d)
         val statusColumn = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, Ui.dp(4, d), 0, 0)
         }
-        gsiText = statusRow("GSI 系统", "检测中...")
-        ubuntuText = statusRow("Linux", "检测中...")
-        statusColumn.addView(gsiText)
-        statusColumn.addView(ubuntuText)
+        val gsiPill = statusRow("GSI 系统", "检测中...")
+        gsiText = gsiPill.text
+        gsiDot = gsiPill.dot
+        val ubuntuPill = statusRow("Linux", "检测中...")
+        ubuntuText = ubuntuPill.text
+        ubuntuDot = ubuntuPill.dot
+        statusColumn.addView(gsiPill.row)
+        statusColumn.addView(ubuntuPill.row)
         card.addView(statusColumn)
         card.addView(
             TextView(activity).apply {
@@ -335,55 +393,38 @@ class HomePage(
         return card
     }
 
-    // ROOT 检测徽章：页面标题行居中放置
-    private fun buildRootBadge(d: Float): View {
-        val badge = LinearLayout(activity).apply {
+    // 状态胶囊行：边框胶囊 + 前置状态点 + 文字（ROOT / GSI / Linux 三行同款）
+    private class StatusPillRow(val row: View, val dot: View, val text: TextView)
+
+    private fun statusRow(label: String, value: String): StatusPillRow {
+        val d = activity.resources.displayMetrics.density
+        val dot = Ui.statusDot(activity, android.graphics.Color.parseColor("#B0B0B0")).apply {
+            layoutParams = LinearLayout.LayoutParams(Ui.dp(8, d), Ui.dp(8, d))
+        }
+        val text = TextView(activity).apply {
+            text = "$label：$value"
+            textSize = 14f
+            setTextColor(Ui.primaryText(activity))
+            layoutParams = Ui.layoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = Ui.dp(6, d)
+            }
+        }
+        val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(Ui.dp(10, d), Ui.dp(4, d), Ui.dp(10, d), Ui.dp(4, d))
             background = Ui.rounded(
                 if (Ui.isDark(activity)) android.graphics.Color.argb(68, 0, 0, 0) else android.graphics.Color.argb(78, 255, 255, 255),
                 8f,
                 d,
             )
-            setPadding(Ui.dp(8, d), 0, Ui.dp(10, d), 0)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Ui.dp(26, d),
-            )
-        }
-        rootDot = Ui.statusDot(activity, android.graphics.Color.parseColor("#B0B0B0")).apply {
-            val size = Ui.dp(7, d)
-            layoutParams = LinearLayout.LayoutParams(size, size)
-        }
-        rootLabel = TextView(activity).apply {
-            text = "ROOT 检测中"
-            textSize = 11f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setTextColor(Ui.secondaryText(activity))
             layoutParams = Ui.layoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                marginStart = Ui.dp(5, d)
+                bottomMargin = Ui.dp(6, d)
             }
         }
-        badge.addView(rootDot)
-        badge.addView(rootLabel)
-        return badge
-    }
-
-    private fun statusRow(label: String, value: String): TextView = TextView(activity).apply {
-        text = "$label：$value"
-        textSize = 14f
-        setTextColor(Ui.primaryText(activity))
-        val d = activity.resources.displayMetrics.density
-        setPadding(Ui.dp(10, d), Ui.dp(4, d), Ui.dp(10, d), Ui.dp(4, d))
-        background = Ui.rounded(
-            if (Ui.isDark(activity)) android.graphics.Color.argb(68, 0, 0, 0) else android.graphics.Color.argb(78, 255, 255, 255),
-            8f,
-            d,
-        )
-        layoutParams = Ui.layoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-        ).apply { bottomMargin = Ui.dp(6, activity.resources.displayMetrics.density) }
+        row.addView(dot)
+        row.addView(text)
+        return StatusPillRow(row, dot, text)
     }
 
     private fun updateMetrics(onResult: (Int?, Int?) -> Unit) {
@@ -492,11 +533,16 @@ class HomePage(
         val ctx = activity
         gsiText.text = "GSI 系统：检测中..."
         ubuntuText.text = "Linux：检测中..."
-        rootLabel.text = "ROOT 检测中"
-        rootDot.background = android.graphics.drawable.GradientDrawable().apply {
-            shape = android.graphics.drawable.GradientDrawable.OVAL
-            setColor(android.graphics.Color.parseColor("#B0B0B0"))
+        rootLabel.text = "ROOT：检测中…"
+        fun grayDot(view: View) {
+            view.background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(android.graphics.Color.parseColor("#B0B0B0"))
+            }
         }
+        grayDot(gsiDot)
+        grayDot(ubuntuDot)
+        grayDot(rootDot)
         executor.execute {
             val device = com.mcai.ubuntudsu.core.StatusDetector.deviceSummary()
             val gsiState = com.mcai.ubuntudsu.core.StatusDetector.gsiState().first
@@ -509,20 +555,179 @@ class HomePage(
                 com.mcai.ubuntudsu.core.GsiState.NORMAL -> "未安装"
                 com.mcai.ubuntudsu.core.GsiState.UNKNOWN -> "未检测到"
             }
+            fun dotColor(colorHex: String) = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(android.graphics.Color.parseColor(colorHex))
+            }
             activity.runOnUiThread {
                 deviceText.text = device
                 gsiText.text = "GSI 系统：$gsiLabel"
                 ubuntuText.text = if (Env.ubuntuInstalled(ctx)) "Linux：已安装（大小计算中...）" else "Linux：未安装"
-                rootLabel.text = if (rootOk) "ROOT 已授权" else "ROOT 未授权"
-                rootDot.background = android.graphics.drawable.GradientDrawable().apply {
-                    shape = android.graphics.drawable.GradientDrawable.OVAL
-                    setColor(android.graphics.Color.parseColor(if (rootOk) "#5CE1A5" else "#FF756F"))
-                }
+                rootLabel.text = if (rootOk) "ROOT：已授权" else "ROOT：未授权"
+                rootDot.background = dotColor(if (rootOk) "#5CE1A5" else "#FF756F")
+                // GSI 点：运行/安装/启用=绿，停用=琥珀，未安装/未知=灰
+                gsiDot.background = dotColor(
+                    when (gsiState) {
+                        com.mcai.ubuntudsu.core.GsiState.RUNNING,
+                        com.mcai.ubuntudsu.core.GsiState.INSTALLED,
+                        com.mcai.ubuntudsu.core.GsiState.ENABLED,
+                        -> "#5CE1A5"
+                        com.mcai.ubuntudsu.core.GsiState.DISABLED -> "#FBBF24"
+                        else -> "#B0B0B0"
+                    },
+                )
+                ubuntuDot.background = dotColor(if (Env.ubuntuInstalled(ctx)) "#5CE1A5" else "#B0B0B0")
             }
             if (Env.ubuntuInstalled(ctx)) {
                 val ubuntuSize = runCatching { Env.formatSize(Env.dirSize(Env.rootfs(ctx))) }
                     .getOrElse { "读取失败" }
                 activity.runOnUiThread { ubuntuText.text = "Linux：已安装 ($ubuntuSize)" }
+            }
+        }
+    }
+
+    // ==================== 顶部头图卡片 ====================
+
+    /** 头图卡片：默认拟态玻璃底；选择图片后 CENTER_CROP 自动裁切适配，长按恢复默认 */
+    private fun buildHeroCard(d: Float): View {
+        val hero = FrameLayout(activity).apply {
+            background = Ui.neuCard(activity, 22f)
+            clipToOutline = true
+            outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(v: View, outline: android.graphics.Outline) {
+                    outline.setRoundRect(0, 0, v.width, v.height, Ui.dp(22, d).toFloat())
+                }
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(150, d),
+            ).apply { bottomMargin = Ui.dp(14, d) }
+        }
+
+        heroImage = ImageView(activity).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+            loadHeroBitmap()?.let { setImageBitmap(it) }
+                ?: setImageResource(R.drawable.hero_default) // 内置默认壁纸
+        }
+        hero.addView(heroImage)
+
+        // 底部渐变压暗：保证白色文案可读（默认壁纸与自定义图都需要）
+        heroScrim = View(activity).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.argb(0, 0, 0, 0), Color.argb(165, 7, 11, 22)),
+            )
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(72, d), Gravity.BOTTOM,
+            )
+        }
+        hero.addView(heroScrim)
+
+        // 左下文案：应用名 + 口号
+        val textBlock = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.START,
+            ).apply { marginStart = Ui.dp(16, d); bottomMargin = Ui.dp(14, d) }
+        }
+        heroTitle = TextView(activity).apply {
+            text = "Ubuntu DSU"
+            textSize = 19f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        }
+        heroSubtitle = TextView(activity).apply {
+            text = "口袋里的 Linux 工作站 · 天明研发版"
+            textSize = 11f
+            setPadding(0, Ui.dp(2, d), 0, 0)
+        }
+        textBlock.addView(heroTitle)
+        textBlock.addView(heroSubtitle)
+        hero.addView(textBlock)
+
+        // 右下「更换背景」玻璃胶囊：唤起系统图片选择器
+        val chip = TextView(activity).apply {
+            text = "更换背景"
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setPadding(Ui.dp(12, d), Ui.dp(6, d), Ui.dp(12, d), Ui.dp(6, d))
+            setTextColor(Ui.buttonText(activity))
+            background = Ui.glassButton(activity, Ui.buttonPrimary(activity))
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.END,
+            ).apply { marginEnd = Ui.dp(12, d); bottomMargin = Ui.dp(12, d) }
+            Ui.pressAnimation(this)
+            setOnClickListener { activity.pickHeroImage() }
+        }
+        hero.addView(chip)
+
+        // 长按恢复内置默认壁纸（有自定义图时删除并回退）
+        hero.setOnLongClickListener {
+            val file = Env.background(activity)
+            if (file.exists() && file.delete()) {
+                heroImage?.setImageResource(R.drawable.hero_default)
+                applyHeroTextColors(true)
+                Toast.makeText(activity, "已恢复默认壁纸", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(activity, "当前已是默认壁纸", Toast.LENGTH_SHORT).show()
+            }
+            true
+        }
+
+        applyHeroTextColors(true) // 默认壁纸/自定义图均为深色底，文字恒白
+        return hero
+    }
+
+    // 有图时文字白色（落在压暗渐变上），无图时跟随主题文字色
+    private fun applyHeroTextColors(onImage: Boolean) {
+        heroTitle?.setTextColor(if (onImage) Color.WHITE else Ui.primaryText(activity))
+        heroSubtitle?.setTextColor(
+            if (onImage) Color.argb(215, 255, 255, 255) else Ui.secondaryText(activity),
+        )
+    }
+
+    // 解码头图：按卡片尺寸降采样，避免大图内存压力
+    private fun loadHeroBitmap(): android.graphics.Bitmap? {
+        return runCatching {
+            val file = Env.background(activity)
+            if (!file.exists()) return null
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(file.path, bounds)
+            if (bounds.outWidth <= 0) return null
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= 1200) sample *= 2
+            android.graphics.BitmapFactory.decodeFile(
+                file.path,
+                android.graphics.BitmapFactory.Options().apply { inSampleSize = sample },
+            )
+        }.getOrNull()
+    }
+
+    // 图片选择回调：拷贝到应用私有目录（持久保存），刷新头图
+    fun onHeroImagePicked(uri: android.net.Uri) {
+        executor.execute {
+            val copied = runCatching {
+                val target = Env.background(activity)
+                activity.contentResolver.openInputStream(uri)?.use { input ->
+                    target.outputStream().use { output -> input.copyTo(output) }
+                } != null
+            }.getOrDefault(false)
+            activity.runOnUiThread {
+                val bmp = if (copied) loadHeroBitmap() else null
+                if (bmp != null) {
+                    heroImage?.setImageBitmap(bmp)
+                    heroImage?.visibility = View.VISIBLE
+                    heroScrim?.visibility = View.VISIBLE
+                    applyHeroTextColors(true)
+                } else {
+                    Toast.makeText(activity, "图片读取失败", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }

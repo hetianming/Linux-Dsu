@@ -39,6 +39,10 @@ object JavaDownloader {
         return raw.ifBlank { "download_${System.currentTimeMillis()}" }
     }
 
+    /**
+     * 文件大小与已下载字节回调（用于 UI 显示「已下载 / 总大小」）
+     * 第一个参数为总字节数，第二个为已下载字节数
+     */
     fun download(
         ctx: Context,
         url: String,
@@ -47,6 +51,7 @@ object JavaDownloader {
         isCancelled: () -> Boolean = { false },
         isPaused: () -> Boolean = { false },
         onLog: ((String) -> Unit)? = null,
+        onSizeInfo: ((Long, Long) -> Unit)? = null,
     ): Result {
         val cleanUrl = url.replace(Regex("\\s+"), "")
         if (!cleanUrl.startsWith("http://") && !cleanUrl.startsWith("https://")) {
@@ -89,7 +94,7 @@ object JavaDownloader {
 
         val cancelled = AtomicBoolean(false)
         return try {
-            downloadInternal(cleanUrl, finalTarget, onProgress, cancelled, { isCancelled() }, { isPaused() }, onLog)
+            downloadInternal(cleanUrl, finalTarget, onProgress, cancelled, { isCancelled() }, { isPaused() }, onLog, onSizeInfo)
         } catch (e: Exception) {
             onLog?.invoke("下载异常: ${e.message}")
             Result(false, null, e.message ?: "下载失败")
@@ -104,6 +109,7 @@ object JavaDownloader {
         isCancelled: () -> Boolean,
         isPaused: () -> Boolean,
         onLog: ((String) -> Unit)?,
+        onSizeInfo: ((Long, Long) -> Unit)?,
     ): Result {
         // 1. 探测文件大小
         onLog?.invoke("正在连接服务器...")
@@ -112,12 +118,13 @@ object JavaDownloader {
             return Result(false, null, "无法获取文件大小")
         }
         onLog?.invoke("文件大小: ${formatBytes(totalSize)}")
+        onSizeInfo?.invoke(totalSize, 0L)
 
         // 2. 选择下载策略
         val tmpFile = File(target.parentFile, "${target.name}.tmp")
         if (rangeSupported && totalSize > 2 * 1024 * 1024) {
             onLog?.invoke("支持 Range，启动 $THREAD_COUNT 线程并发下载...")
-            val result = multiThreadDownload(url, tmpFile, totalSize, onProgress, cancelled, isCancelled, isPaused, onLog)
+            val result = multiThreadDownload(url, tmpFile, totalSize, onProgress, cancelled, isCancelled, isPaused, onLog, onSizeInfo)
             if (result.success) {
                 return finalizeFile(tmpFile, target, onLog, onProgress)
             }
@@ -126,7 +133,7 @@ object JavaDownloader {
             tmpFile.delete()
         }
 
-        return singleThreadDownload(url, tmpFile, target, totalSize, onProgress, cancelled, isCancelled, isPaused, onLog)
+        return singleThreadDownload(url, tmpFile, target, totalSize, onProgress, cancelled, isCancelled, isPaused, onLog, onSizeInfo)
     }
 
     // ========== 探测 ==========
@@ -174,6 +181,7 @@ object JavaDownloader {
         isCancelled: () -> Boolean,
         isPaused: () -> Boolean,
         onLog: ((String) -> Unit)?,
+        onSizeInfo: ((Long, Long) -> Unit)?,
     ): Result {
         // 预分配文件
         try {
@@ -201,7 +209,7 @@ object JavaDownloader {
             val seg = segments[i]
             Thread {
                 try {
-                    downloadSegment(url, tmpFile, seg, done, totalSize, onProgress, cancelled, isCancelled, isPaused, onLog)
+                    downloadSegment(url, tmpFile, seg, done, totalSize, onProgress, cancelled, isCancelled, isPaused, onLog, onSizeInfo)
                 } catch (e: Exception) {
                     if (!cancelled.get()) {
                         anyError.set(true)
@@ -244,6 +252,7 @@ object JavaDownloader {
         isCancelled: () -> Boolean,
         isPaused: () -> Boolean,
         onLog: ((String) -> Unit)?,
+        onSizeInfo: ((Long, Long) -> Unit)?,
     ) {
         val buffer = ByteArray(BUFFER_BYTES)
         var retries = 0
@@ -286,6 +295,7 @@ object JavaDownloader {
                                     val pct = (total * 100 / totalSize).toInt().coerceIn(0, 100)
                                     val speed = (total - lastBytes) * 1000 / (now - lastReport)
                                     onProgress(pct)
+                                    onSizeInfo?.invoke(totalSize, total)
                                     onLog?.invoke("进度: $pct% | ${formatBytes(total)}/${formatBytes(totalSize)} | ${formatBytes(speed)}/s")
                                     lastReport = now
                                     lastBytes = total
@@ -325,6 +335,7 @@ object JavaDownloader {
         isCancelled: () -> Boolean,
         isPaused: () -> Boolean,
         onLog: ((String) -> Unit)?,
+        onSizeInfo: ((Long, Long) -> Unit)?,
     ): Result {
         var retries = 0
 
@@ -357,6 +368,7 @@ object JavaDownloader {
 
                     onLog?.invoke("开始下载...")
                     var done = existing
+                    onSizeInfo?.invoke(actualTotal, done)
                     val buffer = ByteArray(BUFFER_BYTES)
                     var lastReport = System.currentTimeMillis()
                     var lastBytes = done
@@ -381,6 +393,7 @@ object JavaDownloader {
                                     val pct = (done * 100 / actualTotal).toInt().coerceIn(0, 100)
                                     val speed = (done - lastBytes) * 1000 / (now - lastReport)
                                     onProgress(pct)
+                                    onSizeInfo?.invoke(actualTotal, done)
                                     onLog?.invoke("进度: $pct% | ${formatBytes(done)}/${formatBytes(actualTotal)} | ${formatBytes(speed)}/s")
                                     lastReport = now
                                     lastBytes = done

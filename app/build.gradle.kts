@@ -14,8 +14,8 @@ android {
         applicationId = "com.mcai.ubuntudsu"
         minSdk = 26
         targetSdk = 28
-        versionCode = 8
-        versionName = "1.2.1"
+        versionCode = 10
+        versionName = "1.3.7"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
@@ -41,9 +41,9 @@ android {
 
     buildTypes {
         release {
-            // Disable R8/minify to reduce memory pressure in constrained build environments
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8 全程序优化 + 资源收缩：dex/arsc 体积最小化
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

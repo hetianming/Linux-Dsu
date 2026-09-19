@@ -182,7 +182,8 @@ class RootfsFilesActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(Ui.dp(12, d), Ui.dp(8, d), Ui.dp(12, d), Ui.dp(8, d))
             background = Ui.frostedSurface(this@RootfsFilesActivity, radiusDp = 12f, stroke = false)
-            elevation = Ui.dp(6, d).toFloat()
+            // 圆角 outline 投影：裸 elevation 对 LayerDrawable 背景会渲染成方形影子
+            Ui.applyNeuShadow(this, 6f, 12f)
         }
         if (pickMode) {
             toolBar.addView(smallAction("上级", Ui.buttonSecondary(this)) { navigateUp() }.apply {
@@ -236,7 +237,8 @@ class RootfsFilesActivity : AppCompatActivity() {
         orientation = LinearLayout.VERTICAL
         setPadding(Ui.dp(14, d), Ui.dp(12, d), Ui.dp(14, d), Ui.dp(12, d))
         background = Ui.glassSurface(this@RootfsFilesActivity, 18f)
-        elevation = Ui.dp(3, d).toFloat()
+        // 圆角 outline 投影：裸 elevation 对 LayerDrawable 背景会渲染成方形影子
+        Ui.applyNeuShadow(this, 3f, 18f)
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,

@@ -36,6 +36,7 @@ class MainActivity : AppCompatActivity() {
     private var settingsPage: SettingsPage? = null
     private val pageCache = mutableMapOf<Int, View>()
     private var navBar: LinearLayout? = null
+    private var glassNav: com.mcai.ubuntudsu.ui.glass.LiquidGlassView? = null
     private var swipeDownX = 0f
     private var swipeDownY = 0f
     private var swipeTracked = false
@@ -46,6 +47,19 @@ class MainActivity : AppCompatActivity() {
             val path = result.data?.getStringExtra(RootfsFilesActivity.RESULT_FILE_PATH)
             if (path != null) dsuPage?.onZipPicked(android.net.Uri.fromFile(java.io.File(path)))
         }
+
+    // 首页头图背景选择：OpenDocument 可持久授权，结果拷贝进应用私有目录
+    private val pickHeroImageLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+            uri?.let { homePage?.onHeroImagePicked(it) }
+        }
+
+    fun pickHeroImage() {
+        runCatching { pickHeroImageLauncher.launch(arrayOf("image/*")) }
+            .onFailure {
+                android.widget.Toast.makeText(this, "无法打开图片选择器", android.widget.Toast.LENGTH_SHORT).show()
+            }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -136,13 +150,12 @@ class MainActivity : AppCompatActivity() {
         val navLayoutParams = FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.BOTTOM,
         )
         val navBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             // item 之间留出间距：外边距 + item 内边距形成呼吸感
-            setPadding(Ui.dp(14, d), Ui.dp(8, d), Ui.dp(14, d), Ui.dp(8, d))
+            setPadding(Ui.dp(10, d), Ui.dp(8, d), Ui.dp(10, d), Ui.dp(8, d))
             layoutParams = navLayoutParams
         }
         tabs.forEachIndexed { tab, label ->
@@ -153,6 +166,7 @@ class MainActivity : AppCompatActivity() {
                 setTypeface(typeface, if (tab == 0) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
                 setTextColor(if (tab == 0) Ui.buttonText(this@MainActivity) else Ui.secondaryText(this@MainActivity))
                 background = Ui.glassButton(this@MainActivity, if (tab == 0) Ui.buttonPrimary(this@MainActivity) else null)
+                // 舱内胶囊不再单独投影：玻璃舱整体投影，避免双层影子叠加发脏
                 // 胶囊形 item，前后留间距
                 layoutParams = LinearLayout.LayoutParams(0, Ui.dp(40, d), 1f).apply {
                     marginStart = if (tab == 0) 0 else Ui.dp(6, d)
@@ -164,7 +178,25 @@ class MainActivity : AppCompatActivity() {
             navItems.add(item)
             navBar.addView(item)
         }
-        root.addView(navBar, navLayoutParams)
+        // 液态玻璃渲染导航舱：真实 LiquidGlassView 渲染层（着色/高光/折射/景深/辉光）+ 拟态彩色投影
+        val glassNav = com.mcai.ubuntudsu.ui.glass.LiquidGlass.createView(this, com.mcai.ubuntudsu.ui.glass.LiquidGlass.navBar(this)).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM,
+            ).apply {
+                marginStart = Ui.dp(12, d)
+                marginEnd = Ui.dp(12, d)
+                bottomMargin = Ui.dp(8, d)
+            }
+            Ui.applyNeuShadow(this, 5f, 26f, Ui.buttonPrimary(this@MainActivity))
+        }
+        glassNav.addView(navBar, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        ))
+        root.addView(glassNav, glassNav.layoutParams)
+        this.glassNav = glassNav
         this.navBar = navBar
 
         setContentView(root)
@@ -177,9 +209,10 @@ class MainActivity : AppCompatActivity() {
             val ws = getPreferences(MODE_PRIVATE).getBoolean("wallpaper_sync", false)
             v.setPadding(bars.left, if (currentTab == 3 && ws) 0 else bars.top + Ui.dp(2, d), bars.right, 0)
             pageHost.setPadding(0, 0, 0, if (currentTab == 3 && ws) 0 else Ui.dp(56 + 16 + 12, d) + bars.bottom)
-            (navBar.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
-                lp.bottomMargin = bars.bottom
-                navBar.layoutParams = lp
+            // 玻璃导航舱避让手势条
+            (glassNav?.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
+                lp.bottomMargin = bars.bottom + Ui.dp(8, d)
+                glassNav?.layoutParams = lp
             }
             insets
         }
@@ -205,6 +238,7 @@ class MainActivity : AppCompatActivity() {
             }
             item.setTypeface(item.typeface, if (active) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
             item.background = Ui.glassButton(this, if (active) Ui.buttonPrimary(this) else null)
+            // 舱内胶囊不投影，仅靠胶囊底色区分激活态
         }
         // 水滴切换动画：旧 tab 按钮位置泛起涟漪水滴，向新 tab 方向飞溅
         if (previousTab != tab && previousTab in navItems.indices) {

@@ -117,7 +117,8 @@ class RomPage(
             orientation = LinearLayout.VERTICAL
             setPadding(Ui.dp(14, d), Ui.dp(12, d), Ui.dp(14, d), Ui.dp(12, d))
             background = Ui.glassSurface(activity, 16f)
-            elevation = Ui.dp(2, d).toFloat()
+            // 圆角 outline 投影：裸 elevation 对 LayerDrawable 背景会渲染成方形影子
+            Ui.applyNeuShadow(this, 2f, 16f)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -511,7 +512,8 @@ class RomPage(
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(Ui.dp(6, d), Ui.dp(10, d), Ui.dp(6, d), Ui.dp(10, d))
             background = Ui.glassSurface(activity, 12f)
-            elevation = Ui.dp(1, d).toFloat()
+            // 圆角 outline 投影：裸 elevation 对 LayerDrawable 背景会渲染成方形影子
+            Ui.applyNeuShadow(this, 1.5f, 12f)
             isClickable = true
             isFocusable = true
             setOnClickListener {

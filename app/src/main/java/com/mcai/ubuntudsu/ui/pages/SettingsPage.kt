@@ -514,8 +514,8 @@ class SettingsPage(
             bd.gravity = android.view.Gravity.CENTER
             page.background = bd
         } else {
-            // 全部失败时使用深色背景
-            page.setBackgroundColor(android.graphics.Color.parseColor("#1A1A2E"))
+            // 全部失败时回退全局液态玻璃背景（日间/夜间自适应）
+            Ui.animateLiquidBackground(page)
         }
     }
 

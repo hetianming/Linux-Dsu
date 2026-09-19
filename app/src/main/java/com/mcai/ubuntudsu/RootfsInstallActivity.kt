@@ -216,7 +216,8 @@ class RootfsInstallActivity : AppCompatActivity() {
         orientation = LinearLayout.VERTICAL
         setPadding(Ui.dp(14, d), Ui.dp(12, d), Ui.dp(14, d), Ui.dp(12, d))
         background = Ui.glassSurface(this@RootfsInstallActivity, 18f)
-        elevation = Ui.dp(3, d).toFloat()
+        // 圆角 outline 投影：裸 elevation 对 LayerDrawable 背景会渲染成方形影子
+        Ui.applyNeuShadow(this, 3f, 18f)
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,

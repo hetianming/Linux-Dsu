@@ -28,8 +28,6 @@ import android.widget.CheckBox
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.RadioButton
-import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Switch
@@ -70,6 +68,8 @@ class OnboardingActivity : AppCompatActivity() {
     private lateinit var indicatorContainer: LinearLayout
     private lateinit var rootLayout: FrameLayout
     private val indicatorDots = mutableListOf<View>()
+    /** 欢迎页全屏动态彩虹背景层（挂 rootLayout，仅第 0 页显示） */
+    private lateinit var rainbowFlow: RainbowFlowView
 
     // Swipe tracking
     private var swipeStartX = 0f
@@ -84,6 +84,7 @@ class OnboardingActivity : AppCompatActivity() {
     private var agreementChecked = false
     private var notificationGranted = false
     private var storageGranted = false
+    private var usageAccessGranted = false
     private var rootVerified = false
     private var uiScale = 100
 
@@ -108,7 +109,17 @@ class OnboardingActivity : AppCompatActivity() {
         // 1. Animated gradient background (full screen)
         setupGradientBackground(rootLayout)
 
-        // 2. Page container
+        // 1.5 欢迎页动态阳光彩虹背景：独立全屏层（延伸到状态栏/导航栏下方），仅首页显示
+        rainbowFlow = RainbowFlowView(this).apply {
+            visibility = View.GONE
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+        }
+        rootLayout.addView(rainbowFlow)
+
+        // 2. Page container（接收 systemBars padding：内容避让，背景层保持全屏）
         pageContainer = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -125,9 +136,7 @@ class OnboardingActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM,
-            ).apply {
-                bottomMargin = Ui.dp(40, d)
-            }
+            )
         }
         for (i in 0 until PAGE_COUNT) {
             val dot = View(this).apply {
@@ -145,10 +154,14 @@ class OnboardingActivity : AppCompatActivity() {
         setContentView(rootLayout)
         Ui.enableEdgeToEdge(this, rootLayout)
 
-        // Edge-to-edge insets
-        ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { v, insets ->
+        // Edge-to-edge insets：padding 落在 pageContainer / 指示器上，
+        // rootLayout 自身不再留白，彩虹背景真正全屏（修复状态栏白条）
+        ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            pageContainer.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            (indicatorContainer.layoutParams as FrameLayout.LayoutParams).bottomMargin =
+                bars.bottom + Ui.dp(40, d)
+            indicatorContainer.requestLayout()
             insets
         }
         ViewCompat.requestApplyInsets(rootLayout)
@@ -157,59 +170,8 @@ class OnboardingActivity : AppCompatActivity() {
     }
 
     private fun setupGradientBackground(root: FrameLayout) {
-        // DNA NEXT style: 6-color dynamic cycling gradient
-        val colorSets = listOf(
-            intArrayOf(
-                Color.rgb(255, 182, 193), // pink
-                Color.rgb(230, 190, 220), // light purple
-                Color.rgb(176, 196, 222), // steel blue
-                Color.rgb(135, 206, 235), // sky blue
-            ),
-            intArrayOf(
-                Color.rgb(255, 200, 150), // peach
-                Color.rgb(255, 183, 178), // coral pink
-                Color.rgb(210, 180, 222), // lavender
-                Color.rgb(174, 214, 241), // light blue
-            ),
-            intArrayOf(
-                Color.rgb(200, 230, 201), // mint
-                Color.rgb(255, 218, 185), // peach puff
-                Color.rgb(255, 160, 122), // salmon
-                Color.rgb(221, 160, 221), // plum
-            ),
-            intArrayOf(
-                Color.rgb(176, 224, 230), // powder blue
-                Color.rgb(255, 192, 203), // pink
-                Color.rgb(230, 230, 250), // lavender
-                Color.rgb(135, 206, 250), // light sky blue
-            ),
-        )
-        bgDrawable = GradientDrawable(GradientDrawable.Orientation.TL_BR, colorSets[0])
-        root.background = bgDrawable
-
-        // Cycle through color sets smoothly
-        bgAnimator = ValueAnimator.ofFloat(0f, colorSets.size.toFloat()).apply {
-            duration = 8000L
-            repeatMode = ValueAnimator.RESTART
-            repeatCount = ValueAnimator.INFINITE
-            addUpdateListener { anim ->
-                val pos = anim.animatedValue as Float
-                val idx = pos.toInt() % colorSets.size
-                val nextIdx = (idx + 1) % colorSets.size
-                val fraction = pos - idx.toFloat()
-                val current = colorSets[idx]
-                val next = colorSets[nextIdx]
-                val blended = current.mapIndexed { i, c ->
-                    Color.rgb(
-                        (Color.red(c) + (Color.red(next[i]) - Color.red(c)) * fraction).toInt(),
-                        (Color.green(c) + (Color.green(next[i]) - Color.green(c)) * fraction).toInt(),
-                        (Color.blue(c) + (Color.blue(next[i]) - Color.blue(c)) * fraction).toInt(),
-                    )
-                }.toIntArray()
-                bgDrawable?.setColors(blended)
-            }
-        }
-        bgAnimator?.start()
+        // 全局拟态液态玻璃背景：与主界面同源的呼吸渐变（日间蓝灰 / 夜间深海军蓝）
+        Ui.animateLiquidBackground(root)
     }
 
     // ==================== Page Builders ====================
@@ -218,7 +180,7 @@ class OnboardingActivity : AppCompatActivity() {
         0 -> createWelcomePage()
         1 -> createAgreementPage()
         2 -> createPermissionsPage()
-        3 -> createSettingsPage()
+        3 -> createEnvCheckPage()
         4 -> createDonePage()
         else -> createWelcomePage()
     }
@@ -231,6 +193,8 @@ class OnboardingActivity : AppCompatActivity() {
     private fun createWelcomePage(): View {
         val d = resources.displayMetrics.density
         val container = FrameLayout(this)
+
+        // 彩虹背景由 rootLayout 上的全屏 rainbowFlow 层提供（延伸到状态栏/导航栏下方）
 
         // Central content: logo + rainbow text — centered vertically, slightly above center
         val content = LinearLayout(this).apply {
@@ -268,24 +232,32 @@ class OnboardingActivity : AppCompatActivity() {
             }
         }.apply {
             text = "欢迎使用"
-            textSize = 44f
+            textSize = 40f
             setTypeface(typeface, Typeface.BOLD)
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             )
-            // Thin shadow effect (radius=2f, dx=0, dy=1f, color=semi-transparent black)
-            setShadowLayer(2f, 0f, 1f, Color.argb(120, 0, 0, 0))
+            // 极淡阴影（radius=1.5f, dx=0, dy=1f），只做轻微浮起，不加深字色
+            setShadowLayer(1.5f, 0f, 1f, Color.argb(50, 0, 0, 0))
         }
         content.addView(welcomeText)
-        
+
         // Start flowing rainbow gradient animation after layout
         welcomeText.post {
             val paint = welcomeText.paint
             val textWidth = paint.measureText("欢迎使用")
+            // 柔和彩虹（Material 400 级）：明快不深重，与浅色玻璃底协调
             val colors = intArrayOf(
-                Color.RED, Color.YELLOW, Color.GREEN, Color.CYAN, Color.BLUE, Color.MAGENTA, Color.RED
+                Color.parseColor("#FF8A80"),
+                Color.parseColor("#FFB74D"),
+                Color.parseColor("#FFD54F"),
+                Color.parseColor("#81C784"),
+                Color.parseColor("#4FC3F7"),
+                Color.parseColor("#9575CD"),
+                Color.parseColor("#F06292"),
+                Color.parseColor("#FF8A80"),
             )
             val animator = ValueAnimator.ofFloat(0f, textWidth * 2).apply {
                 duration = 4000L
@@ -310,16 +282,14 @@ class OnboardingActivity : AppCompatActivity() {
         // Bottom circular arrow button — position matching video (~100dp from bottom)
         val arrowBtnSize = Ui.dp(56, d)
         val arrowBtn = FrameLayout(this).apply {
-            // Ripple effect on click
+            // 拟态玻璃圆钮：半透明玻璃 + 高光/阴影双环 + 涟漪
             background = RippleDrawable(
-                ColorStateList.valueOf(Color.argb(60, 255, 255, 255)),
-                GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(Color.argb(40, 255, 255, 255))
-                    setStroke(Ui.dp(2, d), Color.argb(200, 255, 255, 255))
-                },
+                ColorStateList.valueOf(Color.argb(60, 90, 160, 255)),
+                Ui.neuCard(this@OnboardingActivity, 28f, Ui.buttonPrimary(this@OnboardingActivity)),
                 null
             )
+            // 拟态彩色投影
+            Ui.applyNeuShadow(this, 7f, 28f, Ui.buttonPrimary(this@OnboardingActivity))
             layoutParams = FrameLayout.LayoutParams(arrowBtnSize, arrowBtnSize, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
                 bottomMargin = Ui.dp(100, d)
             }
@@ -412,9 +382,141 @@ class OnboardingActivity : AppCompatActivity() {
     }
 
     /**
-     * Page 1: Agreement
-     * White card with agreement text, checkbox, continue button
+     * 引导首页专属背景：动态线性"阳光彩虹"渐变。
+     * 斜向 LinearGradient 沿轴向无限流动（首尾同色 + REPEAT 保证无缝循环），
+     * 叠加两团缓慢漂移的日光光晕，营造阳光穿过棱镜的柔和氛围。
+     * 视图 detach 时自动取消动画，不耗电。
      */
+    private class RainbowFlowView(context: android.content.Context) : View(context) {
+        private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        private val glowPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        private val matrix = android.graphics.Matrix()
+        private var phase = 0f
+        private var animator: android.animation.ValueAnimator? = null
+        private var w = 0
+        private var h = 0
+        private var band = 1f
+        private var glowR = 1f
+        private var flowShader: android.graphics.LinearGradient? = null
+        private var warmShader: android.graphics.RadialGradient? = null
+        private var coolShader: android.graphics.RadialGradient? = null
+
+        // 阳光彩虹色环：暖橙→金→嫩绿→青→蓝→紫→粉，首尾同色形成无缝循环
+        private val rainbow: IntArray
+        private val bgBase: Int
+        private val warmColor: Int
+        private val coolColor: Int
+
+        init {
+            val dark = Ui.isDark(context)
+            // 夜间稍浓郁、日间更柔和，与全局液态玻璃配色协调
+            val alpha = if (dark) 175 else 128
+            fun c(rgb: Int) = (alpha shl 24) or (rgb and 0xFFFFFF)
+            rainbow = intArrayOf(
+                c(0xFF8A3D), c(0xFFC24D), c(0xFDE96B), c(0x8FE3A0),
+                c(0x6FC8FF), c(0x9D8CFF), c(0xFF8CC0), c(0xFF8A3D),
+            )
+            bgBase = if (dark) Color.parseColor("#151A2E") else Color.parseColor("#F3F5FA")
+            warmColor = if (dark) 0x38FFC978 else 0x50FFD27A
+            coolColor = if (dark) 0x305A9CFF else 0x4278B4FF
+        }
+
+        override fun onSizeChanged(width: Int, height: Int, oldw: Int, oldh: Int) {
+            w = width
+            h = height
+            band = (maxOf(width, height) * 2.4f).coerceAtLeast(1f)
+            flowShader = android.graphics.LinearGradient(
+                0f, 0f, band, 0f, rainbow, null, android.graphics.Shader.TileMode.REPEAT,
+            )
+            glowR = maxOf(width, height) * 0.75f
+            // 光晕 shader 以 (glowR, glowR) 为圆心，绘制时用 localMatrix 平移定位
+            warmShader = android.graphics.RadialGradient(
+                glowR, glowR, glowR, warmColor, warmColor and 0x00FFFFFF,
+                android.graphics.Shader.TileMode.CLAMP,
+            )
+            coolShader = android.graphics.RadialGradient(
+                glowR, glowR, glowR, coolColor, coolColor and 0x00FFFFFF,
+                android.graphics.Shader.TileMode.CLAMP,
+            )
+        }
+
+        override fun onDraw(canvas: android.graphics.Canvas) {
+            canvas.drawColor(bgBase)
+            val flow = flowShader
+            if (flow != null) {
+                canvas.save()
+                canvas.rotate(-18f, w / 2f, h / 2f)
+                matrix.reset()
+                matrix.setTranslate(phase * band, 0f)
+                flow.setLocalMatrix(matrix)
+                paint.shader = flow
+                canvas.drawRect(-band, -h.toFloat(), band * 2f, h * 2f, paint)
+                canvas.restore()
+                paint.shader = null
+            }
+
+            // 两团日光光晕随相位缓慢漂移（暖光左上 / 冷光右下）
+            val twoPi = (Math.PI * 2).toFloat()
+            val pi = Math.PI.toFloat()
+            val cx1 = w * (0.30f + 0.10f * kotlin.math.sin(phase * twoPi))
+            val cy1 = h * (0.22f + 0.08f * kotlin.math.cos(phase * twoPi))
+            val cx2 = w * (0.74f + 0.09f * kotlin.math.sin(phase * twoPi + pi))
+            val cy2 = h * (0.78f + 0.07f * kotlin.math.cos(phase * twoPi + pi))
+            warmShader?.let {
+                matrix.reset()
+                matrix.setTranslate(cx1 - glowR, cy1 - glowR)
+                it.setLocalMatrix(matrix)
+                glowPaint.shader = it
+                canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), glowPaint)
+            }
+            coolShader?.let {
+                matrix.reset()
+                matrix.setTranslate(cx2 - glowR, cy2 - glowR)
+                it.setLocalMatrix(matrix)
+                glowPaint.shader = it
+                canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), glowPaint)
+            }
+            glowPaint.shader = null
+        }
+
+        override fun onAttachedToWindow() {
+            super.onAttachedToWindow()
+            ensureAnimator()
+        }
+
+        override fun onDetachedFromWindow() {
+            animator?.cancel()
+            animator = null
+            super.onDetachedFromWindow()
+        }
+
+        /** 离开欢迎页（visibility != VISIBLE）自动停动画，回页重启 */
+        override fun onVisibilityChanged(changedView: View, visibility: Int) {
+            super.onVisibilityChanged(changedView, visibility)
+            if (visibility == View.VISIBLE) {
+                ensureAnimator()
+            } else {
+                animator?.cancel()
+                animator = null
+            }
+        }
+
+        private fun ensureAnimator() {
+            if (animator == null && isShown) {
+                animator = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+                    duration = 26000
+                    interpolator = android.view.animation.LinearInterpolator()
+                    repeatCount = android.animation.ValueAnimator.INFINITE
+                    addUpdateListener { anim ->
+                        phase = anim.animatedValue as Float
+                        invalidate()
+                    }
+                    start()
+                }
+            }
+        }
+    }
+
     private fun createAgreementPage(): View {
         val d = resources.displayMetrics.density
         val container = FrameLayout(this)
@@ -435,11 +537,9 @@ class OnboardingActivity : AppCompatActivity() {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(Ui.dp(20, d), Ui.dp(24, d), Ui.dp(20, d), Ui.dp(24, d))
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = Ui.dp(20, d).toFloat()
-                setColor(Color.WHITE)
-            }
+            // 拟态卡片：玻璃填充 + 高光/阴影双环，自液态背景「挤出」
+            background = Ui.neuCard(this@OnboardingActivity, 20f)
+            Ui.applyNeuShadow(this, 5f, 20f)
         }
 
         // Title
@@ -447,14 +547,14 @@ class OnboardingActivity : AppCompatActivity() {
             text = "用户协议"
             textSize = 22f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.BLACK)
+            setTextColor(Ui.primaryText(this@OnboardingActivity))
         })
 
         // Agreement text
         card.addView(TextView(this).apply {
             text = "欢迎使用 TMUI OS。本应用为 Android 设备提供 Linux 桌面环境运行能力，包括 DSU GSI 安装、Chroot Linux 容器、终端模拟及 VNC 远程桌面等功能。\n\n使用本应用需要设备已获取 ROOT 权限，并可能涉及系统级操作。请您仔细阅读以下条款后再决定是否继续使用。"
             textSize = 14f
-            setTextColor(Color.DKGRAY)
+            setTextColor(Ui.secondaryText(this@OnboardingActivity))
             setPadding(0, Ui.dp(16, d), 0, 0)
             setLineSpacing(Ui.dp(4, d).toFloat(), 1f)
         })
@@ -477,7 +577,7 @@ class OnboardingActivity : AppCompatActivity() {
         agreementRow.addView(TextView(this).apply {
             text = "我已阅读并同意用户协议与隐私说明"
             textSize = 14f
-            setTextColor(Color.BLACK)
+            setTextColor(Ui.primaryText(this@OnboardingActivity))
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
                 marginStart = Ui.dp(8, d)
             }
@@ -495,11 +595,13 @@ class OnboardingActivity : AppCompatActivity() {
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = Ui.dp(12, d).toFloat()
-                setColor(Color.parseColor("#4285F4"))
-            }
+            // 拟态实心渐变按钮：accent 渐变 + 高光内环 + 阴影外环
+            background = Ui.neuSolidButton(
+                if (Ui.isDark(this@OnboardingActivity)) android.graphics.Color.parseColor("#62A8FF") else android.graphics.Color.parseColor("#5EA0FF"),
+                if (Ui.isDark(this@OnboardingActivity)) android.graphics.Color.parseColor("#2E6CF0") else android.graphics.Color.parseColor("#2F6BF0"),
+                12f, this@OnboardingActivity
+            )
+            Ui.applyNeuShadow(this, 5f, 12f, Ui.buttonPrimary(this@OnboardingActivity))
             setPadding(0, Ui.dp(14, d), 0, Ui.dp(14, d))
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -548,11 +650,9 @@ class OnboardingActivity : AppCompatActivity() {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(Ui.dp(20, d), Ui.dp(24, d), Ui.dp(20, d), Ui.dp(24, d))
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = Ui.dp(20, d).toFloat()
-                setColor(Color.WHITE)
-            }
+            // 拟态卡片：玻璃填充 + 高光/阴影双环，自液态背景「挤出」
+            background = Ui.neuCard(this@OnboardingActivity, 20f)
+            Ui.applyNeuShadow(this, 5f, 20f)
         }
 
         // Title
@@ -560,14 +660,14 @@ class OnboardingActivity : AppCompatActivity() {
             text = "环境与权限"
             textSize = 22f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.BLACK)
+            setTextColor(Ui.primaryText(this@OnboardingActivity))
         })
 
         // Description
         card.addView(TextView(this).apply {
             text = "选择现在要检查的运行条件。其余设置可稍后在应用内修改。"
             textSize = 14f
-            setTextColor(Color.DKGRAY)
+            setTextColor(Ui.secondaryText(this@OnboardingActivity))
             setPadding(0, Ui.dp(8, d), 0, Ui.dp(16, d))
             setLineSpacing(Ui.dp(4, d).toFloat(), 1f)
         })
@@ -591,11 +691,24 @@ class OnboardingActivity : AppCompatActivity() {
             }
         })
 
+        // Usage access (special permission — jump to system settings page)
+        card.addView(makePermissionRow("使用情况访问", "进程管理读取任务栏后台应用与前台识别", usageAccessGranted) { checked ->
+            usageAccessGranted = checked
+            if (checked) {
+                // 特殊权限：跳系统"使用情况访问"页手动授予
+                runCatching {
+                    startActivity(android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                }.onFailure {
+                    Toast.makeText(this@OnboardingActivity, "系统设置页不可用", Toast.LENGTH_SHORT).show()
+                }
+            }
+        })
+
         // Root notice (not a real permission request, just status display)
         card.addView(TextView(this).apply {
             text = "Root 不会自动请求。点按下方项目可验证已授予的 UID。"
             textSize = 12f
-            setTextColor(Color.GRAY)
+            setTextColor(Ui.secondaryText(this@OnboardingActivity))
             setPadding(0, Ui.dp(8, d), 0, Ui.dp(4, d))
         })
 
@@ -614,11 +727,13 @@ class OnboardingActivity : AppCompatActivity() {
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = Ui.dp(12, d).toFloat()
-                setColor(Color.parseColor("#4285F4"))
-            }
+            // 拟态实心渐变按钮：accent 渐变 + 高光内环 + 阴影外环
+            background = Ui.neuSolidButton(
+                if (Ui.isDark(this@OnboardingActivity)) android.graphics.Color.parseColor("#62A8FF") else android.graphics.Color.parseColor("#5EA0FF"),
+                if (Ui.isDark(this@OnboardingActivity)) android.graphics.Color.parseColor("#2E6CF0") else android.graphics.Color.parseColor("#2F6BF0"),
+                12f, this@OnboardingActivity
+            )
+            Ui.applyNeuShadow(this, 5f, 12f, Ui.buttonPrimary(this@OnboardingActivity))
             setPadding(0, Ui.dp(14, d), 0, Ui.dp(14, d))
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -643,12 +758,9 @@ class OnboardingActivity : AppCompatActivity() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, Ui.dp(12, d), 0, Ui.dp(12, d))
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = Ui.dp(12, d).toFloat()
-                setColor(Color.rgb(245, 245, 250))
-            }
+            setPadding(Ui.dp(12, d), Ui.dp(12, d), Ui.dp(12, d), Ui.dp(12, d))
+            // 拟态凹槽：内阴影环槽位，权限行「嵌」入卡片
+            background = Ui.neuInset(this@OnboardingActivity, 12f)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -665,12 +777,12 @@ class OnboardingActivity : AppCompatActivity() {
             text = title
             textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.BLACK)
+            setTextColor(Ui.primaryText(this@OnboardingActivity))
         })
         textCol.addView(TextView(this).apply {
             text = desc
             textSize = 12f
-            setTextColor(Color.GRAY)
+            setTextColor(Ui.secondaryText(this@OnboardingActivity))
             setPadding(0, Ui.dp(2, d), 0, 0)
         })
         row.addView(textCol)
@@ -685,10 +797,10 @@ class OnboardingActivity : AppCompatActivity() {
     }
 
     /**
-     * Page 3: System Setup — actual useful settings for Linux-Dsu
-     * Root manager / chroot path / VNC resolution
+     * Page 4: 环境体检 — 安装前实测 ROOT 授权 / CPU 架构 / 存储空间
+     * 进入页面自动逐项检测（真实执行，非静态文案），状态实时上屏
      */
-    private fun createSettingsPage(): View {
+    private fun createEnvCheckPage(): View {
         val d = resources.displayMetrics.density
         val container = FrameLayout(this)
 
@@ -706,78 +818,118 @@ class OnboardingActivity : AppCompatActivity() {
 
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(Ui.dp(20, d), Ui.dp(24, d), Ui.dp(20, d), Ui.dp(24, d))
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = Ui.dp(20, d).toFloat()
-                setColor(Color.WHITE)
-            }
+            setPadding(Ui.dp(20, d), Ui.dp(24, d), Ui.dp(20, d), Ui.dp(16, d))
+            // 拟态卡片：玻璃填充 + 高光/阴影双环，自液态背景「挤出」
+            background = Ui.neuCard(this@OnboardingActivity, 20f)
         }
 
         // Title
         card.addView(TextView(this).apply {
-            text = "主题配置"
+            text = "环境体检"
             textSize = 22f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.BLACK)
+            setTextColor(Ui.primaryText(this@OnboardingActivity))
         })
 
         // Description
         card.addView(TextView(this).apply {
-            text = "个性化你的应用外观。选择暗色模式、主题色和强调色，随时可在设置中修改。"
+            text = "在开始之前，为你实测 ROOT 授权、CPU 架构与存储空间，全部通过即可获得最佳安装体验。"
             textSize = 13f
-            setTextColor(Color.DKGRAY)
-            setPadding(0, Ui.dp(8, d), 0, Ui.dp(12, d))
+            setTextColor(Ui.secondaryText(this@OnboardingActivity))
+            setPadding(0, Ui.dp(8, d), 0, Ui.dp(10, d))
             setLineSpacing(Ui.dp(4, d).toFloat(), 1f)
         })
 
-        // 1. Dark Mode Switch
-        card.addView(makeSectionTitle("暗色模式"))
-        val darkSwitch = android.widget.Switch(this).apply {
-            text = "启用暗色模式"
-            textSize = 14f
-            setTextColor(Color.BLACK)
-            isChecked = getSharedPreferences(PREF_ONBOARDING, MODE_PRIVATE).getBoolean("dark_mode", false)
-        }
-        card.addView(darkSwitch)
-
-        // 2. Theme Color
-        card.addView(makeSectionTitle("主题色", topPad = 16))
-        val themeColorGroup = RadioGroup(this).apply { orientation = LinearLayout.VERTICAL }
-        listOf(
-            "极光蓝" to "blue",
-            "薄荷绿" to "green",
-            "日落橙" to "orange",
-            "暗夜紫" to "purple",
-        ).forEach { (label, value) ->
-            themeColorGroup.addView(RadioButton(this).apply {
-                text = label
-                textSize = 14f
-                setTextColor(Color.BLACK)
-                tag = value
-                isChecked = value == "blue"
+        // 检查行：状态点 + 标题 + 实时状态文案
+        fun checkRow(title: String): Pair<View, TextView> {
+            val dot = View(this).apply {
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(Color.argb(70, 130, 140, 165))
+                }
+                layoutParams = LinearLayout.LayoutParams(Ui.dp(12, d), Ui.dp(12, d)).apply {
+                    topMargin = Ui.dp(5, d)
+                }
+            }
+            val status = TextView(this).apply {
+                text = "检测中…"
+                textSize = 12f
+                setTextColor(Ui.secondaryText(this@OnboardingActivity))
+                setPadding(0, Ui.dp(2, d), 0, 0)
+            }
+            card.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, Ui.dp(12, d), 0, Ui.dp(12, d))
+                addView(dot)
+                addView(LinearLayout(this@OnboardingActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                        marginStart = Ui.dp(12, d)
+                    }
+                    addView(TextView(this@OnboardingActivity).apply {
+                        text = title
+                        textSize = 15f
+                        setTypeface(typeface, Typeface.BOLD)
+                        setTextColor(Ui.primaryText(this@OnboardingActivity))
+                    })
+                    addView(status)
+                })
             })
+            return dot to status
         }
-        card.addView(themeColorGroup)
 
-        // 3. Accent Color
-        card.addView(makeSectionTitle("强调色", topPad = 16))
-        val accentColorGroup = RadioGroup(this).apply { orientation = LinearLayout.VERTICAL }
-        listOf(
-            "碧波蓝" to "accent_blue",
-            "青柠绿" to "accent_green",
-            "葡萄紫" to "accent_purple",
-            "蜜桃粉" to "accent_pink",
-        ).forEach { (label, value) ->
-            accentColorGroup.addView(RadioButton(this).apply {
-                text = label
-                textSize = 14f
-                setTextColor(Color.BLACK)
-                tag = value
-                isChecked = value == "accent_blue"
-            })
+        val rootRow = checkRow("ROOT 权限")
+        val archRow = checkRow("CPU 架构")
+        val storageRow = checkRow("存储空间")
+
+        // 状态上屏：绿=通过，琥珀=受限可用，红=不满足
+        fun mark(row: Pair<View, TextView>, level: Int, msg: String) {
+            runOnUiThread {
+                row.first.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(
+                        when (level) {
+                            0 -> Ui.buttonSuccess(this@OnboardingActivity)
+                            1 -> Ui.buttonWarning(this@OnboardingActivity)
+                            else -> Ui.buttonDanger(this@OnboardingActivity)
+                        },
+                    )
+                }
+                row.second.text = msg
+            }
         }
-        card.addView(accentColorGroup)
+
+        // 后台顺序实测三项，每项间留出节奏感
+        Thread {
+            Thread.sleep(400)
+            val rootOk = com.mcai.ubuntudsu.core.StatusDetector.rootAvailable()
+            mark(
+                rootRow,
+                if (rootOk) 0 else 1,
+                if (rootOk) "已获取 ROOT 授权，全部功能可用" else "未获取 ROOT 授权，核心功能受限",
+            )
+            Thread.sleep(400)
+            val archOk = Build.SUPPORTED_ABIS.contains("arm64-v8a")
+            mark(
+                archRow,
+                if (archOk) 0 else 2,
+                if (archOk) "arm64-v8a · 兼容主流 rootfs 镜像" else "未检测到 arm64，兼容性受限",
+            )
+            Thread.sleep(400)
+            val freeBytes = runCatching {
+                android.os.StatFs(android.os.Environment.getDataDirectory().path).availableBytes
+            }.getOrDefault(0L)
+            val freeGb = freeBytes / 1024f / 1024f / 1024f
+            mark(
+                storageRow,
+                when {
+                    freeGb >= 5f -> 0
+                    freeGb >= 2f -> 1
+                    else -> 2
+                },
+                "剩余 %.1f GB · 建议 ≥ 5GB".format(freeGb),
+            )
+        }.start()
 
         scroll.addView(card)
         container.addView(scroll)
@@ -789,11 +941,12 @@ class OnboardingActivity : AppCompatActivity() {
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = Ui.dp(12, d).toFloat()
-                setColor(Color.parseColor("#4285F4"))
-            }
+            // 拟态实心渐变按钮：accent 渐变 + 高光内环 + 阴影外环
+            background = Ui.neuSolidButton(
+                if (Ui.isDark(this@OnboardingActivity)) android.graphics.Color.parseColor("#62A8FF") else android.graphics.Color.parseColor("#5EA0FF"),
+                if (Ui.isDark(this@OnboardingActivity)) android.graphics.Color.parseColor("#2E6CF0") else android.graphics.Color.parseColor("#2F6BF0"),
+                12f, this@OnboardingActivity
+            )
             setPadding(0, Ui.dp(14, d), 0, Ui.dp(14, d))
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -807,36 +960,15 @@ class OnboardingActivity : AppCompatActivity() {
             isClickable = true
             isFocusable = true
             Ui.pressAnimation(this)
-            setOnClickListener {
-                // Save theme selections
-                val themeTag = themeColorGroup.findViewById<RadioButton>(themeColorGroup.checkedRadioButtonId)?.tag as? String ?: "blue"
-                val accentTag = accentColorGroup.findViewById<RadioButton>(accentColorGroup.checkedRadioButtonId)?.tag as? String ?: "accent_blue"
-                getSharedPreferences(PREF_ONBOARDING, MODE_PRIVATE).edit().apply {
-                    putBoolean("dark_mode", darkSwitch.isChecked)
-                    putString("theme_color", themeTag)
-                    putString("accent_color", accentTag)
-                    apply()
-                }
-                goToNextPage()
-            }
+            setOnClickListener { goToNextPage() }
         }
         container.addView(nextBtn)
         return container
     }
 
-    private fun makeSectionTitle(title: String, topPad: Int = 12): TextView {
-        return TextView(this).apply {
-            text = title
-            textSize = 13f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.parseColor("#4285F4"))
-            setPadding(0, Ui.dp(topPad, resources.displayMetrics.density), 0, Ui.dp(4, resources.displayMetrics.density))
-        }
-    }
-
     /**
-     * Page 4: Done
-     * App icon, "TMUI OSv1.0", "设置完毕", "开始使用" button
+     * Page 4: Done — 一切就绪 + 功能亮点速览
+     * 大标题「一切就绪」+ 拟态卡片内 4 项核心功能（图标 + 名称 + 一句话说明）+ 开始使用按钮
      */
     private fun createDonePage(): View {
         val d = resources.displayMetrics.density
@@ -844,45 +976,87 @@ class OnboardingActivity : AppCompatActivity() {
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
+            gravity = Gravity.CENTER_HORIZONTAL
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.CENTER_HORIZONTAL or Gravity.TOP,
             ).apply {
-                topMargin = Ui.dp(180, d)
+                topMargin = Ui.dp(84, d)
+                marginStart = Ui.dp(28, d)
+                marginEnd = Ui.dp(28, d)
             }
         }
 
-        // App icon
-        val iconSize = Ui.dp(80, d)
-        content.addView(ImageView(this).apply {
-            setImageResource(R.drawable.ic_logo_combined)
-            layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply {
-                bottomMargin = Ui.dp(8, d)
-            }
-        })
-
-        // "天明研发版" — larger, positioned below the logo
+        // 大标题 + 副标题
         content.addView(TextView(this).apply {
-            text = "天明研发版"
+            text = "一切就绪"
             textSize = 30f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.argb(220, 255, 255, 255))
+            setTextColor(Ui.primaryText(this@OnboardingActivity))
             gravity = Gravity.CENTER
-            setPadding(0, Ui.dp(8, d), 0, 0)
         })
-
-        // "导向完成" — smaller subtitle
         content.addView(TextView(this).apply {
-            text = "导向完成"
-            textSize = 18f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.argb(160, 255, 255, 255))
+            text = "你的口袋 Linux 工具箱已备好，四大核心能力随时待命"
+            textSize = 13f
+            setTextColor(Ui.secondaryText(this@OnboardingActivity))
             gravity = Gravity.CENTER
-            setPadding(0, Ui.dp(2, d), 0, 0)
+            setPadding(Ui.dp(12, d), Ui.dp(6, d), Ui.dp(12, d), Ui.dp(18, d))
         })
 
+        // 功能亮点卡：4 行入口预览，与主界面同款拟态质感
+        val highlightCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(Ui.dp(16, d), Ui.dp(14, d), Ui.dp(16, d), Ui.dp(14, d))
+            background = Ui.neuCard(this@OnboardingActivity, 20f)
+            Ui.applyNeuShadow(this, 5f, 20f)
+        }
+        listOf(
+            Triple(R.drawable.icon_terminal_runner, "容器终端", "Chroot 容器 · Termux 风格 · apt 装包"),
+            Triple(R.drawable.icon_linux_modern, "桌面环境", "XFCE / KDE / GNOME + VNC 远程桌面"),
+            Triple(R.drawable.icon_dsu_modern, "DSU 管理", "ROOT 直装 GSI 镜像 · 一键重启切换"),
+            Triple(R.drawable.ic_download, "下载管理", "并行下载 · 断点续传 · 镜像直取"),
+        ).forEachIndexed { index, (iconRes, title, desc) ->
+            if (index > 0) {
+                // 水晶玻璃分隔条：分区之间的高光细线
+                highlightCard.addView(
+                    Ui.crystalDivider(this, d),
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        Ui.dp(2, d),
+                    ).apply { topMargin = Ui.dp(2, d); bottomMargin = Ui.dp(2, d) },
+                )
+            }
+            highlightCard.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, Ui.dp(10, d), 0, Ui.dp(10, d))
+                addView(ImageView(this@OnboardingActivity).apply {
+                    setImageResource(iconRes)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    layoutParams = LinearLayout.LayoutParams(Ui.dp(34, d), Ui.dp(34, d))
+                })
+                addView(LinearLayout(this@OnboardingActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                        marginStart = Ui.dp(12, d)
+                    }
+                    addView(TextView(this@OnboardingActivity).apply {
+                        text = title
+                        textSize = 14f
+                        setTypeface(typeface, Typeface.BOLD)
+                        setTextColor(Ui.primaryText(this@OnboardingActivity))
+                    })
+                    addView(TextView(this@OnboardingActivity).apply {
+                        text = desc
+                        textSize = 11f
+                        setTextColor(Ui.secondaryText(this@OnboardingActivity))
+                        setPadding(0, Ui.dp(1, d), 0, 0)
+                    })
+                })
+            })
+        }
+        content.addView(highlightCard)
         container.addView(content)
 
         // Bottom "开始使用" button — placed directly below the indicators
@@ -892,11 +1066,13 @@ class OnboardingActivity : AppCompatActivity() {
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = Ui.dp(12, d).toFloat()
-                setColor(Color.parseColor("#4285F4"))
-            }
+            // 拟态实心渐变按钮：accent 渐变 + 高光内环 + 阴影外环
+            background = Ui.neuSolidButton(
+                if (Ui.isDark(this@OnboardingActivity)) android.graphics.Color.parseColor("#62A8FF") else android.graphics.Color.parseColor("#5EA0FF"),
+                if (Ui.isDark(this@OnboardingActivity)) android.graphics.Color.parseColor("#2E6CF0") else android.graphics.Color.parseColor("#2F6BF0"),
+                12f, this@OnboardingActivity
+            )
+            Ui.applyNeuShadow(this, 5f, 12f, Ui.buttonPrimary(this@OnboardingActivity))
             setPadding(0, Ui.dp(14, d), 0, Ui.dp(14, d))
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -925,6 +1101,11 @@ class OnboardingActivity : AppCompatActivity() {
     private fun showPage(index: Int, animate: Boolean) {
         if (index !in 0 until PAGE_COUNT) return
         currentPage = index
+
+        // 彩虹背景仅首页显示；隐藏时 RainbowFlowView 内部自动停动画不耗电
+        if (::rainbowFlow.isInitialized) {
+            rainbowFlow.visibility = if (index == 0) View.VISIBLE else View.GONE
+        }
 
         if (index >= pages.size) {
             while (pages.size <= index) {
@@ -974,9 +1155,15 @@ class OnboardingActivity : AppCompatActivity() {
     }
 
     private fun makeDotDrawable(active: Boolean): GradientDrawable {
+        // 拟态指示点：激活 = accent 实心 + 高光描边，未激活 = 半透明玻璃
         return GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(if (active) Color.WHITE else Color.argb(120, 255, 255, 255))
+            if (active) {
+                setColor(Ui.buttonPrimary(this@OnboardingActivity))
+                setStroke(Ui.dp(1, resources.displayMetrics.density), Color.argb(150, 255, 255, 255))
+            } else {
+                setColor(Color.argb(110, 255, 255, 255))
+            }
         }
     }
 

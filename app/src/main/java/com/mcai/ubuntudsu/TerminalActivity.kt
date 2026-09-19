@@ -111,7 +111,19 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
         val density = resources.displayMetrics.density
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(Color.rgb(30, 30, 30))
+            // 拟态深色玻璃工具条：深海军蓝渐变 + 顶部高光边（与终端深色场景协调）
+            background = android.graphics.drawable.LayerDrawable(
+                arrayOf(
+                    android.graphics.drawable.GradientDrawable(
+                        android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                        intArrayOf(Color.rgb(22, 31, 53), Color.rgb(14, 21, 38)),
+                    ).apply { cornerRadius = 0f },
+                    android.graphics.drawable.GradientDrawable().apply {
+                        setColor(Color.TRANSPARENT)
+                        setStroke((1 * density).toInt(), Color.argb(56, 168, 214, 255))
+                    },
+                ),
+            )
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 (48 * density).toInt(),
@@ -188,7 +200,8 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
             textSize = 11f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            background = Ui.rounded(Color.rgb(45, 100, 170), 3f, density)
+            // 拟态实心渐变按钮（蓝）
+            background = Ui.neuSolidButton(Color.parseColor("#3E7BFA"), Color.parseColor("#2A5BD7"), 4f, this@TerminalActivity)
             layoutParams = LinearLayout.LayoutParams((54 * density).toInt(), ViewGroup.LayoutParams.MATCH_PARENT).apply {
                 marginStart = (2 * density).toInt()
             }
@@ -199,7 +212,8 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
             textSize = 11f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            background = Ui.rounded(Color.rgb(45, 130, 100), 3f, density)
+            // 拟态实心渐变按钮（绿）
+            background = Ui.neuSolidButton(Color.parseColor("#2FA37A"), Color.parseColor("#1F7A5C"), 4f, this@TerminalActivity)
             layoutParams = LinearLayout.LayoutParams((48 * density).toInt(), ViewGroup.LayoutParams.MATCH_PARENT).apply {
                 marginStart = (2 * density).toInt()
             }
@@ -320,7 +334,26 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
         val menu = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding((18 * density).toInt(), (8 * density).toInt(), (18 * density).toInt(), (8 * density).toInt())
-            setBackgroundColor(Color.rgb(52, 52, 52))
+            // 拟态深色玻璃菜单：渐变底 + 霓虹高光边
+            background = android.graphics.drawable.LayerDrawable(
+                arrayOf(
+                    android.graphics.drawable.GradientDrawable(
+                        android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                        intArrayOf(Color.rgb(24, 33, 55), Color.rgb(16, 23, 41)),
+                    ).apply { cornerRadius = (14 * density) },
+                    android.graphics.drawable.GradientDrawable().apply {
+                        setColor(Color.TRANSPARENT)
+                        cornerRadius = (14 * density)
+                        setStroke((1 * density).toInt(), Color.argb(60, 111, 168, 255))
+                    },
+                ),
+            )
+            // 圆角 outline：PopupWindow 投影随 content view outline 走，否则是方形影子
+            outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(view: View, outline: android.graphics.Outline) {
+                    outline.setRoundRect(0, 0, view.width, view.height, 14 * density)
+                }
+            }
         }
         fun item(label: String, action: () -> Unit) {
             menu.addView(TextView(this).apply {

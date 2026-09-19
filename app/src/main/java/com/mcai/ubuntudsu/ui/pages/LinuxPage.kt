@@ -33,9 +33,9 @@ class LinuxPage(
             orientation = LinearLayout.VERTICAL
             setPadding(Ui.dp(16, d), Ui.dp(12, d), Ui.dp(16, d), Ui.dp(16, d))
         }
-        // 标题行：左侧"Linux 系统"（设置入口仅在首页）
+        // 标题行：左侧"Linux ARM® 架构"（设置入口仅在首页）
         page.addView(TextView(activity).apply {
-            text = "Linux 系统"
+            text = "Linux ARM® 架构"
             textSize = 22f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
@@ -59,24 +59,49 @@ class LinuxPage(
         page.addView(installHint)
 
         page.addView(spacer(6))
-        page.addView(actionCard(R.drawable.icon_install_rootfs, "安装 rootfs 系统", "本地安装 · 云端下载 · 备份") {
-            activity.startActivity(Intent(activity, RootfsInstallActivity::class.java))
-        })
-        page.addView(actionCard(R.drawable.icon_trash_rootfs, "卸载 rootfs 系统", "删除已安装的 Ubuntu 系统") { confirmUninstall() })
+        // 安装/卸载二合一卡片：一张拟态玻璃卡内两行入口，水晶玻璃渲染条分格
+        val manageCard = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Ui.glassSurface(activity, 18f)
+            Ui.applyNeuShadow(this, 3f, 18f)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = Ui.dp(8, d) }
+        }
+        manageCard.addView(
+            actionRow(R.drawable.icon_install_rootfs, "安装 rootfs 系统", "本地安装 · 云端下载 · 备份") {
+                activity.startActivity(Intent(activity, RootfsInstallActivity::class.java))
+            },
+        )
+        manageCard.addView(
+            Ui.crystalDivider(activity, d),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(2, d)),
+        )
+        manageCard.addView(
+            actionRow(R.drawable.icon_trash_rootfs, "卸载 rootfs 系统", "删除已安装的 Ubuntu 系统") { confirmUninstall() },
+        )
+        page.addView(manageCard)
 
         page.addView(
-            Ui.entryButton(activity, "终端运行器", "Chroot 运行 · Termux 风格终端", ">", "#E95420", R.drawable.icon_terminal_runner) {
+            sectionLabel("运行环境", d),
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = Ui.dp(10, d); bottomMargin = Ui.dp(8, d) },
+        )
+        // 大图标入口：一排两个往下排（容器终端 / 桌面环境），第三项文件管理独占一排
+        val tileRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+        tileRow.addView(
+            Ui.iconTile(activity, "容器终端", "Chroot 容器 · Termux 风格", R.drawable.icon_terminal_runner, Color.parseColor("#E95420")) {
                 requireRootfs {
                     activity.startActivity(Intent(activity, TerminalActivity::class.java))
                 }
             },
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = Ui.dp(8, d) },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
         )
-        page.addView(
-            Ui.entryButton(activity, "桌面环境", "XFCE · KDE · GNOME + VNC 桌面", ">", "#2D64AA", R.drawable.icon_linux_modern) {
+        tileRow.addView(
+            Ui.iconTile(activity, "桌面环境", "XFCE · KDE · GNOME + VNC", R.drawable.icon_linux_modern, Color.parseColor("#2D64AA")) {
                 requireRootfs {
                     activity.startActivity(
                         Intent(activity, TerminalActivity::class.java).apply {
@@ -85,13 +110,11 @@ class LinuxPage(
                     )
                 }
             },
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = Ui.dp(8, d) },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = Ui.dp(8, d) },
         )
+        page.addView(tileRow)
         page.addView(
-            Ui.entryButton(activity, "rootfs 文件管理", "浏览 · 编辑 rootfs 内文件", ">", "#6C4AC2", R.drawable.ic_folder_manager) {
+            Ui.iconTile(activity, "文件管理", "浏览 · 编辑 rootfs 内文件", R.drawable.ic_folder_manager, Color.parseColor("#6C4AC2")) {
                 requireRootfs {
                     activity.startActivity(Intent(activity, RootfsFilesActivity::class.java))
                 }
@@ -188,7 +211,8 @@ class LinuxPage(
         orientation = LinearLayout.VERTICAL
         setPadding(Ui.dp(14, d), Ui.dp(12, d), Ui.dp(14, d), Ui.dp(12, d))
         background = Ui.glassSurface(activity, 18f)
-        elevation = Ui.dp(3, d).toFloat()
+        // 圆角 outline 投影：裸 elevation 对 LayerDrawable 背景会渲染成方形影子
+        Ui.applyNeuShadow(this, 3f, 18f)
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -200,20 +224,23 @@ class LinuxPage(
         return View(activity).also { it.layoutParams = Ui.layoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(height, d)) }
     }
 
-    private fun actionCard(iconRes: Int, heading: String, detail: String, onClick: () -> Unit): View {
+    // 分区小标题：运行环境 / 系统管理等网格区头部
+    private fun sectionLabel(text: String, d: Float): TextView = TextView(activity).apply {
+        this.text = text
+        textSize = 12f
+        setTypeface(typeface, android.graphics.Typeface.BOLD)
+        setTextColor(Ui.secondaryText(activity))
+    }
+
+    // 二合一卡片内的入口行：无独立背景，靠外层玻璃卡 + 水晶分隔条分格
+    private fun actionRow(iconRes: Int, heading: String, detail: String, onClick: () -> Unit): View {
         val d = activity.resources.displayMetrics.density
         return LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(Ui.dp(12, d), Ui.dp(9, d), Ui.dp(10, d), Ui.dp(9, d))
-            background = Ui.glassSurface(activity, 18f)
-            elevation = Ui.dp(3, d).toFloat()
             setOnClickListener { onClick() }
             Ui.pressAnimation(this)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { bottomMargin = Ui.dp(8, d) }
             addView(ImageView(activity).apply {
                 setImageResource(iconRes)
                 scaleType = ImageView.ScaleType.FIT_CENTER

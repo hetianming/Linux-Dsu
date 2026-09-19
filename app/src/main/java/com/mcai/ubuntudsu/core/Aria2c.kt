@@ -51,7 +51,10 @@ object Aria2c {
     // 探测可用的 aria2c：
     // 1) nativeLibraryDir 已解压的 libaria2c.so（extractNativeLibs=true 时存在）
     // 2) APK 内嵌的 lib/arm64-v8a/libaria2c.so 运行时解压到 filesDir（useLegacyPackaging=false 时 so 不落盘，必须解压）
-    // 3) root 环境 PATH 中的 aria2c
+    // 3) root 环境 PATH 中的 aria2c（仅在无内置二进制时探测；结果缓存，避免每次启动/继续都阻塞等 su）
+    @Volatile private var suAria2Path: String? = null
+    @Volatile private var suAria2Probed = false
+
     fun candidates(ctx: Context): List<String> {
         val list = mutableListOf<String>()
         runCatching {
@@ -62,14 +65,20 @@ object Aria2c {
             val extracted = extractBundled(ctx)
             if (extracted != null) list.add(extracted.absolutePath)
         }
-        runCatching {
-            if (RootShell.available()) {
-                RootShell.exec("command -v aria2c", timeoutMs = 10000)
-                    .stdout.trim().lineSequence()
-                    .firstOrNull { it.isNotBlank() && it.startsWith("/") }
-                    ?.let { list.add(it) }
+        // 内置二进制可用时完全不碰 su：su 未授权/弹窗确认时探测会阻塞至超时（~10s），
+        // 这正是「点继续后 10 秒才动」的来源
+        if (list.isNotEmpty()) return list.distinct()
+        if (!suAria2Probed) {
+            suAria2Probed = true
+            runCatching {
+                if (RootShell.available()) {
+                    suAria2Path = RootShell.exec("command -v aria2c", timeoutMs = 10000)
+                        .stdout.trim().lineSequence()
+                        .firstOrNull { it.isNotBlank() && it.startsWith("/") }
+                }
             }
         }
+        suAria2Path?.let { list.add(it) }
         return list.distinct()
     }
 
@@ -257,21 +266,22 @@ object Aria2c {
             }.apply { isDaemon = true; start() }
 
             while (true) {
-                if (process.waitFor(1, TimeUnit.SECONDS)) break
+                // 200ms 轮询：暂停/取消指令最多 0.2 秒内被感知并杀掉进程（原 1 秒粒度是"点暂停迟迟不停"的来源之一）
+                if (process.waitFor(200, TimeUnit.MILLISECONDS)) break
                 if (isCancelled()) {
                     process.destroyForcibly()
-                    reader.join(1000)
+                    reader.join(300)
                     return Result(false, null, "已取消")
                 }
                 val now = System.currentTimeMillis()
                 if (now - startedAt > OVERALL_TIMEOUT_MS) {
                     process.destroyForcibly()
-                    reader.join(1000)
+                    reader.join(300)
                     return Result(false, null, "下载超时（超过 15 分钟）")
                 }
                 if (now - lastProgressAt.get() > STALL_TIMEOUT_MS) {
                     process.destroyForcibly()
-                    reader.join(1000)
+                    reader.join(300)
                     return Result(false, null, "网络无进展（${STALL_TIMEOUT_MS / 1000} 秒无数据），切换线路重试")
                 }
             }
@@ -327,9 +337,18 @@ object Aria2c {
         binary.startsWith("/data/app/") || binary.startsWith("/data/data/")
 
     // 尝试 app 侧创建并写入目录；返回 app 是否可直接写入
+    // 注意：File.canWrite() 在 FUSE 挂载的公共目录上可能误报（返回 true 但实际写入被拒，
+    // 或反之），必须以「实际创建并删除测试文件」为准——误判直接导致只剩 su 计划、无 root 时下载全灭
     private fun ensureAppDir(dir: File): Boolean {
-        if (dir.isDirectory && dir.canWrite()) return true
+        fun writeTest(): Boolean = runCatching {
+            val t = File(dir, ".aria2_write_test")
+            t.createNewFile()
+            t.delete()
+            true
+        }.getOrDefault(false)
         if (!dir.exists()) runCatching { dir.mkdirs() }
-        return dir.isDirectory && dir.canWrite()
+        if (!dir.isDirectory) return false
+        if (dir.canWrite() && writeTest()) return true
+        return writeTest()
     }
 }
