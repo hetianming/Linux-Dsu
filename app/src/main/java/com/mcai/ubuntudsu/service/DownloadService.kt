@@ -78,6 +78,11 @@ class DownloadService : Service() {
         @Volatile var progress = 0
         @Volatile var totalSize = 0L
         @Volatile var downloadedSize = 0L
+        /** 当前时速文本（如 "3.2 MB/s"），由引擎回调或字节差计算更新 */
+        @Volatile var speed = ""
+        /** 时速采样：上次统计时间与字节，用于 JavaDownloader 字节差测速 */
+        @Volatile var sampleAt = 0L
+        @Volatile var sampleBytes = 0L
         /** 该任务通知是否存活（取消/完成后撤下，拦截在途回调 re-post） */
         @Volatile var notifActive = true
         /** 终态（成功/失败/取消）；暂停不算终态 */
@@ -195,6 +200,7 @@ class DownloadService : Service() {
             onSizeInfo = { total, downloaded ->
                 task.totalSize = total
                 task.downloadedSize = downloaded
+                updateSpeedByDelta(task, downloaded)
                 broadcastTask(task, 1, task.progress, "${task.progress}%")
             },
         )
@@ -204,6 +210,28 @@ class DownloadService : Service() {
             task.cancelled.get() -> finishTask(task, false, "已取消", "")
             else -> finishTask(task, false, "下载失败: ${result.message}", "")
         }
+    }
+
+    /** 按已下载字节差计算时速（JavaDownloader 每 ~1s 回调一次 onSizeInfo） */
+    private fun updateSpeedByDelta(task: TaskCtx, downloaded: Long) {
+        val now = System.currentTimeMillis()
+        if (task.sampleAt == 0L) {
+            task.sampleAt = now
+            task.sampleBytes = downloaded
+            return
+        }
+        val dt = now - task.sampleAt
+        if (dt < 500) return
+        val bytesPerSec = (downloaded - task.sampleBytes) * 1000 / dt
+        task.sampleAt = now
+        task.sampleBytes = downloaded
+        task.speed = if (bytesPerSec > 0) formatSpeed(bytesPerSec) else ""
+    }
+
+    private fun formatSpeed(bytesPerSec: Long): String = when {
+        bytesPerSec >= 1 shl 20 -> String.format(java.util.Locale.US, "%.1f MB/s", bytesPerSec / 1048576.0)
+        bytesPerSec >= 1 shl 10 -> String.format(java.util.Locale.US, "%.1f KB/s", bytesPerSec / 1024.0)
+        else -> "$bytesPerSec B/s"
     }
 
     /**
@@ -243,6 +271,12 @@ class DownloadService : Service() {
             },
             isCancelled = { task.cancelled.get() || task.paused.get() },
             onLog = { log -> broadcastLog(task, log) },
+            onStats = { speedText ->
+                // aria2c 每秒回传实测速度，直接刷新界面时速
+                task.speed = speedText
+                if (task.notifActive) updateNotif(task)
+                broadcastTask(task, 1, task.progress, "${task.progress}%")
+            },
         )
 
         when {
@@ -275,6 +309,12 @@ class DownloadService : Service() {
                     isCancelled = { task.cancelled.get() },
                     isPaused = { task.paused.get() },
                     onLog = { log -> broadcastLog(task, log) },
+                    onSizeInfo = { total, downloaded ->
+                        task.totalSize = total
+                        task.downloadedSize = downloaded
+                        updateSpeedByDelta(task, downloaded)
+                        broadcastTask(task, 1, task.progress, "${task.progress}%")
+                    },
                 )
                 when {
                     task.cancelled.get() -> finishTask(task, false, "已取消", "")
@@ -296,6 +336,10 @@ class DownloadService : Service() {
     private fun pauseTask(task: TaskCtx) {
         if (task.done) return
         task.paused.set(true)
+        // 暂停即时清空时速并重置采样基准，避免恢复瞬间出现虚假峰值
+        task.speed = ""
+        task.sampleAt = 0L
+        task.sampleBytes = 0L
         broadcastTask(task, 5, task.progress, "已暂停")
         if (task.notifActive) updateNotif(task)
     }
@@ -303,6 +347,9 @@ class DownloadService : Service() {
     private fun resumeTask(task: TaskCtx) {
         if (task.done) return
         task.paused.set(false)
+        task.speed = ""
+        task.sampleAt = 0L
+        task.sampleBytes = 0L
         broadcastTask(task, 1, task.progress, "继续下载")
         if (task.notifActive) updateNotif(task)
         // aria2 路径：暂停时线程已随进程退出，这里断点续传重启；
@@ -329,6 +376,7 @@ class DownloadService : Service() {
         if (task.done) return
         task.done = true
         task.notifActive = false
+        task.speed = ""
         val nm = getSystemService(NotificationManager::class.java)
         if (success) {
             task.progress = 100
@@ -390,7 +438,7 @@ class DownloadService : Service() {
         val intent = Intent(BROADCAST_UPDATE).apply {
             putExtra(EXTRA_STATE, state)
             putExtra(EXTRA_PROGRESS, progress)
-            putExtra(EXTRA_SPEED, "")
+            putExtra(EXTRA_SPEED, if (state == 1) task.speed else "")
             putExtra(EXTRA_STATUS_TEXT, status)
             putExtra(EXTRA_FILE_NAME, task.fileName)
             putExtra(EXTRA_TASK_ID, task.id)
@@ -456,7 +504,13 @@ class DownloadService : Service() {
         val paused = task.paused.get() && !task.done
         val builder = Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("${task.label} · ${task.fileName.takeLast(38)}")
-            .setContentText(if (paused) "已暂停 · ${task.progress}%" else "${task.progress}%")
+            .setContentText(
+                when {
+                    paused -> "已暂停 · ${task.progress}%"
+                    task.speed.isNotBlank() -> "${task.progress}% · ${task.speed}"
+                    else -> "${task.progress}%"
+                },
+            )
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
             // 每任务独立小窗口：下载中 → [暂停][取消]；已暂停 → [继续][取消]

@@ -27,6 +27,8 @@ object Aria2c {
     // summary 中已下载字节片段（如 "1.0MiB/"）：服务器无 Content-Length 时据此与预期大小计算百分比
     private val byteRegex = Regex("""\s([0-9]+(?:\.[0-9]+)?)(B|KiB|MiB|GiB)/""")
     private val byteUnits = mapOf("B" to 1L, "KiB" to 1024L, "MiB" to 1048576L, "GiB" to 1073741824L)
+    // summary 行下载速度片段（如 "DL:5.2MiB"）：解析后换算为用户熟悉的 KB/s、MB/s
+    private val dlRegex = Regex("""DL:([0-9]+(?:\.[0-9]+)?)(B|KiB|MiB|GiB)""")
 
     data class Result(
         val success: Boolean,
@@ -136,6 +138,7 @@ object Aria2c {
         expectedSize: Long = -1L,
         referer: String? = null,
         userAgent: String? = null,
+        onStats: ((speedText: String) -> Unit)? = null,
     ): Result {
         val dir = target.parentFile ?: return Result(false, null, "无效的保存路径")
         // 目录准备：app 可写则直建，否则经 root 创建
@@ -160,7 +163,7 @@ object Aria2c {
             plans.add(true)
             for (useRoot in plans) {
                 if (!tried.add("$binary|$useRoot")) continue
-                val result = runOnce(ctx, binary, useRoot, url, target, onProgress, isCancelled, onLog, expectedSize, referer, userAgent)
+                val result = runOnce(ctx, binary, useRoot, url, target, onProgress, isCancelled, onLog, expectedSize, referer, userAgent, onStats)
                 if (result.success) return result
                 if (result.message == "已取消") return result
                 lastError = result.message
@@ -184,6 +187,7 @@ object Aria2c {
         expectedSize: Long = -1L,
         referer: String? = null,
         userAgent: String? = null,
+        onStats: ((speedText: String) -> Unit)? = null,
     ): Result {
         val dir = target.parentFile?.absolutePath ?: return Result(false, null, "无效的保存路径")
         if (isCancelled()) return Result(false, null, "已取消")
@@ -238,6 +242,19 @@ object Aria2c {
                             lastLine.set(line.trim())
                             // summary 行含速度/连接数，实时回传界面，避免看起来像卡死
                             if (onLog != null && line.contains("CN:")) onLog(line.trim())
+                            // 解析 DL: 速度片段回传界面时速显示（summary-interval=1s，每秒一条）
+                            if (onStats != null && line.contains("DL:")) {
+                                dlRegex.find(line)?.let { m ->
+                                    val value = m.groupValues[1].toDoubleOrNull() ?: 0.0
+                                    val text = when (m.groupValues[2]) {
+                                        "GiB" -> String.format(java.util.Locale.US, "%.2f GB/s", value * 1024)
+                                        "MiB" -> String.format(java.util.Locale.US, "%.1f MB/s", value)
+                                        "KiB" -> String.format(java.util.Locale.US, "%.1f KB/s", value)
+                                        else -> String.format(java.util.Locale.US, "%d B/s", value.toLong())
+                                    }
+                                    onStats(text)
+                                }
+                            }
                         }
                         // 已下载字节：直链被墙时空转行（0B/0B）不会变化，只有真实数据才推进看门狗与进度
                         val bytesNow = byteRegex.find(line)?.let { m ->
