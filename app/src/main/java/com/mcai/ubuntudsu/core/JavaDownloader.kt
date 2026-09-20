@@ -32,6 +32,9 @@ object JavaDownloader {
 
     data class Result(val success: Boolean, val file: File?, val message: String)
 
+    /** 暂停信号：暂停时抛出以立即断开 HTTP 连接，恢复后由重试循环从断点重连（不消耗重试次数） */
+    private class PausedSignal : Exception()
+
     fun defaultSaveDir(): File = File("/sdcard/Downloads")
 
     fun fileNameFromUrl(url: String): String {
@@ -274,11 +277,11 @@ object JavaDownloader {
                             var lastBytes = done.get()
 
                             while (!cancelled.get() && !isCancelled()) {
-                                // 暂停检测：每100ms检查一次暂停状态
-                                while (isPaused()) {
-                                    if (cancelled.get() || isCancelled()) return
-                                    Thread.sleep(100)
-                                }
+                                // 暂停：抛信号立即断开连接。
+                                // 原地 sleep 等待的话，闲置连接会被服务器/NAT 静默断开，
+                                // 恢复后 input.read() 阻塞在死连接上直至读超时——界面显示
+                                // "下载中"却零字节（假恢复）。断开重连才能即刻恢复传输。
+                                if (isPaused()) throw PausedSignal()
                                 val bytesRead = input.read(buffer)
                                 if (bytesRead < 0) break
 
@@ -310,6 +313,12 @@ object JavaDownloader {
                     retries++
                     if (retries > MAX_RETRIES) throw java.io.IOException("HTTP $code")
                     Thread.sleep(2000L * retries)
+                }
+            } catch (e: PausedSignal) {
+                // 连接已断开，原地等待恢复；恢复后回到循环顶部按 seg.cursor 断点重连（不消耗重试次数）
+                while (isPaused()) {
+                    if (cancelled.get() || isCancelled()) return
+                    Thread.sleep(100)
                 }
             } catch (e: Exception) {
                 if (cancelled.get()) return
@@ -378,11 +387,8 @@ object JavaDownloader {
                             if (existing > 0) raf.seek(existing) else raf.setLength(0)
 
                             while (!cancelled.get() && !isCancelled()) {
-                                // 暂停检测：每100ms检查一次暂停状态
-                                while (isPaused()) {
-                                    if (cancelled.get() || isCancelled()) return Result(false, null, "已取消")
-                                    Thread.sleep(100)
-                                }
+                                // 暂停：抛信号断开连接，避免恢复后阻塞在已被服务端断掉的死连接上（同多线程路径）
+                                if (isPaused()) throw PausedSignal()
                                 val bytesRead = input.read(buffer)
                                 if (bytesRead < 0) break
                                 raf.write(buffer, 0, bytesRead)
@@ -416,6 +422,12 @@ object JavaDownloader {
                     retries++
                     if (retries > MAX_RETRIES) return Result(false, null, "HTTP $code")
                     Thread.sleep(2000L * retries)
+                }
+            } catch (e: PausedSignal) {
+                // 连接已断开，原地等待恢复；恢复后回到循环顶部按 tmpFile 长度断点重连（不消耗重试次数）
+                while (isPaused()) {
+                    if (cancelled.get() || isCancelled()) return Result(false, null, "已取消")
+                    Thread.sleep(100)
                 }
             } catch (e: Exception) {
                 onLog?.invoke("异常: ${e.message}，重试 ${retries + 1}/$MAX_RETRIES")

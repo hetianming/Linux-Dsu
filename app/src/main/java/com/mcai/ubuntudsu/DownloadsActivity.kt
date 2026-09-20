@@ -661,67 +661,15 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
 
         val d = resources.displayMetrics.density
 
-        // 下载中分组
-        val downloading = filtered.filter { it.state == 1 }
-        if (downloading.isNotEmpty()) {
-            taskContainer.addView(sectionHeader("下载中", Color.parseColor("#3B82F6")))
-            downloading.forEach { task ->
-                addTaskCard(task, d)
-            }
-        }
-
-        // 已完成分组
-        val done = filtered.filter { it.state == 2 }
-        if (done.isNotEmpty()) {
-            taskContainer.addView(sectionHeader("已完成", Color.parseColor("#22C55E")))
-            done.forEach { task ->
-                addTaskCard(task, d)
-            }
-        }
-
-        // 已暂停分组
-        val paused = filtered.filter { it.state == 5 }
-        if (paused.isNotEmpty()) {
-            taskContainer.addView(sectionHeader("已暂停", Color.parseColor("#EF4444")))
-            paused.forEach { task ->
-                addTaskCard(task, d)
-            }
-        }
-
-        // 其他状态（等待/失败/取消）
-        val others = filtered.filter { it.state !in listOf(1, 2, 5) }
-        if (others.isNotEmpty()) {
-            taskContainer.addView(sectionHeader("其他", Ui.secondaryText(this)))
-            others.forEach { task ->
-                addTaskCard(task, d)
-            }
+        // 稳定顺序单列表：绝不按状态分组重排。
+        // 分组渲染（下载中组在上/已暂停组在下）会让卡片在每次暂停/继续时跨分组跳位，
+        // 用户瞄准的按钮瞬间被另一张卡占据 → "点卡片2暂停了卡片1"的错位感。
+        // 顺序恒定 startTime 倒序 + id，卡片只随自身状态原地变色换按钮，位置永不动。
+        filtered.forEach { task ->
+            addTaskCard(task, d)
         }
 
         updateBottomBar()
-    }
-
-    private fun sectionHeader(text: String, color: Int): View {
-        val d = resources.displayMetrics.density
-        val label = text
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(Ui.dp(4, d), Ui.dp(10, d), 0, Ui.dp(6, d))
-            addView(View(this@DownloadsActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(Ui.dp(3, d), Ui.dp(14, d))
-                background = GradientDrawable().apply {
-                    setColor(color)
-                    cornerRadius = Ui.dp(2, d).toFloat()
-                }
-            })
-            addView(TextView(this@DownloadsActivity).apply {
-                this.text = label
-                textSize = 13f
-                setTypeface(typeface, Typeface.BOLD)
-                setTextColor(Ui.primaryText(this@DownloadsActivity))
-                setPadding(Ui.dp(6, d), 0, 0, 0)
-            })
-        }
     }
 
     private fun addTaskCard(task: DownloadTask, d: Float) {

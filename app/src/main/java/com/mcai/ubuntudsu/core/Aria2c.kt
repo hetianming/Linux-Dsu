@@ -196,10 +196,12 @@ object Aria2c {
         if (!cleanUrl.startsWith("http://") && !cleanUrl.startsWith("https://")) {
             return Result(false, null, "URL 无效（清洗后：$cleanUrl）")
         }
-        // aria2c 日志放 app 私有目录（任何运行身份都经 ctx 可写），失败时读取首条 ERROR
+        // aria2c 日志放 app 私有目录（任何运行身份都经 ctx 可写），失败时读取首条 ERROR。
+        // 按目标文件名隔离：多任务并行时共用一个 session.log 会互相删除/串写
+        // （任务B启动会删掉任务A正在写的日志，A失败时读到的却是B的错误）
         val logDir = File(ctx.filesDir, "aria2c")
         if (!logDir.exists()) runCatching { logDir.mkdirs() }
-        val logFile = File(logDir, "session.log")
+        val logFile = File(logDir, "session-${Integer.toHexString(target.name.hashCode())}.log")
         runCatching { logFile.delete() }
         val args = mutableListOf(
             "--no-conf=true",
