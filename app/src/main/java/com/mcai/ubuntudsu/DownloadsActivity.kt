@@ -627,7 +627,12 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
     private fun refreshTaskList() {
         updateTabLabels()
 
-        val all = tasks.values.sortedByDescending { it.startTime }
+        // 排序必须确定性：startTime 相同（杀APP重开后广播重建任务/同毫秒创建）时
+        // 若依赖 HashMap values() 顺序，任务增删会引发 rehash 导致卡片位置互换
+        // —— 用户点"第二张卡"暂停的却是原第一张卡的任务。加 id 次级键锁死顺序
+        val all = tasks.values.sortedWith(
+            compareByDescending<DownloadTask> { it.startTime }.thenBy { it.id },
+        )
         val filtered = when (currentTab) {
             Tab.ALL -> all
             Tab.DOWNLOADING -> all.filter { it.state == 1 }
