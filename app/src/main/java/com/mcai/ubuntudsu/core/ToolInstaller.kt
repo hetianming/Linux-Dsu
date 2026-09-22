@@ -4,22 +4,21 @@ import android.content.Context
 import android.util.Log
 import java.io.File
 import java.io.InputStream
-import java.util.zip.GZIPInputStream
+import java.util.zip.ZipFile
+import java.util.zip.ZipInputStream
 
 object ToolInstaller {
 
     private const val TAG = "ToolInstaller"
     private const val TOOLS_DIR = "tools"
     private const val PREFS_KEY = "tools_installed_version"
+    private const val BUNDLED_ZIP = "tools.zip"
 
-    // 内嵌工具清单：assets 中的名字（.bin 包装的 gzip） → 安装后的可执行名
-    private val TOOLS = mapOf(
-        "adb_arm64.bin" to "adb",
-        "fastboot_arm64.bin" to "fastboot",
-    )
+    // 工具清单：ZIP 内的文件名 → 安装后的可执行名
+    private val TOOLS = listOf("adb" to "adb", "fastboot" to "fastboot")
 
     /** APK 内嵌工具的版本标识（修改工具时同步更新此处以触发重新安装）。 */
-    private const val BUNDLED_VERSION = 3
+    private const val BUNDLED_VERSION = 4
 
     fun ensureInstalled(ctx: Context): Boolean {
         val prefs = ctx.getSharedPreferences("tools_install", Context.MODE_PRIVATE)
@@ -52,7 +51,7 @@ object ToolInstaller {
     /** 验证已安装的工具是否仍然存在且可执行。 */
     private fun validateTools(ctx: Context): Boolean {
         var ok = true
-        TOOLS.values.forEach { name ->
+        TOOLS.forEach { (_, name) ->
             val path = toolPath(ctx, name)
             if (path == null) {
                 Log.w(TAG, "工具文件缺失或不可执行: $name，需要重新安装")
@@ -62,16 +61,16 @@ object ToolInstaller {
         return ok
     }
 
-    /** 将内嵌工具（.gz 压缩）解压到 app-private 目录并设置可执行权限。 */
+    /** 将 ZIP 中的工具解压到 app-private 目录并设置可执行权限。 */
     fun installAll(ctx: Context): Boolean {
         val dir = toolsDir(ctx)
         dir.mkdirs()
         var ok = true
-        TOOLS.forEach { (assetName, installName) ->
-            if (!ensureExecutable(File(dir, installName), assetName, ctx)) ok = false
+        TOOLS.forEach { (zipName, installName) ->
+            if (!extractTool(ctx, zipName, File(dir, installName))) ok = false
         }
         // 验证文件存在且可执行
-        TOOLS.values.forEach { name ->
+        TOOLS.forEach { (_, name) ->
             val f = File(dir, name)
             if (!f.exists()) {
                 Log.e(TAG, "工具安装后文件缺失: ${f.absolutePath}")
@@ -84,46 +83,43 @@ object ToolInstaller {
         return ok
     }
 
-    /** 从 assets 解压 gzip 压缩文件，chmod 755。 */
-    private fun ensureExecutable(dest: File, assetName: String, ctx: Context): Boolean {
+    /** 从 ZIP 中解压单个工具文件。 */
+    private fun extractTool(ctx: Context, zipEntryName: String, dest: File): Boolean {
         if (dest.exists() && dest.canExecute()) return true
         return runCatching {
-            Log.i(TAG, "开始解压: $assetName → ${dest.absolutePath}")
-            // 确保目标目录存在
+            Log.i(TAG, "开始解压: $zipEntryName → ${dest.absolutePath}")
             dest.parentFile?.mkdirs()
-            // 删除旧文件（如果存在）
             if (dest.exists()) dest.delete()
-            // 创建新文件
             if (!dest.createNewFile()) {
                 throw IllegalStateException("无法创建文件: ${dest.absolutePath}")
             }
-            // 从 assets 读取并解压 gzip
-            val assetStream = ctx.assets.open("tools/$assetName")
-            val bufferSize = 8192
-            val buffer = ByteArray(bufferSize)
-            GZIPInputStream(assetStream).use { gzInput ->
-                dest.outputStream().use { output ->
-                    var bytesRead: Int
-                    while (gzInput.read(buffer, 0, bufferSize).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
+            // 从 ZIP 中提取
+            ctx.assets.open("tools.zip").use { zipStream ->
+                ZipInputStream(zipStream).use { zis ->
+                    var entry = zis.nextEntry
+                    while (entry != null) {
+                        if (entry.name == zipEntryName && !entry.isDirectory) {
+                            dest.outputStream().use { out ->
+                                zis.copyTo(out)
+                            }
+                            break
+                        }
+                        entry = zis.nextEntry
                     }
-                    output.flush()
                 }
             }
-            // 验证文件大小
             val actualSize = dest.length()
-            Log.i(TAG, "解压完成: $assetName, 大小=${actualSize} bytes")
+            Log.i(TAG, "解压完成: $zipEntryName, 大小=${actualSize} bytes")
             if (actualSize < 1000) {
                 throw IllegalStateException("解压后文件过小: $actualSize")
             }
-            // 设置权限
             dest.setExecutable(true, false)
             dest.setReadable(true, false)
             dest.setWritable(true, false)
             Log.i(TAG, "权限设置完成, canExecute=${dest.canExecute()}")
             dest.canExecute()
         }.getOrElse {
-            Log.e(TAG, "解压工具失败: $assetName", it)
+            Log.e(TAG, "解压工具失败: $zipEntryName", it)
             false
         }
     }
