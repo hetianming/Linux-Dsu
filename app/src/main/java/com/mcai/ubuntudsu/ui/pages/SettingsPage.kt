@@ -98,6 +98,7 @@ class SettingsPage(
             GridItem("主题样式", R.drawable.icon_theme_color, "#5B6CFF") { showThemeDialog() },
             GridItem("进程管理", R.drawable.icon_process_manager, "#E53935") { openProcessManager() },
             GridItem("ROM固件", R.drawable.icon_rom_firmware, "#FF6B35") { openRomFirmware() },
+            GridItem("OTG助手", R.drawable.icon_otg, "#00897B") { openOtgAssistant() },
             GridItem("软件更新", R.drawable.icon_update_color, "#2D64AA") { checkUpdate() },
         )
 
@@ -300,6 +301,11 @@ class SettingsPage(
 
     private fun openRomFirmware() {
         val intent = Intent(activity, com.mcai.ubuntudsu.RomActivity::class.java)
+        activity.startActivity(intent)
+    }
+
+    private fun openOtgAssistant() {
+        val intent = Intent(activity, com.mcai.ubuntudsu.OtgAssistantActivity::class.java)
         activity.startActivity(intent)
     }
 

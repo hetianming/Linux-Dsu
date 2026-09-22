@@ -562,7 +562,7 @@ class HomePage(
             activity.runOnUiThread {
                 deviceText.text = device
                 gsiText.text = "GSI 系统：$gsiLabel"
-                ubuntuText.text = if (Env.ubuntuInstalled(ctx)) "Linux：已安装（大小计算中...）" else "Linux：未安装"
+                ubuntuText.text = if (Env.ubuntuInstalled(ctx)) "Linux：已安装" else "Linux：未安装"
                 rootLabel.text = if (rootOk) "ROOT：已授权" else "ROOT：未授权"
                 rootDot.background = dotColor(if (rootOk) "#5CE1A5" else "#FF756F")
                 // GSI 点：运行/安装/启用=绿，停用=琥珀，未安装/未知=灰
@@ -577,11 +577,6 @@ class HomePage(
                     },
                 )
                 ubuntuDot.background = dotColor(if (Env.ubuntuInstalled(ctx)) "#5CE1A5" else "#B0B0B0")
-            }
-            if (Env.ubuntuInstalled(ctx)) {
-                val ubuntuSize = runCatching { Env.formatSize(Env.dirSize(Env.rootfs(ctx))) }
-                    .getOrElse { "读取失败" }
-                activity.runOnUiThread { ubuntuText.text = "Linux：已安装 ($ubuntuSize)" }
             }
         }
     }

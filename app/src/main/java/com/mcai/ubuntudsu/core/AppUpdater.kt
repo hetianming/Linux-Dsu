@@ -96,8 +96,8 @@ object AppUpdater {
     // 直链无进展时依次切换公共加速线路，保证国内可下载（安装时系统仍会校验签名，镜像无法伪造）。
     // 列表内的镜像均实测过 206 Range 可用；镜像失效时直链逻辑仍可兜底，替换即可。
     private val gitHubMirrors = listOf(
-        "https://ghfast.top/",
         "https://ghproxy.net/",
+        "https://ghfast.top/",
     )
 
     // 下载线路：直链优先，GitHub 资产再追加加速镜像

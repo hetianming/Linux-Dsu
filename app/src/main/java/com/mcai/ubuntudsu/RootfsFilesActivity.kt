@@ -43,6 +43,7 @@ class RootfsFilesActivity : AppCompatActivity() {
         const val EXTRA_PICK = "extra_pick"
         const val EXTRA_TITLE = "extra_title"
         const val EXTRA_EXT = "extra_ext"
+        const val EXTRA_EXT_ALL = "extra_ext_all"
         const val RESULT_FILE_PATH = "result_file_path"
     }
 
@@ -100,8 +101,9 @@ class RootfsFilesActivity : AppCompatActivity() {
         pickMode = intent.getBooleanExtra(EXTRA_PICK, false)
         if (pickMode) {
             pickTitle = intent.getStringExtra(EXTRA_TITLE) ?: "选择文件"
-            pickExt = (intent.getStringExtra(EXTRA_EXT) ?: "").split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
-            if (pickExt.isEmpty()) pickExt = listOf(".tar.gz", ".tar.xz", ".tgz", ".txz")
+            pickExt = if (intent.getBooleanExtra(EXTRA_EXT_ALL, false)) emptyList()
+            else (intent.getStringExtra(EXTRA_EXT) ?: "").split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+            if (pickExt.isEmpty() && !intent.getBooleanExtra(EXTRA_EXT_ALL, false)) pickExt = listOf(".tar.gz", ".tar.xz", ".tgz", ".txz")
         } else if (!Env.ubuntuInstalled(this)) {
             Toast.makeText(this, "Ubuntu rootfs 尚未安装", Toast.LENGTH_SHORT).show()
             finish()

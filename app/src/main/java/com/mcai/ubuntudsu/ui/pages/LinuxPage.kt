@@ -148,14 +148,7 @@ class LinuxPage(
             return
         }
         val version = rootfsVersion()
-        infoText.text = "系统版本信息：$version\n状态：已安装\n路径：$path\n大小：计算中..."
-        executor.execute {
-            val size = runCatching { Env.formatSize(Env.dirSize(Env.rootfs(activity))) }
-                .getOrElse { "读取失败" }
-            activity.runOnUiThread {
-                infoText.text = "系统版本信息：$version\n状态：已安装\n路径：$path\n大小：$size"
-            }
-        }
+        infoText.text = "系统版本信息：$version\n状态：已安装\n路径：$path"
     }
 
     private fun rootfsVersion(): String {

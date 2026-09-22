@@ -25,6 +25,8 @@
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
 
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+
     <application
         android:name=".App"
         android:allowBackup="false"
@@ -63,6 +65,9 @@
             android:exported="false"
             android:theme="@style/Theme.App" />
         <activity android:name=".DownloadsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.App" />
+        <activity android:name=".OtgAssistantActivity"
             android:exported="false"
             android:theme="@style/Theme.App" />
 

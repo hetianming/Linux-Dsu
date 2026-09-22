@@ -166,8 +166,7 @@ object StatusDetector {
 
     fun ubuntuSummary(ctx: Context): String {
         if (!Env.ubuntuInstalled(ctx)) return "未安装"
-        val size = Env.formatSize(Env.dirSize(Env.rootfs(ctx)))
-        return "已安装 ($size)"
+        return "已安装"
     }
 
     private fun systemProperty(name: String): String = runCatching {
