@@ -67,7 +67,7 @@ class OtgAssistantPage(
     private var pendingPickerTarget: String? = null
 
     /** 设置镜像路径选择后的回调（由 OtgAssistantActivity 调用 launcher 后设置）。 */
-    fun setImagePicker(setter: (String) -> Unit) { pendingImageSetter = setter }
+    fun setImagePicker(setter: (String) -> Unit) { /* kept for compatibility */ }
 
     // ==================== 入口 ====================
 
