@@ -64,7 +64,7 @@ class OtgAssistantPage(
     private lateinit var tabBtns: List<TextView>
 
     // 文件选择回调
-    private var pendingImageSetter: ((String) -> Unit)? = null
+    private var pendingPickerTarget: String? = null
 
     /** 设置镜像路径选择后的回调（由 OtgAssistantActivity 调用 launcher 后设置）。 */
     fun setImagePicker(setter: (String) -> Unit) { pendingImageSetter = setter }
@@ -565,17 +565,27 @@ class OtgAssistantPage(
     // ==================== 文件选择 ====================
 
     private fun pickImage() {
-        pendingImageSetter = { path -> flashImageInput.setText(path) }
+        pendingPickerTarget = "image"
         launchRootfsPicker("选择镜像文件", null)
     }
 
     private fun pickPushFile() {
-        pendingImageSetter = { path -> pushLocalInput.setText(path) }
+        pendingPickerTarget = "push"
         launchRootfsPicker("选择本地文件", null)
     }
 
     private fun pickPullFolder() {
-        appendLog("请在上方「保存目录」输入框中手动填写路径")
+        pendingPickerTarget = "pull"
+        val intent = Intent(activity, RootfsFilesActivity::class.java).apply {
+            putExtra(RootfsFilesActivity.EXTRA_PICK, true)
+            putExtra(RootfsFilesActivity.EXTRA_TITLE, "选择保存目录")
+            putExtra(RootfsFilesActivity.EXTRA_EXT_ALL, true)
+        }
+        try {
+            activity.startActivity(intent)
+        } catch (e: Exception) {
+            appendLog("无法打开文件选择器: ${e.message}")
+        }
     }
 
     private fun launchRootfsPicker(title: String, ext: String?) {
@@ -590,8 +600,17 @@ class OtgAssistantPage(
 
     /** 供 OtgAssistantActivity 回调文件选择结果。 */
     fun onFilePicked(path: String) {
-        pendingImageSetter?.invoke(path)
-        pendingImageSetter = null
+        when (pendingPickerTarget) {
+            "image" -> flashImageInput.setText(path)
+            "push" -> pushLocalInput.setText(path)
+            "pull" -> pullLocalInput.setText(path)
+            else -> {
+                // 默认填入镜像路径
+                if (::flashImageInput.isInitialized) flashImageInput.setText(path)
+                else if (::pushLocalInput.isInitialized) pushLocalInput.setText(path)
+            }
+        }
+        pendingPickerTarget = null
     }
 
     // ==================== 执行封装 ====================
