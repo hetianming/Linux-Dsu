@@ -3,8 +3,6 @@ package com.mcai.ubuntudsu.core
 import android.content.Context
 import android.util.Log
 import java.io.File
-import java.io.InputStream
-import java.util.zip.GZIPInputStream
 
 object ToolInstaller {
 
@@ -12,10 +10,10 @@ object ToolInstaller {
     private const val TOOLS_DIR = "tools"
     private const val PREFS_KEY = "tools_installed_version"
 
-    // 内嵌工具清单：assets 中的名字（.gz 压缩） → 安装后的可执行名
+    // 内嵌工具清单：assets 中的名字 → 安装后的可执行名
     private val TOOLS = mapOf(
-        "adb_arm64.gz" to "adb",
-        "fastboot_arm64.gz" to "fastboot",
+        "adb_arm64" to "adb",
+        "fastboot_arm64" to "fastboot",
     )
 
     /** APK 内嵌工具的版本标识（修改工具时同步更新此处以触发重新安装）。 */
@@ -62,7 +60,7 @@ object ToolInstaller {
         return ok
     }
 
-    /** 将内嵌工具（.gz 压缩）解压到 app-private 目录并设置可执行权限。 */
+    /** 将内嵌工具复制到 app-private 目录并设置可执行权限。 */
     fun installAll(ctx: Context): Boolean {
         val dir = toolsDir(ctx)
         dir.mkdirs()
@@ -84,11 +82,11 @@ object ToolInstaller {
         return ok
     }
 
-    /** 从 assets 解压 gzip 压缩文件，chmod 755。 */
+    /** 从 assets 复制二进制文件，chmod 755。 */
     private fun ensureExecutable(dest: File, assetName: String, ctx: Context): Boolean {
         if (dest.exists() && dest.canExecute()) return true
         return runCatching {
-            Log.i(TAG, "开始解压: $assetName → ${dest.absolutePath}")
+            Log.i(TAG, "开始复制: $assetName → ${dest.absolutePath}")
             // 确保目标目录存在
             dest.parentFile?.mkdirs()
             // 删除旧文件（如果存在）
@@ -97,25 +95,22 @@ object ToolInstaller {
             if (!dest.createNewFile()) {
                 throw IllegalStateException("无法创建文件: ${dest.absolutePath}")
             }
-            // 从 assets 读取并解压
+            // 从 assets 复制（非压缩二进制）
             val assetStream = ctx.assets.open("tools/$assetName")
             val bufferSize = 8192
             val buffer = ByteArray(bufferSize)
-            GZIPInputStream(assetStream).use { gzInput ->
-                dest.outputStream().use { output ->
-                    var bytesRead: Int
-                    while (gzInput.read(buffer, 0, bufferSize).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
-                    }
-                    output.flush()
+            dest.outputStream().use { output ->
+                var bytesRead: Int
+                while (assetStream.read(buffer, 0, bufferSize).also { bytesRead = it } != -1) {
+                    output.write(buffer, 0, bytesRead)
                 }
+                output.flush()
             }
             // 验证文件大小
-            val expectedSize = if ("adb_arm64.gz" == assetName) 1716240L else 607567L
             val actualSize = dest.length()
-            Log.i(TAG, "解压完成: $assetName, 原始=${actualSize} bytes")
+            Log.i(TAG, "复制完成: $assetName, 大小=${actualSize} bytes")
             if (actualSize < 1000) {
-                throw IllegalStateException("解压后文件过小: $actualSize")
+                throw IllegalStateException("复制后文件过小: $actualSize")
             }
             // 设置权限
             dest.setExecutable(true, false)
@@ -124,7 +119,7 @@ object ToolInstaller {
             Log.i(TAG, "权限设置完成, canExecute=${dest.canExecute()}")
             dest.canExecute()
         }.getOrElse {
-            Log.e(TAG, "解压工具失败: $assetName", it)
+            Log.e(TAG, "复制工具失败: $assetName", it)
             false
         }
     }
