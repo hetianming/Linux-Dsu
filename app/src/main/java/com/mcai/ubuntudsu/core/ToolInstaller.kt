@@ -12,10 +12,10 @@ object ToolInstaller {
     private const val TOOLS_DIR = "tools"
     private const val PREFS_KEY = "tools_installed_version"
 
-    // 内嵌工具清单：assets 中的名字（.gz 压缩） → 安装后的可执行名
+    // 内嵌工具清单：assets 中的名字（.bin 包装的 gzip） → 安装后的可执行名
     private val TOOLS = mapOf(
-        "adb_arm64.gz" to "adb",
-        "fastboot_arm64.gz" to "fastboot",
+        "adb_arm64.bin" to "adb",
+        "fastboot_arm64.bin" to "fastboot",
     )
 
     /** APK 内嵌工具的版本标识（修改工具时同步更新此处以触发重新安装）。 */
