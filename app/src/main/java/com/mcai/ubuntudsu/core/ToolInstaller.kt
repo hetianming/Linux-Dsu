@@ -27,7 +27,6 @@ object ToolInstaller {
         val installedVersion = try {
             prefs.getInt(PREFS_KEY, -1)
         } catch (e: ClassCastException) {
-            // 旧版本存的是 Boolean，清除后重新安装
             android.util.Log.w(TAG, "清除旧的 Boolean 偏好: ${e.message}")
             prefs.edit().remove(PREFS_KEY).apply()
             -1
@@ -35,9 +34,31 @@ object ToolInstaller {
             android.util.Log.w(TAG, "读取偏好失败: ${e.message}")
             -1
         }
-        if (installedVersion == BUNDLED_VERSION) return true
+        if (installedVersion == BUNDLED_VERSION) {
+            // 验证工具文件仍然存在
+            return validateTools(ctx)
+        }
+        Log.i(TAG, "工具版本不匹配 (expected=$BUNDLED_VERSION, got=$installedVersion)，开始安装")
         val ok = installAll(ctx)
-        if (ok) prefs.edit().putInt(PREFS_KEY, BUNDLED_VERSION).apply()
+        if (ok) {
+            prefs.edit().putInt(PREFS_KEY, BUNDLED_VERSION).apply()
+            Log.i(TAG, "工具安装成功")
+        } else {
+            Log.e(TAG, "工具安装失败")
+        }
+        return ok
+    }
+
+    /** 验证已安装的工具是否仍然存在且可执行。 */
+    private fun validateTools(ctx: Context): Boolean {
+        var ok = true
+        TOOLS.values.forEach { name ->
+            val path = toolPath(ctx, name)
+            if (path == null) {
+                Log.w(TAG, "工具文件缺失或不可执行: $name，需要重新安装")
+                ok = false
+            }
+        }
         return ok
     }
 
@@ -67,17 +88,40 @@ object ToolInstaller {
     private fun ensureExecutable(dest: File, assetName: String, ctx: Context): Boolean {
         if (dest.exists() && dest.canExecute()) return true
         return runCatching {
-            // 解压 gzip 压缩文件（Android 内置 GZIPInputStream）
-            ctx.assets.open("tools/$assetName").use { input ->
-                dest.parentFile?.mkdirs()
-                if (!dest.exists()) dest.createNewFile()
-                GZIPInputStream(input).use { gzInput ->
-                    gzInput.copyTo(dest.outputStream())
+            Log.i(TAG, "开始解压: $assetName → ${dest.absolutePath}")
+            // 确保目标目录存在
+            dest.parentFile?.mkdirs()
+            // 删除旧文件（如果存在）
+            if (dest.exists()) dest.delete()
+            // 创建新文件
+            if (!dest.createNewFile()) {
+                throw IllegalStateException("无法创建文件: ${dest.absolutePath}")
+            }
+            // 从 assets 读取并解压
+            val assetStream = ctx.assets.open("tools/$assetName")
+            val bufferSize = 8192
+            val buffer = ByteArray(bufferSize)
+            GZIPInputStream(assetStream).use { gzInput ->
+                dest.outputStream().use { output ->
+                    var bytesRead: Int
+                    while (gzInput.read(buffer, 0, bufferSize).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                    }
+                    output.flush()
                 }
             }
+            // 验证文件大小
+            val expectedSize = if ("adb_arm64.gz" == assetName) 1716240L else 607567L
+            val actualSize = dest.length()
+            Log.i(TAG, "解压完成: $assetName, 原始=${actualSize} bytes")
+            if (actualSize < 1000) {
+                throw IllegalStateException("解压后文件过小: $actualSize")
+            }
+            // 设置权限
             dest.setExecutable(true, false)
             dest.setReadable(true, false)
-            Log.i(TAG, "安装工具: $assetName → ${dest.absolutePath}")
+            dest.setWritable(true, false)
+            Log.i(TAG, "权限设置完成, canExecute=${dest.canExecute()}")
             dest.canExecute()
         }.getOrElse {
             Log.e(TAG, "解压工具失败: $assetName", it)
