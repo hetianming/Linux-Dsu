@@ -36,6 +36,7 @@ import androidx.core.view.WindowInsetsCompat
  */
 object Ui {
     private const val MAX_CORNER_RADIUS_DP = 32f
+    val typeface = Typeface.SANS_SERIF
 
     // ==================== 拟态调色板 ====================
 
