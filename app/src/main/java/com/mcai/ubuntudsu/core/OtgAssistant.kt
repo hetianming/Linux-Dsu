@@ -336,4 +336,13 @@ object OtgAssistant {
             else -> 0L
         }
     }
+
+    fun buildOutput(result: ShellResult): String {
+        return buildString {
+            if (result.stdout.isNotEmpty()) appendLine(result.stdout)
+            if (result.stderr.isNotEmpty()) appendLine("[错误] ${result.stderr}")
+            if (result.code != 0 && result.code != 127) appendLine("[退出码: ${result.code}]")
+            if (result.code == 127) appendLine("[命令未找到]")
+        }.trimEnd()
+    }
 }

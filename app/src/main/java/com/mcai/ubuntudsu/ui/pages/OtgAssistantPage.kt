@@ -370,45 +370,62 @@ class OtgAssistantPage(
         // --- BL 锁状态 ---
         out.addView(section("BL 锁状态", "").apply {
             addView(actionBtn("查看 BL 锁状态", Ui.buttonSecondary(activity)) {
-                runFbCmd("getvar unlocked") { appendFbLog("unlocked: $it") }
-                runFbCmd("oem device-info") { appendFbLog(it) }
-                runFbCmd("flashing get_unlock_ability") { appendFbLog("get_unlock_ability: $it") }
+                executor.execute {
+                    val unlocked = OtgAssistant.fastbootGetvar(activity, selectedFbSerial, "unlocked")
+                    activity.runOnUiThread { appendFbLog("unlocked: ${unlocked ?: "无法获取"}") }
+                    val deviceInfo = OtgAssistant.run(activity, "fastboot", listOf("-s", selectedFbSerial, "oem", "device-info"), timeoutMs = 20000)
+                    activity.runOnUiThread { appendFbLog("oem device-info:\n${OtgAssistant.buildOutput(deviceInfo)}") }
+                    val unlockAbility = OtgAssistant.fastbootGetvar(activity, selectedFbSerial, "flashing unlock-ability")
+                    activity.runOnUiThread { appendFbLog("get_unlock_ability: ${unlockAbility ?: "无法获取"}") }
+                }
             })
         })
 
         // --- 品牌解锁选项 ---
         out.addView(section("品牌解锁选项", "").apply {
-            val brands = listOf("Lenovo", "oppo", "Google_Pixel")
-            val brandLabels = listOf("联想", "OPPO/一加/realme", "Google Pixel")
-            val brandBtns = brands.mapIndexed { i, b ->
-                actionBtn(brandLabels[i], Ui.buttonSecondary(activity)) {
-                    runFbCmd("flash unlock", b = selectedFbSerial) { appendFbLog(it) }
-                    when (b) {
-                        "Lenovo" -> runFbCmd("oem unlock-go", b = selectedFbSerial) { appendFbLog(it) }
-                        "oppo", "Google_Pixel" -> {
-                            runFbCmd("flashing unlock", b = selectedFbSerial) { appendFbLog(it) }
-                            if (b == "Google_Pixel") runFbCmd("flashing unlock_critical", b = selectedFbSerial) { appendFbLog(it) }
+            val brands = listOf("联想" to "Lenovo", "OPPO/一加/realme" to "oppo", "Google Pixel" to "Google_Pixel")
+            brands.forEach { (label, _) ->
+                addView(actionBtn(label, Ui.buttonSecondary(activity)) {
+                    executor.execute {
+                        val serial = selectedFbSerial.takeIf { it.isNotBlank() }
+                        val unlocked = OtgAssistant.fastbootUnlock(activity, serial)
+                        activity.runOnUiThread { appendFbLog(unlocked.toString()) }
+                        when (label) {
+                            "联想" -> {
+                                val r = OtgAssistant.run(activity, "fastboot", listOf(serial.orEmpty(), "oem", "unlock-go"), timeoutMs = 90000)
+                                activity.runOnUiThread { appendFbLog(OtgAssistant.buildOutput(r)) }
+                            }
+                            "OPPO/一加/realme", "Google Pixel" -> {
+                                val r1 = OtgAssistant.run(activity, "fastboot", listOf(serial.orEmpty(), "flashing", "unlock"), timeoutMs = 90000)
+                                activity.runOnUiThread { appendFbLog(OtgAssistant.buildOutput(r1)) }
+                                if (label == "Google Pixel") {
+                                    val r2 = OtgAssistant.run(activity, "fastboot", listOf(serial.orEmpty(), "flashing", "unlock_critical"), timeoutMs = 90000)
+                                    activity.runOnUiThread { appendFbLog(OtgAssistant.buildOutput(r2)) }
+                                }
+                            }
                         }
+                        activity.runOnUiThread { appendFbLog("已发送解锁指令，按提示操作") }
                     }
-                    appendFbLog("✅ 已发送解锁指令，按提示操作")
-                }
+                })
             }
-            brandBtns.forEach { addView(it) }
         })
 
         // --- 解锁 BL（多方案） ---
         out.addView(section("解锁 BL（多方案）", "").apply {
             val options = listOf(
-                "fastboot oem unlock-go",
-                "fastboot oem unlock",
-                "fastboot flashing unlock",
-                "fastboot flashing unlock_critical",
-                "fastboot bbk unlock_vivo",
+                "oem unlock" to listOf("oem", "unlock"),
+                "oem unlock-go" to listOf("oem", "unlock-go"),
+                "flashing unlock" to listOf("flashing", "unlock"),
+                "flashing unlock_critical" to listOf("flashing", "unlock_critical"),
+                "bbk unlock" to listOf("bbk", "unlock"),
             )
-            options.forEachIndexed { i, cmd ->
-                addView(actionBtn("方案${i + 1}", Ui.buttonSecondary(activity)) {
-                    val args = cmd.substringAfter("fastboot ").split(" ")
-                    runFbCmd(args[0], *args.drop(1).toTypedArray()) { appendFbLog(it) }
+            options.forEachIndexed { i, (label, cmd) ->
+                addView(actionBtn("方案${i + 1}: $label", Ui.buttonSecondary(activity)) {
+                    executor.execute {
+                        val serial = selectedFbSerial.takeIf { it.isNotBlank() }
+                        val result = OtgAssistant.run(activity, "fastboot", (serial?.let { listOf("-s", it) } ?: emptyList()) + cmd, timeoutMs = 90000)
+                        activity.runOnUiThread { appendFbLog(OtgAssistant.buildOutput(result)) }
+                    }
                 })
             }
         })
@@ -416,10 +433,18 @@ class OtgAssistantPage(
         // --- 上锁 BL ---
         out.addView(section("上锁 BL", "").apply {
             addView(actionBtn("方案① flashing lock", Ui.buttonDanger(activity)) {
-                runFbCmd("flashing", "lock") { appendFbLog(it) }
+                executor.execute {
+                    val serial = selectedFbSerial.takeIf { it.isNotBlank() }
+                    val result = OtgAssistant.fastbootLockCmd(activity, serial, 0)
+                    activity.runOnUiThread { appendFbLog(OtgAssistant.buildOutput(result)) }
+                }
             })
             addView(actionBtn("方案② oem lock", Ui.buttonDanger(activity)) {
-                runFbCmd("oem", "lock") { appendFbLog(it) }
+                executor.execute {
+                    val serial = selectedFbSerial.takeIf { it.isNotBlank() }
+                    val result = OtgAssistant.fastbootLockCmd(activity, serial, 1)
+                    activity.runOnUiThread { appendFbLog(OtgAssistant.buildOutput(result)) }
+                }
             })
             addView(infoText("⚠️  上锁前请确保 REC 和系统都是官方的，否则变砖自负！"))
         })
@@ -427,14 +452,26 @@ class OtgAssistantPage(
         // --- A/B 卡槽 ---
         out.addView(section("A/B 卡槽切换", "").apply {
             addView(actionBtn("查看当前激活分区", Ui.buttonSecondary(activity)) {
-                runFbCmd("getvar", "current-slot") { appendFbLog(it) }
+                executor.execute {
+                    val serial = selectedFbSerial.takeIf { it.isNotBlank() }
+                    val result = OtgAssistant.fastbootGetvar(activity, serial, "current-slot")
+                    activity.runOnUiThread { appendFbLog("current-slot: ${result ?: "无法获取"}") }
+                }
             })
             addView(row2btn(
                 actionBtn("切换至 A", Ui.buttonPrimary(activity)) {
-                    runFbCmd("--set-active=a") { appendFbLog(it) }
+                    executor.execute {
+                        val serial = selectedFbSerial.takeIf { it.isNotBlank() }
+                        val result = OtgAssistant.fastbootSetActive(activity, serial, "a")
+                        activity.runOnUiThread { appendFbLog(OtgAssistant.buildOutput(result)) }
+                    }
                 },
                 actionBtn("切换至 B", Ui.buttonPrimary(activity)) {
-                    runFbCmd("--set-active=b") { appendFbLog(it) }
+                    executor.execute {
+                        val serial = selectedFbSerial.takeIf { it.isNotBlank() }
+                        val result = OtgAssistant.fastbootSetActive(activity, serial, "b")
+                        activity.runOnUiThread { appendFbLog(OtgAssistant.buildOutput(result)) }
+                    }
                 },
             ))
         })
@@ -471,18 +508,24 @@ class OtgAssistantPage(
                 val part = partitionInput.text.toString().trim()
                 val img = imgInput.text.toString().trim()
                 if (part.isEmpty() || img.isEmpty()) { appendFbLog("请填写分区名和镜像路径"); return@actionBtn }
-                runFbCmd("flash", part, img) { appendFbLog(it) }
+                executor.execute {
+                    val serial = selectedFbSerial.takeIf { it.isNotBlank() }
+                    val result = OtgAssistant.fastbootFlash(activity, serial, part, img)
+                    activity.runOnUiThread { appendFbLog(OtgAssistant.buildOutput(result)) }
+                }
             })
         })
 
         // --- 动态获取分区刷入 ---
         out.addView(section("动态分区刷入", "").apply {
             addView(actionBtn("获取可用分区列表", Ui.buttonSecondary(activity)) {
-                runFbCmd("getvar", "all") { 
-                    val parts = it.lines().map { l -> l.trim() }
-                        .filter { l -> l.contains("partition-type:") }
-                        .map { l -> l.replaceBefore(":", "").trim() }
-                    appendFbLog("可用分区:\n${parts.joinToString("\n") { "  $it" }}")
+                executor.execute {
+                    val serial = selectedFbSerial.takeIf { it.isNotBlank() }
+                    val partitions = OtgAssistant.fastbootPartitions(activity, serial)
+                    activity.runOnUiThread {
+                        val list = partitions.joinToString("\n") { "${it.name} (${it.type}, ${it.sizeBytes} bytes)" }
+                        appendFbLog("可用分区:\n$list")
+                    }
                 }
             })
             val partInput = EditText(activity).apply {
@@ -495,7 +538,7 @@ class OtgAssistantPage(
                 ).apply { bottomMargin = Ui.dp(4, d).toInt() }
                 isFocusable = false
             }
-            val imgInput = EditText(activity).apply {
+            val imgInput2 = EditText(activity).apply {
                 hint = "镜像文件路径"
                 textSize = 12f
                 setBackgroundResource(android.R.drawable.edit_text)
@@ -506,26 +549,54 @@ class OtgAssistantPage(
                 isFocusable = false
             }
             addView(partInput)
-            addView(imgInput)
+            addView(imgInput2)
             addView(actionBtn("选择镜像文件", Ui.buttonSecondary(activity)) {
-                pendingFbFileAction = { path -> imgInput.setText(path) }
+                pendingFbFileAction = { path -> imgInput2.setText(path) }
                 openFilePicker("请选择 .img 镜像文件")
             })
             addView(actionBtn("刷入", Ui.buttonPrimary(activity)) {
                 val part = partInput.text.toString().trim()
-                val img = imgInput.text.toString().trim()
+                val img = imgInput2.text.toString().trim()
                 if (part.isEmpty() || img.isEmpty()) { appendFbLog("请填写分区名和镜像路径"); return@actionBtn }
-                runFbCmd("flash", part, img) { appendFbLog(it) }
+                executor.execute {
+                    val serial = selectedFbSerial.takeIf { it.isNotBlank() }
+                    val result = OtgAssistant.fastbootFlash(activity, serial, part, img)
+                    activity.runOnUiThread { appendFbLog(OtgAssistant.buildOutput(result)) }
+                }
             })
         })
 
         // --- 重启控制 ---
         out.addView(section("重启控制", "").apply {
             addView(row4btn(
-                actionBtn("系统", Ui.buttonSuccess(activity)) { runFbCmd("reboot") { appendFbLog(it) } },
-                actionBtn("Bootloader", Ui.buttonPrimary(activity)) { runFbCmd("reboot-bootloader") { appendFbLog(it) } },
-                actionBtn("Recovery", Ui.buttonWarning(activity)) { runFbCmd("reboot", "recovery") { appendFbLog(it) } },
-                actionBtn("EDL", Ui.buttonDanger(activity)) { runFbCmd("oem", "edl") { appendFbLog(it) } },
+                actionBtn("系统", Ui.buttonSuccess(activity)) {
+                    executor.execute {
+                        val serial = selectedFbSerial.takeIf { it.isNotBlank() }
+                        val result = OtgAssistant.fastbootReboot(activity, serial, "system")
+                        activity.runOnUiThread { appendFbLog(OtgAssistant.buildOutput(result)) }
+                    }
+                },
+                actionBtn("Bootloader", Ui.buttonPrimary(activity)) {
+                    executor.execute {
+                        val serial = selectedFbSerial.takeIf { it.isNotBlank() }
+                        val result = OtgAssistant.fastbootReboot(activity, serial, "bootloader")
+                        activity.runOnUiThread { appendFbLog(OtgAssistant.buildOutput(result)) }
+                    }
+                },
+                actionBtn("Recovery", Ui.buttonWarning(activity)) {
+                    executor.execute {
+                        val serial = selectedFbSerial.takeIf { it.isNotBlank() }
+                        val result = OtgAssistant.fastbootReboot(activity, serial, "recovery")
+                        activity.runOnUiThread { appendFbLog(OtgAssistant.buildOutput(result)) }
+                    }
+                },
+                actionBtn("EDL", Ui.buttonDanger(activity)) {
+                    executor.execute {
+                        val serial = selectedFbSerial.takeIf { it.isNotBlank() }
+                        val result = OtgAssistant.fastbootReboot(activity, serial, "edl")
+                        activity.runOnUiThread { appendFbLog(OtgAssistant.buildOutput(result)) }
+                    }
+                },
             ))
         })
 
@@ -671,7 +742,7 @@ class OtgAssistantPage(
     private fun runAdbCmd(vararg args: String, onResult: ((String) -> Unit)? = null) {
         executor.execute {
             val result = OtgAssistant.run(activity, "adb", args.toList(), timeoutMs = 60000)
-            val output = buildOutput(result)
+            val output = OtgAssistant.buildOutput(result)
             activity.runOnUiThread {
                 onResult?.invoke(output)
             }
@@ -720,17 +791,6 @@ class OtgAssistantPage(
         }
     }
 
-    private fun runFbCmd(vararg args: String, b: String = selectedFbSerial, onResult: ((String) -> Unit)? = null) {
-        executor.execute {
-            val serialized = if (b.isNotBlank()) listOf("-s", b) else emptyList()
-            val result = OtgAssistant.run(activity, "fastboot", serialized + args.toList(), timeoutMs = 120000)
-            val output = buildOutput(result)
-            activity.runOnUiThread {
-                onResult?.invoke(output)
-            }
-        }
-    }
-
     private fun appendFbLog(msg: String) {
         fbLogView.append("$msg\n")
         fbLogView.post { (fbLogView.parent as? ScrollView)?.fullScroll(View.FOCUS_DOWN) }
@@ -753,16 +813,5 @@ class OtgAssistantPage(
         pendingFbFileAction?.invoke(path)
         pendingAdbFileAction = null
         pendingFbFileAction = null
-    }
-
-    // ==================== 工具 ====================
-
-    private fun buildOutput(result: ShellResult): String {
-        return buildString {
-            if (result.stdout.isNotEmpty()) appendLine(result.stdout)
-            if (result.stderr.isNotEmpty()) appendLine("[错误] ${result.stderr}")
-            if (result.code != 0 && result.code != 127) appendLine("[退出码: ${result.code}]")
-            if (result.code == 127) appendLine("[命令未找到]")
-        }.trimEnd()
     }
 }
