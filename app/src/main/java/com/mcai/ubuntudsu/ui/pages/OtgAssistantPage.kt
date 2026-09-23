@@ -269,6 +269,18 @@ class OtgAssistantPage(
             isFocusable = false
             isClickable = true
         }
+        pushRemoteInput = inputField("目标设备路径", "")
+        card.addView(pushLocalInput)
+        card.addView(pushRemoteInput)
+        card.addView(actionBtn("推送", Ui.buttonPrimary(activity)) { adbPush() })
+
+        card.addView(hint("—— 拉取（目标设备 → 本机）——"))
+        pullRemoteInput = inputField("设备文件路径", "")
+        pullLocalInput = inputField("保存目录（点按钮选择）", "").apply {
+            setOnClickListener { pickPullFolder() }
+            isFocusable = false
+            isClickable = true
+        }
         card.addView(pullRemoteInput)
         card.addView(pullLocalInput)
         card.addView(actionBtn("拉取", Ui.buttonPrimary(activity)) { adbPull() })
