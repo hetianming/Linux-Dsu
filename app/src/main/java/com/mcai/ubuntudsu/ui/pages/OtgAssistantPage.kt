@@ -205,8 +205,6 @@ class OtgAssistantPage(
         }
         card.addView(flashPartitionInput)
 
-        flashImageInput = inputField("镜像路径（如 /sdcard/boot.img）", "")
-        card.addView(flashImageInput)
         card.addView(row2btn(
             actionBtn("选择镜像文件", Ui.buttonSuccess(activity)) { pickImage() },
             actionBtn("刷写分区", Ui.buttonDanger(activity)) { confirmFlash() },
@@ -254,24 +252,26 @@ class OtgAssistantPage(
         card.addView(actionBtn("刷新设备", Ui.buttonPrimary(activity)) { refreshAdbDevices() })
 
         card.addView(hint("—— 推送（本机 → 目标设备）——"))
-        pushLocalInput = inputField("本机文件路径", "")
+        pushLocalInput = inputField("本机文件路径（点按钮选择）", "").apply {
+            setOnClickListener { pickPushFile() }
+            isFocusable = false
+            isClickable = true
+        }
         pushRemoteInput = inputField("目标设备路径", "")
         card.addView(pushLocalInput)
         card.addView(pushRemoteInput)
-        card.addView(row2btn(
-            actionBtn("选择文件", Ui.buttonSuccess(activity)) { pickPushFile() },
-            actionBtn("推送", Ui.buttonPrimary(activity)) { adbPush() },
-        ))
+        card.addView(actionBtn("推送", Ui.buttonPrimary(activity)) { adbPush() })
 
         card.addView(hint("—— 拉取（目标设备 → 本机）——"))
         pullRemoteInput = inputField("设备文件路径", "")
-        pullLocalInput = inputField("保存目录", "")
+        pullLocalInput = inputField("保存目录（点按钮选择）", "").apply {
+            setOnClickListener { pickPullFolder() }
+            isFocusable = false
+            isClickable = true
+        }
         card.addView(pullRemoteInput)
         card.addView(pullLocalInput)
-        card.addView(row2btn(
-            actionBtn("选择目录", Ui.buttonWarning(activity)) { pickPullFolder() },
-            actionBtn("拉取", Ui.buttonPrimary(activity)) { adbPull() },
-        ))
+        card.addView(actionBtn("拉取", Ui.buttonPrimary(activity)) { adbPull() })
         return card
     }
 
