@@ -1,7 +1,6 @@
 package com.mcai.ubuntudsu.ui.pages
 
 import android.app.Activity
-import android.content.Intent
 import android.graphics.Typeface
 import android.view.Gravity
 import android.view.View
@@ -21,18 +20,6 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * OTG 助手 - FastbootEnhance 安卓版
- * 
- * 功能：
- * 1. 设备连接检测（Fastboot/ADB/EDL）
- * 2. Fastboot 变量查看
- * 3. 分区表管理与刷写
- * 4. 逻辑分区操作（创建/删除/调整）
- * 5. Payload.bin 刷写
- * 6. 重启控制
- * 7. A/B 卡槽切换
- */
 class OtgAssistantPage(
     private val activity: Activity,
     private val onDismiss: (() -> Unit)? = null,
@@ -41,38 +28,24 @@ class OtgAssistantPage(
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val running = AtomicBoolean(true)
 
-    // === 设备列表 ===
-    private lateinit var deviceList: LinearLayout
-    private var selectedSerial: String = ""
-    private var isFastbootd: Boolean = false
-    private var currentSlot: String = ""
+    // === ADB ===
+    private lateinit var adbDeviceList: LinearLayout
+    private var selectedAdbSerial: String = ""
+    private lateinit var adbLogView: TextView
+    private var pendingAdbFileAction: ((String) -> Unit)? = null
 
-    // === Fastboot 变量 ===
-    private lateinit var varsListView: LinearLayout
-
-    // === 分区表 ===
-    private lateinit var partitionList: LinearLayout
-    private lateinit var partitionFilter: EditText
-    private var currentPartitions: List<OtgAssistant.Partition> = emptyList()
-    private var selectedPartition: OtgAssistant.Partition? = null
+    // === Fastboot ===
+    private lateinit var fbDeviceList: LinearLayout
+    private var selectedFbSerial: String = ""
+    private lateinit var fbLogView: TextView
+    private var pendingFbFileAction: ((String) -> Unit)? = null
 
     // === 进度条 ===
     private lateinit var progressBar: ProgressBar
 
-    // === 日志 ===
-    private lateinit var logView: TextView
-
-    // === Tab ===
-    private lateinit var tabContents: List<View>
-    private lateinit var tabBtns: List<TextView>
-
-    // === 文件选择回调 ===
-    private var pendingFileAction: ((String) -> Unit)? = null
-
-    fun onFilePicked(path: String) {
-        pendingFileAction?.invoke(path)
-        pendingFileAction = null
-    }
+    // === Tab 选中 ===
+    private var currentTab = 0
+    private var tabBtns: List<TextView> = emptyList()
 
     // ==================== 入口 ====================
 
@@ -94,7 +67,17 @@ class OtgAssistantPage(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, 0, 0, Ui.dp(8, d))
-            addView(backBtn { activity.onBackPressed() })
+            addView(TextView(activity).apply {
+                text = "<"
+                textSize = 20f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(Ui.primaryText(activity))
+                gravity = Gravity.CENTER
+                setPadding(Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt(), Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt())
+                background = Ui.glassButton(activity, Ui.buttonSecondary(activity))
+                Ui.pressAnimation(this)
+                setOnClickListener { activity.onBackPressed() }
+            })
             val t = TextView(activity).apply {
                 text = "OTG 助手"
                 textSize = 18f
@@ -106,11 +89,8 @@ class OtgAssistantPage(
             addView(t)
         })
 
-        // 设备选择区
-        root.addView(buildDeviceSection())
-
         // Tab 栏
-        val tabs = listOf("变量", "分区", "Payload")
+        val tabs = listOf("ADB", "Fastboot")
         val tabRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             background = Ui.neuCard(activity, 12f)
@@ -119,7 +99,7 @@ class OtgAssistantPage(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { topMargin = Ui.dp(8, d) }
         }
-        tabBtns = tabs.map { label ->
+        val tabBtnsList = tabs.map { label ->
             TextView(activity).apply {
                 text = label
                 textSize = 13f
@@ -133,22 +113,25 @@ class OtgAssistantPage(
                 setOnClickListener { selectTab(tabs.indexOf(label)) }
             }
         }
+        tabBtns = tabBtnsList
         tabBtns[0].setTextColor(Ui.buttonPrimary(activity))
         tabBtns.forEach { tabRow.addView(it) }
         root.addView(tabRow)
 
-        // Tab 内容
-        tabContents = listOf(
-            buildVarsTab(),
-            buildPartitionTab(),
-            buildPayloadTab().also { it.visibility = View.GONE },
-        )
-        tabContents.forEachIndexed { i, v ->
-            v.layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = Ui.dp(8, d) }
-            root.addView(v)
-        }
+        // ADB 内容
+        val adbContent = buildAdbContent()
+        adbContent.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = Ui.dp(8, d) }
+        root.addView(adbContent)
+
+        // Fastboot 内容
+        val fbContent = buildFbContent()
+        fbContent.visibility = View.GONE
+        fbContent.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = Ui.dp(8, d) }
+        root.addView(fbContent)
 
         // 进度条
         progressBar = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -159,355 +142,443 @@ class OtgAssistantPage(
         }
         root.addView(progressBar)
 
-        // 操作按钮区
-        root.addView(buildActionBar())
-
-        // 日志
-        root.addView(section("日志", "").apply {
-            logView = Ui.logTextView(activity)
-            addView(logView)
-        })
-
-        // 初始检测
-        detectDevices()
-        startAutoRefresh()
+        currentTab = 0
         return root
     }
 
-    // ==================== 设备选择区 ====================
-
-    private fun buildDeviceSection(): LinearLayout {
-        val card = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            background = Ui.neuCard(activity, 16f)
-            setPadding(Ui.dp(12, d), Ui.dp(10, d), Ui.dp(12, d), Ui.dp(10, d))
+    private fun selectTab(idx: Int) {
+        currentTab = idx
+        tabBtns?.forEachIndexed { i, btn ->
+            btn.setTextColor(if (i == idx) Ui.buttonPrimary(activity) else Ui.secondaryText(activity))
         }
-
-        card.addView(TextView(activity).apply {
-            text = "设备列表"
-            textSize = 14f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Ui.primaryText(activity))
-        })
-
-        deviceList = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(100, d)
-            )
-        }
-        card.addView(deviceList)
-
-        card.addView(actionBtn("刷新设备", Ui.buttonPrimary(activity)) { detectDevices() })
-        return card
+        // 重新构建内容（简单方式）
+        rebuildTabs()
     }
 
-    private fun buildDeviceRow(serial: String, productName: String): LinearLayout {
-        return LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = Ui.glassButton(activity, Ui.buttonSecondary(activity))
-            setPadding(Ui.dp(8, d), Ui.dp(6, d), Ui.dp(8, d), Ui.dp(6, d))
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = Ui.dp(2, d) }
-            setOnClickListener { selectDevice(serial) }
-
-            addView(TextView(activity).apply {
-                text = serial
-                textSize = 12f
-                setTypeface(typeface, Typeface.BOLD)
-                setTextColor(Ui.primaryText(activity))
-                layoutParams = LinearLayout.LayoutParams(
-                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
-                )
-            })
-
-            addView(TextView(activity).apply {
-                text = productName
-                textSize = 10f
-                setTextColor(Ui.secondaryText(activity))
-            })
-
-            addView(TextView(activity).apply {
-                text = if (selectedSerial == serial) "✓" else "›"
-                textSize = 16f
-                setTextColor(if (selectedSerial == serial) Ui.buttonSuccess(activity) else Ui.secondaryText(activity))
-            })
-        }
-    }
-
-    private fun selectDevice(serial: String) {
-        selectedSerial = serial
-        refreshDeviceSelection()
-        loadFastbootVars()
-    }
-
-    private fun refreshDeviceSelection() {
-        deviceList.removeAllViews()
-        deviceList.addView(TextView(activity).apply {
-            text = "当前: $selectedSerial${if (isFastbootd) " (fastbootd)" else ""}"
-            textSize = 11f
-            setTextColor(Ui.buttonPrimary(activity))
-            setPadding(0, Ui.dp(2, d), 0, Ui.dp(4, d))
-        })
-    }
-
-    // ==================== Tab 0: Fastboot 变量 ====================
-
-    private fun buildVarsTab(): LinearLayout {
-        val card = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            background = Ui.neuCard(activity, 16f)
-            setPadding(Ui.dp(12, d), Ui.dp(10, d), Ui.dp(12, d), Ui.dp(10, d))
-        }
-
-        card.addView(TextView(activity).apply {
-            text = "Fastboot 变量"
-            textSize = 14f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Ui.primaryText(activity))
-        })
-
-        varsListView = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(200, d)
-            )
-        }
-        card.addView(varsListView)
-
-        card.addView(actionBtn("刷新变量", Ui.buttonPrimary(activity)) { loadFastbootVars() })
-        return card
-    }
-
-    private fun buildVarRow(name: String, value: String): LinearLayout {
-        return LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, Ui.dp(4, d), 0, Ui.dp(4, d))
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-
-            addView(TextView(activity).apply {
-                text = name
-                textSize = 12f
-                setTypeface(typeface, Typeface.BOLD)
-                setTextColor(Ui.secondaryText(activity))
-                layoutParams = LinearLayout.LayoutParams(
-                    Ui.dp(120, d), ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-            })
-
-            addView(TextView(activity).apply {
-                text = value
-                textSize = 12f
-                setTextColor(Ui.primaryText(activity))
-                layoutParams = LinearLayout.LayoutParams(
-                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
-                )
-            })
-        }
-    }
-
-    // ==================== Tab 1: 分区管理 ====================
-
-    private fun buildPartitionTab(): LinearLayout {
-        val card = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            background = Ui.neuCard(activity, 16f)
-            setPadding(Ui.dp(12, d), Ui.dp(10, d), Ui.dp(12, d), Ui.dp(10, d))
-        }
-
-        card.addView(TextView(activity).apply {
-            text = "分区表"
-            textSize = 14f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Ui.primaryText(activity))
-        })
-
-        // 搜索框
-        partitionFilter = inputField("搜索分区...", "").apply {
-            setPadding(Ui.dp(8, d), Ui.dp(6, d), Ui.dp(8, d), Ui.dp(6, d))
-        }
-        card.addView(partitionFilter)
-        partitionFilter.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) filterPartitions()
-            false
-        }
-
-        // 分区列表
-        partitionList = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(180, d)
-            )
-        }
-        card.addView(partitionList)
-
-        card.addView(actionBtn("刷新分区表", Ui.buttonPrimary(activity)) { loadPartitions() })
-        return card
-    }
-
-    private fun buildPartitionRow(part: OtgAssistant.Partition, isSelected: Boolean): LinearLayout {
-        return LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = if (isSelected) Ui.glassButton(activity, Ui.buttonPrimary(activity))
-                        else Ui.glassButton(activity, null)
-            setPadding(Ui.dp(8, d), Ui.dp(4, d), Ui.dp(8, d), Ui.dp(4, d))
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = Ui.dp(1, d) }
-            setOnClickListener { selectPartition(part) }
-
-            addView(TextView(activity).apply {
-                text = part.name
-                textSize = 12f
-                setTypeface(typeface, Typeface.BOLD)
-                setTextColor(if (isSelected) Ui.buttonText(activity) else Ui.primaryText(activity))
-                layoutParams = LinearLayout.LayoutParams(
-                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
-                )
-            })
-
-            addView(TextView(activity).apply {
-                text = part.type
-                textSize = 10f
-                setTextColor(Ui.secondaryText(activity))
-            })
-
-            addView(TextView(activity).apply {
-                text = Env.formatSize(part.sizeBytes)
-                textSize = 10f
-                setTextColor(Ui.secondaryText(activity))
-            })
-        }
-    }
-
-    private fun selectPartition(part: OtgAssistant.Partition) {
-        selectedPartition = part
-        refreshPartitionSelection()
-        updatePartitionActions()
-    }
-
-    private fun refreshPartitionSelection() {
-        partitionList.removeAllViews()
-        val filtered = filterPartitionsList()
-        filtered.forEach { part ->
-            partitionList.addView(buildPartitionRow(part, part == selectedPartition))
-        }
-    }
-
-    private fun filterPartitions() {
-        refreshPartitionSelection()
-    }
-
-    private fun filterPartitionsList(): List<OtgAssistant.Partition> {
-        val filter = partitionFilter.text.toString().trim().lowercase()
-        return if (filter.isEmpty()) currentPartitions
-        else currentPartitions.filter { it.name.lowercase().contains(filter) }
-    }
-
-    private fun updatePartitionActions() {
-        // 在 action bar 中更新可用操作
-    }
-
-    // ==================== Tab 2: Payload ====================
-
-    private fun buildPayloadTab(): LinearLayout {
-        val card = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            background = Ui.neuCard(activity, 16f)
-            setPadding(Ui.dp(12, d), Ui.dp(10, d), Ui.dp(12, d), Ui.dp(10, d))
-        }
-
-        card.addView(TextView(activity).apply {
-            text = "Payload.bin 刷写"
-            textSize = 14f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Ui.primaryText(activity))
-        })
-
-        card.addView(hint("支持在 fastbootd 模式下刷写 Payload.bin 更新包"))
-        card.addView(actionBtn("选择 Payload 文件", Ui.buttonSuccess(activity)) { pickPayload() })
-        card.addView(actionBtn("刷写 Payload", Ui.buttonDanger(activity)) { flashPayload() })
-        return card
-    }
-
-    private fun pickPayload() {
-        pendingFileAction = { path ->
-            appendLog("已选择: $path")
-        }
-        val intent = Intent(activity, RootfsFilesActivity::class.java).apply {
-            putExtra(RootfsFilesActivity.EXTRA_PICK, true)
-            putExtra(RootfsFilesActivity.EXTRA_TITLE, "选择 Payload 文件")
-            putExtra(RootfsFilesActivity.EXTRA_EXT, ".bin")
-        }
-        try { activity.startActivity(intent) } catch (e: Exception) { appendLog("无法打开文件选择器: ${e.message}") }
-    }
-
-    private fun flashPayload() {
-        appendLog("Payload 刷写功能待实现")
-    }
-
-    // ==================== 操作按钮区 ====================
-
-    private fun buildActionBar(): LinearLayout {
-        val card = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            background = Ui.neuCard(activity, 16f)
-            setPadding(Ui.dp(12, d), Ui.dp(10, d), Ui.dp(12, d), Ui.dp(10, d))
-        }
-
-        // 第一行：重启相关
-        card.addView(row4btn(
-            actionBtn("重启系统", Ui.buttonSuccess(activity)) { rebootSystem() },
-            actionBtn("重启 Bootloader", Ui.buttonPrimary(activity)) { rebootBootloader() },
-            actionBtn("重启 Recovery", Ui.buttonWarning(activity)) { rebootRecovery() },
-            actionBtn("切换卡槽", Ui.buttonSecondary(activity)) { switchSlot() },
-        ))
-
-        // 第二行：解锁相关
-        card.addView(row2btn(
-            actionBtn("解锁 Bootloader", Ui.buttonDanger(activity)) { unlockBootloader() },
-            actionBtn("上锁 Bootloader", Ui.buttonDanger(activity)) { lockBootloader() },
-        ))
-
-        // 第三行：分区操作（默认禁用）
-        card.addView(TextView(activity).apply {
-            text = "分区操作"
-            textSize = 12f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Ui.secondaryText(activity))
-            layoutParams = LinearLayout.LayoutParams(
+    private fun rebuildTabs() {
+        // 清空并重建 tab 内容区域（由于 ScrollView 直接 addView，需要替换）
+        val root = findRoot() ?: return
+        // 移除第 2 个及以后的子 view（tab content + progress）
+        while (root.childCount > 2) root.removeViewAt(2)
+        val tabs = listOf("ADB", "Fastboot")
+        if (currentTab == 0) {
+            val c = buildAdbContent()
+            c.layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { topMargin = Ui.dp(8, d) }
-        })
-
-        val partitionBtnRow = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
+            root.addView(c)
+        } else {
+            val c = buildFbContent()
+            c.visibility = View.GONE
+            c.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = Ui.dp(8, d) }
+            root.addView(c)
         }
-        val eraseBtn = actionBtn("擦除分区", Ui.buttonDanger(activity)) { erasePartition() }
-        val flashBtn = actionBtn("刷写分区", Ui.buttonSuccess(activity)) { flashPartition() }
-        partitionBtnRow.addView(eraseBtn)
-        partitionBtnRow.addView(flashBtn)
-        card.addView(partitionBtnRow)
-
-        return card
+        root.addView(progressBar)
     }
 
-    private fun row4btn(a: View, b: View, c: View, d: View): LinearLayout {
-        val density = activity.resources.displayMetrics.density
+    private fun findRoot(): LinearLayout? {
+        // 从 scrollView 的 child 找到根 LinearLayout
+        val sv = (activity.findViewById<View>(android.R.id.content) as? ViewGroup)?.getChildAt(0) as? ScrollView
+            ?: return null
+        return sv.getChildAt(0) as? LinearLayout
+    }
+
+    // ==================== ADB 区 ====================
+
+    private fun buildAdbContent(): LinearLayout {
+        val out = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        // --- 设备列表 ---
+        out.addView(section("设备列表", "").apply {
+            adbDeviceList = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(80, d)
+                )
+            }
+            addView(adbDeviceList)
+            addView(actionBtn("刷新设备", Ui.buttonPrimary(activity)) { refreshAdbDevices() })
+        })
+
+        // --- ADB 服务控制 ---
+        out.addView(section("ADB 服务", "").apply {
+            addView(row3btn(
+                actionBtn("启用", Ui.buttonSuccess(activity)) { runAdbCmd("start-server"); appendAdbLog("已启用 ADB 服务") },
+                actionBtn("关闭", Ui.buttonDanger(activity)) { runAdbCmd("kill-server"); appendAdbLog("已关闭 ADB 服务") },
+                actionBtn("重启", Ui.buttonWarning(activity)) { runAdbCmd("kill-server"); runAdbCmd("start-server"); appendAdbLog("已重启 ADB 服务") },
+            ))
+        })
+
+        // --- 无线 ADB ---
+        out.addView(section("无线 ADB 连接", "").apply {
+            val ipInput = EditText(activity).apply {
+                hint = "请输入 IP:端口，如 192.168.1.100:5555"
+                textSize = 12f
+                setBackgroundResource(android.R.drawable.edit_text)
+                setPadding(Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt(), Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = Ui.dp(4, d).toInt() }
+                isFocusable = false
+            }
+            addView(ipInput)
+            addView(row2btn(
+                actionBtn("连接", Ui.buttonPrimary(activity)) {
+                    val ip = ipInput.text.toString().trim()
+                    if (ip.isEmpty()) { appendAdbLog("请输入 IP:端口"); return@actionBtn }
+                    runAdbCmd("connect $ip") { appendAdbLog(it) }
+                },
+                actionBtn("断开", Ui.buttonDanger(activity)) {
+                    val ip = ipInput.text.toString().trim()
+                    runAdbCmd("disconnect $ip") { appendAdbLog(it) }
+                },
+            ))
+        })
+
+        // --- 设备信息 ---
+        out.addView(section("设备信息", "").apply {
+            addView(actionBtn("查看设备信息", Ui.buttonSecondary(activity)) {
+                runAdbCmd("get-serialno") { appendAdbLog("序列号: $it") }
+                runAdbCmd("get-state") { appendAdbLog("状态: $it") }
+                runAdbCmd("shell getprop ro.product.model") { appendAdbLog("型号: $it") }
+                runAdbCmd("shell getprop ro.build.version.release") { appendAdbLog("Android 版本: $it") }
+                runAdbCmd("shell getprop ro.build.version.sdk") { appendAdbLog("SDK 版本: $it") }
+                runAdbCmd("shell getprop ro.product.device") { appendAdbLog("设备代号: $it") }
+                runAdbCmd("shell getprop ro.board.platform") { appendAdbLog("平台: $it") }
+            })
+        })
+
+        // --- 推送文件 ---
+        out.addView(section("推送文件", "").apply {
+            val localInput = EditText(activity).apply {
+                hint = "本地文件路径"
+                textSize = 12f
+                setBackgroundResource(android.R.drawable.edit_text)
+                setPadding(Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt(), Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = Ui.dp(4, d).toInt() }
+                isFocusable = false
+            }
+            val remoteInput = EditText(activity).apply {
+                hint = "目标路径（默认 /sdcard）"
+                textSize = 12f
+                setBackgroundResource(android.R.drawable.edit_text)
+                setPadding(Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt(), Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = Ui.dp(4, d).toInt() }
+                isFocusable = false
+            }
+            addView(localInput)
+            addView(remoteInput)
+            addView(actionBtn("选择本地文件", Ui.buttonSecondary(activity)) {
+                pendingAdbFileAction = { path -> localInput.setText(path) }
+                openFilePicker("请选择要推送的文件")
+            })
+            addView(actionBtn("推送到设备", Ui.buttonPrimary(activity)) {
+                val local = localInput.text.toString().trim()
+                val remote = (remoteInput.text.toString().trim()).ifEmpty { "/sdcard" }
+                if (local.isEmpty()) { appendAdbLog("请先选择本地文件"); return@actionBtn }
+                runAdbCmd("push \"$local\" \"$remote\"") { appendAdbLog(it) }
+            })
+        })
+
+        // --- 拉取文件 ---
+        out.addView(section("从设备复制文件", "").apply {
+            val remoteInput = EditText(activity).apply {
+                hint = "设备文件/目录路径（默认 /sdcard）"
+                textSize = 12f
+                setBackgroundResource(android.R.drawable.edit_text)
+                setPadding(Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt(), Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = Ui.dp(4, d).toInt() }
+                isFocusable = false
+            }
+            val localInput = EditText(activity).apply {
+                hint = "本地保存目录"
+                textSize = 12f
+                setBackgroundResource(android.R.drawable.edit_text)
+                setPadding(Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt(), Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = Ui.dp(4, d).toInt() }
+                isFocusable = false
+            }
+            addView(remoteInput)
+            addView(localInput)
+            addView(actionBtn("选择保存目录", Ui.buttonSecondary(activity)) {
+                pendingAdbFileAction = { path -> localInput.setText(path) }
+                openFilePicker("请选择保存目录", isFolder = true)
+            })
+            addView(actionBtn("从设备拉取", Ui.buttonPrimary(activity)) {
+                val remote = (remoteInput.text.toString().trim()).ifEmpty { "/sdcard" }
+                val local = localInput.text.toString().trim()
+                if (local.isEmpty()) { appendAdbLog("请先选择保存目录"); return@actionBtn }
+                runAdbCmd("pull \"$remote\" \"$local\"") { appendAdbLog(it) }
+            })
+        })
+
+        // --- 解锁屏幕密码 ---
+        out.addView(section("解锁屏幕密码", "").apply {
+            addView(actionBtn("ADB Root 解锁", Ui.buttonDanger(activity)) {
+                appendAdbLog("正在执行 root 解锁...")
+                runAdbCmd("root") { appendAdbLog(it) }
+                runAdbCmd("wait-for-device") { appendAdbLog(it) }
+                runAdbCmd("""shell rm -f /data/system/gatekeeper.password.key /data/system/gatekeeper.pattern.key /data/system/locksettings.db /data/system/gesture.key /data/system/password.key""") { appendAdbLog(it) }
+                appendAdbLog("✅ 解锁完成，请重启设备")
+            })
+        })
+
+        // --- 日志 ---
+        adbLogView = Ui.logTextView(activity).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(150, d)
+            ).apply { topMargin = Ui.dp(4, d) }
+        }
+        out.addView(adbLogView)
+
+        // 初始检测
+        refreshAdbDevices()
+        return out
+    }
+
+    // ==================== Fastboot 区 ====================
+
+    private fun buildFbContent(): LinearLayout {
+        val out = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        // --- 设备列表 ---
+        out.addView(section("设备列表", "").apply {
+            fbDeviceList = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(80, d)
+                )
+            }
+            addView(fbDeviceList)
+            addView(actionBtn("刷新设备", Ui.buttonPrimary(activity)) { refreshFbDevices() })
+        })
+
+        // --- BL 锁状态 ---
+        out.addView(section("BL 锁状态", "").apply {
+            addView(actionBtn("查看 BL 锁状态", Ui.buttonSecondary(activity)) {
+                runFbCmd("getvar unlocked") { appendFbLog("unlocked: $it") }
+                runFbCmd("oem device-info") { appendFbLog(it) }
+                runFbCmd("flashing get_unlock_ability") { appendFbLog("get_unlock_ability: $it") }
+            })
+        })
+
+        // --- 品牌解锁选项 ---
+        out.addView(section("品牌解锁选项", "").apply {
+            val brands = listOf("Lenovo", "oppo", "Google_Pixel")
+            val brandLabels = listOf("联想", "OPPO/一加/realme", "Google Pixel")
+            val brandBtns = brands.mapIndexed { i, b ->
+                actionBtn(brandLabels[i], Ui.buttonSecondary(activity)) {
+                    runFbCmd("flash unlock", b = selectedFbSerial) { appendFbLog(it) }
+                    when (b) {
+                        "Lenovo" -> runFbCmd("oem unlock-go", b = selectedFbSerial) { appendFbLog(it) }
+                        "oppo", "Google_Pixel" -> {
+                            runFbCmd("flashing unlock", b = selectedFbSerial) { appendFbLog(it) }
+                            if (b == "Google_Pixel") runFbCmd("flashing unlock_critical", b = selectedFbSerial) { appendFbLog(it) }
+                        }
+                    }
+                    appendFbLog("✅ 已发送解锁指令，按提示操作")
+                }
+            }
+            brandBtns.forEach { addView(it) }
+        })
+
+        // --- 解锁 BL（多方案） ---
+        out.addView(section("解锁 BL（多方案）", "").apply {
+            val options = listOf(
+                "fastboot oem unlock-go",
+                "fastboot oem unlock",
+                "fastboot flashing unlock",
+                "fastboot flashing unlock_critical",
+                "fastboot bbk unlock_vivo",
+            )
+            options.forEachIndexed { i, cmd ->
+                addView(actionBtn("方案${i + 1}", Ui.buttonSecondary(activity)) {
+                    val args = cmd.substringAfter("fastboot ").split(" ")
+                    runFbCmd(args[0], *args.drop(1).toTypedArray()) { appendFbLog(it) }
+                })
+            }
+        })
+
+        // --- 上锁 BL ---
+        out.addView(section("上锁 BL", "").apply {
+            addView(actionBtn("方案① flashing lock", Ui.buttonDanger(activity)) {
+                runFbCmd("flashing", "lock") { appendFbLog(it) }
+            })
+            addView(actionBtn("方案② oem lock", Ui.buttonDanger(activity)) {
+                runFbCmd("oem", "lock") { appendFbLog(it) }
+            })
+            addView(infoText("⚠️  上锁前请确保 REC 和系统都是官方的，否则变砖自负！"))
+        })
+
+        // --- A/B 卡槽 ---
+        out.addView(section("A/B 卡槽切换", "").apply {
+            addView(actionBtn("查看当前激活分区", Ui.buttonSecondary(activity)) {
+                runFbCmd("getvar", "current-slot") { appendFbLog(it) }
+            })
+            addView(row2btn(
+                actionBtn("切换至 A", Ui.buttonPrimary(activity)) {
+                    runFbCmd("--set-active=a") { appendFbLog(it) }
+                },
+                actionBtn("切换至 B", Ui.buttonPrimary(activity)) {
+                    runFbCmd("--set-active=b") { appendFbLog(it) }
+                },
+            ))
+        })
+
+        // --- 线刷单个镜像 ---
+        out.addView(section("线刷单个镜像", "").apply {
+            val partitionInput = EditText(activity).apply {
+                hint = "分区名（如 boot/system/vendor）"
+                textSize = 12f
+                setBackgroundResource(android.R.drawable.edit_text)
+                setPadding(Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt(), Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = Ui.dp(4, d).toInt() }
+                isFocusable = false
+            }
+            val imgInput = EditText(activity).apply {
+                hint = "镜像文件路径"
+                textSize = 12f
+                setBackgroundResource(android.R.drawable.edit_text)
+                setPadding(Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt(), Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = Ui.dp(4, d).toInt() }
+                isFocusable = false
+            }
+            addView(partitionInput)
+            addView(imgInput)
+            addView(actionBtn("选择镜像文件", Ui.buttonSecondary(activity)) {
+                pendingFbFileAction = { path -> imgInput.setText(path) }
+                openFilePicker("请选择 .img 镜像文件")
+            })
+            addView(actionBtn("刷入分区", Ui.buttonPrimary(activity)) {
+                val part = partitionInput.text.toString().trim()
+                val img = imgInput.text.toString().trim()
+                if (part.isEmpty() || img.isEmpty()) { appendFbLog("请填写分区名和镜像路径"); return@actionBtn }
+                runFbCmd("flash", part, img) { appendFbLog(it) }
+            })
+        })
+
+        // --- 动态获取分区刷入 ---
+        out.addView(section("动态分区刷入", "").apply {
+            addView(actionBtn("获取可用分区列表", Ui.buttonSecondary(activity)) {
+                runFbCmd("getvar", "all") { 
+                    val parts = it.lines().map { l -> l.trim() }
+                        .filter { l -> l.contains("partition-type:") }
+                        .map { l -> l.replaceBefore(":", "").trim() }
+                    appendFbLog("可用分区:\n${parts.joinToString("\n") { "  $it" }}")
+                }
+            })
+            val partInput = EditText(activity).apply {
+                hint = "输入分区名刷入"
+                textSize = 12f
+                setBackgroundResource(android.R.drawable.edit_text)
+                setPadding(Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt(), Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = Ui.dp(4, d).toInt() }
+                isFocusable = false
+            }
+            val imgInput = EditText(activity).apply {
+                hint = "镜像文件路径"
+                textSize = 12f
+                setBackgroundResource(android.R.drawable.edit_text)
+                setPadding(Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt(), Ui.dp(8, d).toInt(), Ui.dp(4, d).toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = Ui.dp(4, d).toInt() }
+                isFocusable = false
+            }
+            addView(partInput)
+            addView(imgInput)
+            addView(actionBtn("选择镜像文件", Ui.buttonSecondary(activity)) {
+                pendingFbFileAction = { path -> imgInput.setText(path) }
+                openFilePicker("请选择 .img 镜像文件")
+            })
+            addView(actionBtn("刷入", Ui.buttonPrimary(activity)) {
+                val part = partInput.text.toString().trim()
+                val img = imgInput.text.toString().trim()
+                if (part.isEmpty() || img.isEmpty()) { appendFbLog("请填写分区名和镜像路径"); return@actionBtn }
+                runFbCmd("flash", part, img) { appendFbLog(it) }
+            })
+        })
+
+        // --- 重启控制 ---
+        out.addView(section("重启控制", "").apply {
+            addView(row4btn(
+                actionBtn("系统", Ui.buttonSuccess(activity)) { runFbCmd("reboot") { appendFbLog(it) } },
+                actionBtn("Bootloader", Ui.buttonPrimary(activity)) { runFbCmd("reboot-bootloader") { appendFbLog(it) } },
+                actionBtn("Recovery", Ui.buttonWarning(activity)) { runFbCmd("reboot", "recovery") { appendFbLog(it) } },
+                actionBtn("EDL", Ui.buttonDanger(activity)) { runFbCmd("oem", "edl") { appendFbLog(it) } },
+            ))
+        })
+
+        // --- 日志 ---
+        fbLogView = Ui.logTextView(activity).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(150, d)
+            ).apply { topMargin = Ui.dp(4, d) }
+        }
+        out.addView(fbLogView)
+
+        // 初始检测
+        refreshFbDevices()
+        return out
+    }
+
+    // ==================== 工具方法 ====================
+
+    private fun section(title: String, hint: String): LinearLayout {
         return LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.VERTICAL
+            background = Ui.neuCard(activity, 12f)
+            setPadding(Ui.dp(10, d), Ui.dp(8, d), Ui.dp(10, d), Ui.dp(8, d))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = Ui.dp(4, density) }
-            addView(a, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = Ui.dp(2, density).toInt() })
-            addView(b, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = Ui.dp(2, density).toInt() })
-            addView(c, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = Ui.dp(2, density).toInt() })
-            addView(d, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            ).apply { bottomMargin = Ui.dp(6, d).toInt() }
+
+            addView(TextView(activity).apply {
+                text = title
+                textSize = 14f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(Ui.primaryText(activity))
+            })
+            if (hint.isNotEmpty()) {
+                addView(infoText(hint))
+            }
+        }
+    }
+
+    private fun actionBtn(label: String, color: Int, onClick: () -> Unit): TextView {
+        return TextView(activity).apply {
+            this.text = label
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(color)
+            gravity = Gravity.CENTER
+            background = Ui.glassButton(activity, null)
+            Ui.pressAnimation(this)
+            setPadding(Ui.dp(12, d), Ui.dp(8, d), Ui.dp(12, d), Ui.dp(8, d))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = Ui.dp(4, d).toInt() }
+            setOnClickListener { onClick() }
         }
     }
 
@@ -516,282 +587,182 @@ class OtgAssistantPage(
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = Ui.dp(4, d) }
-            addView(a, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = Ui.dp(4, d) })
+            ).apply { bottomMargin = Ui.dp(4, d).toInt() }
+            addView(a, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = Ui.dp(4, d).toInt() })
             addView(b, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
     }
 
-    // ==================== 检测与刷新 ====================
-
-    private fun detectDevices() {
-        executor.execute {
-            val fbDevices = OtgAssistant.fastbootDevices(activity)
-            activity.runOnUiThread {
-                deviceList.removeAllViews()
-                if (fbDevices.isEmpty()) {
-                    deviceList.addView(TextView(activity).apply {
-                        text = "未检测到 Fastboot 设备"
-                        textSize = 12f
-                        setTextColor(Ui.secondaryText(activity))
-                        setPadding(0, Ui.dp(4, d), 0, Ui.dp(4, d))
-                    })
-                } else {
-                    fbDevices.forEach { serial ->
-                        deviceList.addView(buildDeviceRow(serial, ""))
-                    }
-                    if (selectedSerial.isEmpty()) {
-                        selectedSerial = fbDevices[0]
-                        refreshDeviceSelection()
-                        loadFastbootVars()
-                    }
-                }
-            }
-        }
-    }
-
-    private fun loadFastbootVars() {
-        if (selectedSerial.isEmpty()) return
-        showProgress(true)
-        executor.execute {
-            val vars = OtgAssistant.fastbootGetvarAll(activity, selectedSerial)
-            isFastbootd = vars.any { (k, _) -> k == "is-logical" || k == "has-slot" }
-            vars.find { (k, _) -> k == "current-slot" }?.let { (_, v) -> currentSlot = v }
-            activity.runOnUiThread {
-                varsListView.removeAllViews()
-                if (vars.isEmpty()) {
-                    varsListView.addView(TextView(activity).apply {
-                        text = "无变量"
-                        textSize = 12f
-                        setTextColor(Ui.secondaryText(activity))
-                    })
-                } else {
-                    vars.forEach { (name, value) ->
-                        varsListView.addView(buildVarRow(name, value))
-                    }
-                }
-                refreshDeviceSelection()
-                showProgress(false)
-            }
-        }
-    }
-
-    private fun loadPartitions() {
-        if (selectedSerial.isEmpty()) return
-        showProgress(true)
-        executor.execute {
-            val partitions = OtgAssistant.fastbootPartitions(activity, selectedSerial)
-            activity.runOnUiThread {
-                currentPartitions = partitions
-                partitionList.removeAllViews()
-                if (partitions.isEmpty()) {
-                    partitionList.addView(TextView(activity).apply {
-                        text = "无分区信息"
-                        textSize = 12f
-                        setTextColor(Ui.secondaryText(activity))
-                    })
-                } else {
-                    filterPartitions()
-                }
-                showProgress(false)
-            }
-        }
-    }
-
-    private fun startAutoRefresh() {
-        val self = this
-        val refreshTask = object : Runnable {
-            override fun run() {
-                if (!running.get()) return
-                executor.execute {
-                    val fb = OtgAssistant.fastbootDevices(activity)
-                    activity.runOnUiThread {
-                        if (fb.isNotEmpty() && selectedSerial.isEmpty()) {
-                            selectedSerial = fb[0]
-                            refreshDeviceSelection()
-                            loadFastbootVars()
-                            loadPartitions()
-                        } else if (fb.isEmpty() && selectedSerial.isNotEmpty()) {
-                            selectedSerial = ""
-                            refreshDeviceSelection()
-                            varsListView.removeAllViews()
-                            partitionList.removeAllViews()
-                        }
-                    }
-                }
-                if (running.get()) executor.execute { Thread.sleep(3000); self.executor.execute { this.run() } }
-            }
-        }
-        executor.execute { refreshTask.run() }
-    }
-
-    // ==================== 操作命令 ====================
-
-    private fun rebootSystem() {
-        runFastbootCmd("reboot") {
-            selectedSerial = ""
-            refreshDeviceSelection()
-        }
-    }
-
-    private fun rebootBootloader() {
-        runFastbootCmd(if (isFastbootd) "reboot bootloader" else "reboot-bootloader")
-    }
-
-    private fun rebootRecovery() {
-        runFastbootCmd("reboot recovery") {
-            selectedSerial = ""
-            refreshDeviceSelection()
-        }
-    }
-
-    private fun switchSlot() {
-        if (currentSlot.isEmpty()) {
-            appendLog("当前设备不支持卡槽切换")
-            return
-        }
-        val newSlot = if (currentSlot == "a") "b" else "a"
-        runFastbootCmd("set_active $newSlot") {
-            currentSlot = newSlot
-            refreshDeviceSelection()
-        }
-    }
-
-    private fun unlockBootloader() {
-        AlertDialog.Builder(activity)
-            .setTitle("解锁 Bootloader")
-            .setMessage("解锁将清除全部数据，确定继续？")
-            .setPositiveButton("解锁") { _, _ ->
-                runFastbootCmd("flashing unlock")
-            }
-            .setNegativeButton("取消", null).show()
-    }
-
-    private fun lockBootloader() {
-        AlertDialog.Builder(activity)
-            .setTitle("上锁 Bootloader")
-            .setMessage("上锁将清除数据，确定继续？")
-            .setPositiveButton("上锁") { _, _ ->
-                runFastbootCmd("flashing lock")
-            }
-            .setNegativeButton("取消", null).show()
-    }
-
-    private fun erasePartition() {
-        val part = selectedPartition ?: return
-        AlertDialog.Builder(activity)
-            .setTitle("擦除分区")
-            .setMessage("确定擦除 ${part.name}？")
-            .setPositiveButton("擦除") { _, _ ->
-                runFastbootCmd("erase ${part.name}")
-            }
-            .setNegativeButton("取消", null).show()
-    }
-
-    private fun flashPartition() {
-        val part = selectedPartition ?: return
-        pendingFileAction = { path ->
-            runFastbootCmd("flash ${part.name} \"$path\"")
-        }
-        val intent = Intent(activity, RootfsFilesActivity::class.java).apply {
-            putExtra(RootfsFilesActivity.EXTRA_PICK, true)
-            putExtra(RootfsFilesActivity.EXTRA_TITLE, "选择镜像文件")
-            putExtra(RootfsFilesActivity.EXTRA_EXT_ALL, true)
-        }
-        try { activity.startActivity(intent) } catch (e: Exception) { appendLog("无法打开文件选择器: ${e.message}") }
-    }
-
-    private fun runFastbootCmd(cmd: String, onComplete: (() -> Unit)? = null) {
-        showProgress(true)
-        executor.execute {
-            val result = OtgAssistant.run(activity, "fastboot", listOf(cmd), timeoutMs = 120000)
-            activity.runOnUiThread {
-                showProgress(false)
-                val output = (result.stdout + result.stderr).trim()
-                appendLog("▶ $cmd")
-                appendLog(output.ifBlank { "（退出码 ${result.code}）" })
-                appendLog(if (result.success) "✓ 完成" else "✗ 失败(${result.code})")
-                onComplete?.invoke()
-                if (result.success) {
-                    loadFastbootVars()
-                    loadPartitions()
-                }
-            }
-        }
-    }
-
-    // ==================== UI 辅助 ====================
-
-    private fun selectTab(idx: Int) {
-        tabContents.forEachIndexed { i, v -> v.visibility = if (i == idx) View.VISIBLE else View.GONE }
-        tabBtns.forEachIndexed { i, btn ->
-            btn.setTextColor(if (i == idx) Ui.buttonPrimary(activity) else Ui.secondaryText(activity))
-        }
-        if (idx == 1 && currentPartitions.isEmpty()) loadPartitions()
-    }
-
-    private fun showProgress(show: Boolean) {
-        progressBar.visibility = if (show) View.VISIBLE else View.GONE
-    }
-
-    private fun appendLog(line: String) {
-        if (::logView.isInitialized) logView.append("$line\n")
-    }
-
-    private fun backBtn(onClick: () -> Unit) = TextView(activity).apply {
-        text = "‹ 返回"; textSize = 13f; setTextColor(Ui.buttonText(activity))
-        background = Ui.glassButton(activity, Ui.buttonPrimary(activity))
-        Ui.pressAnimation(this)
-        setPadding(Ui.dp(12, d), Ui.dp(6, d), Ui.dp(12, d), Ui.dp(6, d))
-        setOnClickListener { onClick() }
-    }
-
-    private fun section(title: String, subtitle: String): LinearLayout {
-        val card = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(Ui.dp(12, d), Ui.dp(10, d), Ui.dp(12, d), Ui.dp(10, d))
-            background = Ui.neuCard(activity, 16f)
+    private fun row3btn(a: View, b: View, c: View): LinearLayout {
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = Ui.dp(8, d) }
+            ).apply { bottomMargin = Ui.dp(4, d).toInt() }
+            addView(a, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = Ui.dp(2, d).toInt() })
+            addView(b, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = Ui.dp(2, d).toInt() })
+            addView(c, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
-        card.addView(TextView(activity).apply {
-            text = title; textSize = 14f; setTypeface(typeface, Typeface.BOLD)
+    }
+
+    private fun row4btn(a: View, b: View, c: View, d: View): LinearLayout {
+        val density = activity.resources.displayMetrics.density
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = Ui.dp(4, density).toInt() }
+            addView(a, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = Ui.dp(2, density).toInt() })
+            addView(b, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = Ui.dp(2, density).toInt() })
+            addView(c, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = Ui.dp(2, density).toInt() })
+            addView(d, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+    }
+
+    private fun infoText(txt: String): TextView {
+        return TextView(activity).apply {
+            this.text = txt
+            textSize = 11f
+            setTextColor(Ui.secondaryText(activity))
+            setPadding(0, Ui.dp(2, d).toInt(), 0, Ui.dp(4, d).toInt())
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+    }
+
+    // ==================== ADB 操作 ====================
+
+    private fun refreshAdbDevices() {
+        executor.execute {
+            val devices = OtgAssistant.adbDevices(activity)
+            activity.runOnUiThread {
+                adbDeviceList.removeAllViews()
+                if (devices.isEmpty()) {
+                    adbDeviceList.addView(infoText("未检测到 ADB 设备"))
+                } else {
+                    devices.forEach { serial ->
+                        adbDeviceList.addView(adbDeviceRow(serial))
+                    }
+                }
+            }
+        }
+    }
+
+    private fun adbDeviceRow(serial: String): TextView {
+        return TextView(activity).apply {
+            text = serial
+            textSize = 12f
+            setTypeface(typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
-        })
-        if (subtitle.isNotEmpty()) card.addView(TextView(activity).apply {
-            text = subtitle; textSize = 10f; setTextColor(Ui.secondaryText(activity))
-            setPadding(0, Ui.dp(1, d), 0, Ui.dp(6, d))
-        })
-        return card
-    }
-
-    private fun hint(text: String) = TextView(activity).apply {
-        this.text = text; textSize = 11f; setTextColor(Ui.secondaryText(activity))
-        setPadding(0, Ui.dp(2, d), 0, Ui.dp(4, d))
-    }
-
-    private fun inputField(hint: String, initial: String): EditText = EditText(activity).apply {
-        this.hint = hint; setText(initial)
-        textSize = 13f; setTextColor(Ui.primaryText(activity))
-        setHintTextColor(Ui.secondaryText(activity))
-        background = Ui.neuInset(activity, 10f)
-        setPadding(Ui.dp(10, d), Ui.dp(8, d), Ui.dp(10, d), Ui.dp(8, d))
-        layoutParams = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = Ui.dp(4, d) }
-    }
-
-    private fun actionBtn(label: String, accent: Int, onClick: () -> Unit): TextView =
-        TextView(activity).apply {
-            text = label; textSize = 13f; gravity = Gravity.CENTER
-            setTextColor(Ui.buttonText(activity))
-            background = Ui.glassButton(activity, accent)
+            background = Ui.glassButton(activity, Ui.buttonSecondary(activity))
             Ui.pressAnimation(this)
-            setPadding(Ui.dp(10, d), Ui.dp(8, d), Ui.dp(10, d), Ui.dp(8, d))
-            setOnClickListener { onClick() }
+            setPadding(Ui.dp(8, d), Ui.dp(6, d), Ui.dp(8, d), Ui.dp(6, d))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = Ui.dp(4, d) }
+            ).apply { bottomMargin = Ui.dp(2, d).toInt() }
+            setOnClickListener {
+                selectedAdbSerial = serial
+                appendAdbLog("已选择设备: $serial")
+            }
         }
+    }
+
+    private fun runAdbCmd(vararg args: String, onResult: ((String) -> Unit)? = null) {
+        executor.execute {
+            val result = OtgAssistant.run(activity, "adb", args.toList(), timeoutMs = 60000)
+            val output = buildOutput(result)
+            activity.runOnUiThread {
+                onResult?.invoke(output)
+            }
+        }
+    }
+
+    private fun appendAdbLog(msg: String) {
+        adbLogView.append("$msg\n")
+        adbLogView.post { (adbLogView.parent as? ScrollView)?.fullScroll(View.FOCUS_DOWN) }
+    }
+
+    // ==================== Fastboot 操作 ====================
+
+    private fun refreshFbDevices() {
+        executor.execute {
+            val devices = OtgAssistant.fastbootDevices(activity)
+            activity.runOnUiThread {
+                fbDeviceList.removeAllViews()
+                if (devices.isEmpty()) {
+                    fbDeviceList.addView(infoText("未检测到 Fastboot 设备"))
+                } else {
+                    devices.forEach { serial ->
+                        fbDeviceList.addView(fbDeviceRow(serial))
+                    }
+                }
+            }
+        }
+    }
+
+    private fun fbDeviceRow(serial: String): TextView {
+        return TextView(activity).apply {
+            text = serial
+            textSize = 12f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Ui.primaryText(activity))
+            background = Ui.glassButton(activity, Ui.buttonSecondary(activity))
+            Ui.pressAnimation(this)
+            setPadding(Ui.dp(8, d), Ui.dp(6, d), Ui.dp(8, d), Ui.dp(6, d))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = Ui.dp(2, d).toInt() }
+            setOnClickListener {
+                selectedFbSerial = serial
+                appendFbLog("已选择设备: $serial")
+            }
+        }
+    }
+
+    private fun runFbCmd(vararg args: String, b: String = selectedFbSerial, onResult: ((String) -> Unit)? = null) {
+        executor.execute {
+            val serialized = if (b.isNotBlank()) listOf("-s", b) else emptyList()
+            val result = OtgAssistant.run(activity, "fastboot", serialized + args.toList(), timeoutMs = 120000)
+            val output = buildOutput(result)
+            activity.runOnUiThread {
+                onResult?.invoke(output)
+            }
+        }
+    }
+
+    private fun appendFbLog(msg: String) {
+        fbLogView.append("$msg\n")
+        fbLogView.post { (fbLogView.parent as? ScrollView)?.fullScroll(View.FOCUS_DOWN) }
+    }
+
+    // ==================== 文件选择 ====================
+
+    private fun openFilePicker(title: String, isFolder: Boolean = false) {
+        val intent = android.content.Intent(activity, RootfsFilesActivity::class.java).apply {
+            putExtra(RootfsFilesActivity.EXTRA_PICK, true)
+            putExtra(RootfsFilesActivity.EXTRA_TITLE, title)
+            putExtra(RootfsFilesActivity.EXTRA_EXT_ALL, isFolder)
+        }
+        try { activity.startActivity(intent) } 
+        catch (e: Exception) { appendAdbLog("无法打开文件选择器: ${e.message}") }
+    }
+
+    fun onFilePicked(path: String) {
+        pendingAdbFileAction?.invoke(path)
+        pendingFbFileAction?.invoke(path)
+        pendingAdbFileAction = null
+        pendingFbFileAction = null
+    }
+
+    // ==================== 工具 ====================
+
+    private fun buildOutput(result: ShellResult): String {
+        return buildString {
+            if (result.stdout.isNotEmpty()) appendLine(result.stdout)
+            if (result.stderr.isNotEmpty()) appendLine("[错误] ${result.stderr}")
+            if (result.code != 0 && result.code != 127) appendLine("[退出码: ${result.code}]")
+            if (result.code == 127) appendLine("[命令未找到]")
+        }.trimEnd()
+    }
 }
