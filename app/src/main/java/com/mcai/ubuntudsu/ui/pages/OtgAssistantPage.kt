@@ -26,6 +26,7 @@ import java.util.concurrent.Executors
  */
 class OtgAssistantPage(
     private val activity: Activity,
+    private val pickFileLauncher: androidx.activity.result.ActivityResultLauncher<android.content.Intent>,
     private val onDismiss: (() -> Unit)? = null,
 ) {
     private val density: Float get() = activity.resources.displayMetrics.density
@@ -38,6 +39,7 @@ class OtgAssistantPage(
     private lateinit var fbLogView: TextView
     private lateinit var shellLogView: TextView
     private lateinit var progressBar: ProgressBar
+    private lateinit var operationStatus: TextView
     
     private var currentTab = 0
     private lateinit var tabLayout: LinearLayout
@@ -70,6 +72,16 @@ class OtgAssistantPage(
             visibility = View.GONE
         }
         root.addView(progressBar)
+
+        // 操作状态提示
+        operationStatus = TextView(activity).apply {
+            textSize = 11f
+            setTextColor(Ui.secondaryText(activity))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = Ui.dp(2, density) }
+        }
+        root.addView(operationStatus)
         
         contentContainer.addView(buildAdbContent())
         val fbContent = buildFastbootContent()
@@ -200,19 +212,13 @@ class OtgAssistantPage(
             addView(row2btn(
                 actionBtn("选择 APK", Ui.buttonSecondary(activity)) {
                     pendingFileAction = { path -> apkDisplay.text = path }
-                    val intent = android.content.Intent(activity, RootfsFilesActivity::class.java).apply {
-                        putExtra(RootfsFilesActivity.EXTRA_PICK, true)
-                        putExtra(RootfsFilesActivity.EXTRA_TITLE, "选择 APK 文件")
-                        putExtra(RootfsFilesActivity.EXTRA_EXT, ".apk")
-                    }
-                    try { activity.startActivity(intent) }
-                    catch (e: Exception) { showAdbToast("无法打开文件选择器: ${e.message}") }
+                    openFilePicker("选择 APK 文件", ".apk")
                 },
                 actionBtn("安装", Ui.buttonPrimary(activity)) {
                     val apkPath = apkDisplay.text.toString().trim()
                     if (selectedAdbSerial.isEmpty()) { showAdbToast("请先选择设备"); return@actionBtn }
                     if (apkPath.isEmpty() || apkPath == "未选择 APK 文件") { showAdbToast("请选择 APK 文件"); return@actionBtn }
-                    showProgress(true)
+                    showProgress(true, "正在安装 APK...")
                     executor.execute {
                         val result = OtgAssistant.adbInstall(activity, selectedAdbSerial, apkPath)
                         showProgress(false)
@@ -239,22 +245,16 @@ class OtgAssistantPage(
         val pushRemoteInput = mutableEditText("远程路径", "/sdcard/")
         pushCard.addView(pushRemoteInput)
         pushCard.addView(row2btn(
-            actionBtn("选择文件", Ui.buttonSecondary(activity)) {
-                pendingFileAction = { path -> pushDisplay.text = path }
-                val intent = android.content.Intent(activity, RootfsFilesActivity::class.java).apply {
-                    putExtra(RootfsFilesActivity.EXTRA_PICK, true)
-                    putExtra(RootfsFilesActivity.EXTRA_TITLE, "选择文件")
-                    putExtra(RootfsFilesActivity.EXTRA_EXT_ALL, true)
-                }
-                try { activity.startActivity(intent) }
-                catch (e: Exception) { showAdbToast("无法打开文件选择器: ${e.message}") }
-            },
+                actionBtn("选择文件", Ui.buttonSecondary(activity)) {
+                    pendingFileAction = { path -> pushDisplay.text = path }
+                    openFilePicker("选择文件", isFolder = true)
+                },
             actionBtn("推送", Ui.buttonPrimary(activity)) {
                 val localPath = pushDisplay.text.toString().trim()
                 val remotePath = pushRemoteInput.text.toString().trim()
                 if (selectedAdbSerial.isEmpty()) { showAdbToast("请先选择设备"); return@actionBtn }
                 if (localPath.isEmpty() || localPath == "未选择文件") { showAdbToast("请选择文件"); return@actionBtn }
-                showProgress(true)
+                showProgress(true, "正在推送文件...")
                 executor.execute {
                     val result = OtgAssistant.adbPush(activity, selectedAdbSerial, localPath, remotePath)
                     showProgress(false)
@@ -501,7 +501,7 @@ class OtgAssistantPage(
                         showFbToast("请选择分区和镜像文件")
                         return@actionBtn
                     }
-                    showProgress(true)
+                    showProgress(true, "正在刷入分区 $partition...")
                     executor.execute {
                         val result = OtgAssistant.fastbootFlash(activity, selectedFbSerial, partition, imgPath)
                         showProgress(false)
@@ -560,7 +560,7 @@ class OtgAssistantPage(
     private fun executeUnlock(commands: List<List<String>>, warning: String = "警告: 此操作将解锁Bootloader，清除所有数据") {
         if (selectedFbSerial.isEmpty()) { showFbToast("请先选择设备"); return }
         showFbLog(warning)
-        showProgress(true)
+        showProgress(true, "正在执行 BL 解锁...")
         executor.execute {
             val result = OtgAssistant.fastbootUnlockCmd(activity, selectedFbSerial, commands)
             showProgress(false)
@@ -809,7 +809,7 @@ class OtgAssistantPage(
 
     private fun runQuickCmd(cmd: String, desc: String) {
         if (selectedAdbSerial.isEmpty()) { showShellToast("请先选择设备"); return }
-        showProgress(true)
+        showProgress(true, "正在执行命令...")
         executor.execute {
             val result = OtgAssistant.adbShell(activity, selectedAdbSerial, cmd)
             showProgress(false)
@@ -828,31 +828,30 @@ class OtgAssistantPage(
 
     // ==================== 通用方法 ====================
 
-    private fun showProgress(show: Boolean) {
+    private fun showProgress(show: Boolean, status: String = "") {
         activity.runOnUiThread {
             progressBar.visibility = if (show) View.VISIBLE else View.GONE
+            operationStatus.text = if (show) status else ""
         }
     }
 
-    private fun openFilePicker(title: String, isFolder: Boolean = false) {
+    private fun openFilePicker(title: String, ext: String = "", isFolder: Boolean = false) {
         val intent = android.content.Intent(activity, RootfsFilesActivity::class.java).apply {
             putExtra(RootfsFilesActivity.EXTRA_PICK, true)
             putExtra(RootfsFilesActivity.EXTRA_TITLE, title)
-            putExtra(RootfsFilesActivity.EXTRA_EXT_ALL, isFolder)
+            if (isFolder) {
+                putExtra(RootfsFilesActivity.EXTRA_EXT_ALL, true)
+            } else if (ext.isNotEmpty()) {
+                putExtra(RootfsFilesActivity.EXTRA_EXT, ext)
+            }
         }
-        try { activity.startActivity(intent) }
+        try { pickFileLauncher.launch(intent) }
         catch (e: Exception) { showAdbToast("无法打开文件选择器: ${e.message}") }
     }
 
     private fun openFilePickerForImg(display: TextView) {
         pendingFileAction = { path -> display.text = path }
-        val intent = android.content.Intent(activity, RootfsFilesActivity::class.java).apply {
-            putExtra(RootfsFilesActivity.EXTRA_PICK, true)
-            putExtra(RootfsFilesActivity.EXTRA_TITLE, "选择 .img 镜像")
-            putExtra(RootfsFilesActivity.EXTRA_EXT, ".img")
-        }
-        try { activity.startActivity(intent) }
-        catch (e: Exception) { showFbToast("无法打开文件选择器: ${e.message}") }
+        openFilePicker("选择 .img 镜像", ".img")
     }
 
     fun onFilePicked(path: String) {

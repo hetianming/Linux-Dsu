@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.mcai.ubuntudsu.core.ToolInstaller
@@ -14,6 +15,15 @@ import com.mcai.ubuntudsu.ui.pages.OtgAssistantPage
 class OtgAssistantActivity : AppCompatActivity() {
 
     private lateinit var page: OtgAssistantPage
+
+    private val pickFileLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val path = result.data?.getStringExtra(RootfsFilesActivity.RESULT_FILE_PATH)
+            if (!path.isNullOrBlank()) page.onFilePicked(path)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,7 +40,7 @@ class OtgAssistantActivity : AppCompatActivity() {
             return
         }
 
-        page = OtgAssistantPage(this) { finish() }
+        page = OtgAssistantPage(this, pickFileLauncher) { finish() }
         val content = page.build()
 
         val root = FrameLayout(this).apply {
@@ -49,14 +59,6 @@ class OtgAssistantActivity : AppCompatActivity() {
             v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
             androidx.core.view.ViewCompat.requestApplyInsets(content)
             insets
-        }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (resultCode == RESULT_OK) {
-            val path = data?.getStringExtra(RootfsFilesActivity.RESULT_FILE_PATH)
-            if (!path.isNullOrBlank()) page.onFilePicked(path)
         }
     }
 
