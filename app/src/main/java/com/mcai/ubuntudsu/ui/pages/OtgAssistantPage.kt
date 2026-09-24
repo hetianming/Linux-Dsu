@@ -11,6 +11,7 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
+import android.app.AlertDialog
 import com.mcai.ubuntudsu.RootfsFilesActivity
 import com.mcai.ubuntudsu.core.OtgAssistant
 import com.mcai.ubuntudsu.ui.Ui
@@ -731,7 +732,26 @@ class OtgAssistantPage(
     }
 
     private fun showAdbLog(msg: String) {
-        adbLogView.append("$msg\n")
+        val fullLog = if (::adbLogView.isInitialized) adbLogView.text.toString() else ""
+        val newLog = "$fullLog$msg\n"
+        if (::adbLogView.isInitialized) adbLogView.text = newLog
+        showLogDialog("ADB 日志", newLog)
+    }
+
+    private fun showLogDialog(title: String, logContent: String) {
+        val dialog = android.app.AlertDialog.Builder(activity)
+            .setTitle(title)
+            .setMessage(logContent)
+            .setPositiveButton("复制") { _, _ ->
+                val clip = android.content.ClipData.newPlainText(title, logContent)
+                activity.getSystemService(android.content.ClipboardManager::class.java).let {
+                    it?.setPrimaryClip(clip)
+                }
+            }
+            .setNegativeButton("关闭", null)
+            .create()
+        dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        dialog.show()
     }
 
     private fun showAdbToast(msg: String) {
@@ -811,7 +831,10 @@ class OtgAssistantPage(
     }
 
     private fun showFbLog(msg: String) {
-        fbLogView.append("$msg\n")
+        val fullLog = if (::fbLogView.isInitialized) fbLogView.text.toString() else ""
+        val newLog = "$fullLog$msg\n"
+        if (::fbLogView.isInitialized) fbLogView.text = newLog
+        showLogDialog("Fastboot 日志", newLog)
     }
 
     private fun showFbToast(msg: String) {
@@ -831,7 +854,10 @@ class OtgAssistantPage(
     }
 
     private fun showShellLog(msg: String) {
-        shellLogView.append("$msg\n")
+        val fullLog = if (::shellLogView.isInitialized) shellLogView.text.toString() else ""
+        val newLog = "$fullLog$msg\n"
+        if (::shellLogView.isInitialized) shellLogView.text = newLog
+        showLogDialog("Shell 日志", newLog)
         shellLogView.post { shellLogView.parent?.requestLayout() }
     }
 
