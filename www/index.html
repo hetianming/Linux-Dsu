@@ -10,6 +10,11 @@
         .container { background: rgba(255,255,255,0.05); backdrop-filter: blur(20px); border-radius: 24px; padding: 40px; max-width: 480px; width: 100%; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
         h1 { color: #fff; font-size: 28px; margin-bottom: 8px; text-align: center; }
         .version { color: #7ec8e3; font-size: 14px; text-align: center; margin-bottom: 24px; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+        .tab { flex: 1; padding: 12px; border-radius: 12px; text-align: center; font-size: 13px; font-weight: 600; }
+        .tab-adb { background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; }
+        .tab-fb { background: linear-gradient(135deg, #8b5cf6, #6d28d9); color: #fff; }
+        .tab-shell { background: linear-gradient(135deg, #10b981, #059669); color: #fff; }
         .features { background: rgba(0,0,0,0.2); border-radius: 16px; padding: 20px; margin-bottom: 24px; }
         .features h3 { color: #7ec8e3; font-size: 14px; margin-bottom: 12px; }
         .features ul { list-style: none; }
@@ -21,7 +26,7 @@
         .download-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
         .btn-release { background: linear-gradient(135deg, #4ade80, #22c55e); color: #fff; }
         .btn-debug { background: linear-gradient(135deg, #60a5fa, #3b82f6); color: #fff; }
-        .btn-info { font-size: 12px; opacity: 0.8; }
+        .btn-info { font-size: 12px; opacity: 0.8; margin-top: 4px; }
         .footer { color: #6b7280; font-size: 12px; text-align: center; margin-top: 24px; }
     </style>
 </head>
@@ -30,15 +35,18 @@
         <h1>OTG 刷机助手</h1>
         <p class="version">版本 v1.5.1 | 全能版</p>
         
+        <div class="tabs">
+            <div class="tab tab-adb">ADB 调试</div>
+            <div class="tab tab-fb">Fastboot 刷机</div>
+            <div class="tab tab-shell">Shell 终端</div>
+        </div>
+        
         <div class="features">
-            <h3>新功能</h3>
+            <h3>三大功能模块</h3>
             <ul>
-                <li>ADB 设备管理、文件推送/拉取、应用安装</li>
-                <li>Fastboot 分区刷入、BL 解锁/上锁</li>
-                <li>Shell 命令执行、Root 权限切换</li>
-                <li>无线 ADB 连接支持</li>
-                <li>A/B 卡槽管理</li>
-                <li>多品牌解锁方案（Xiaomi/Pixel/OPPO 等）</li>
+                <li><strong>ADB 调试</strong>: 设备信息、应用安装、文件传输、重启控制</li>
+                <li><strong>Fastboot 刷机</strong>: 分区刷入、BL 解锁/上锁、擦除分区</li>
+                <li><strong>Shell 终端</strong>: 执行任意命令、查看进程、Root 切换</li>
             </ul>
         </div>
         
