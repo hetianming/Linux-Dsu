@@ -45,17 +45,19 @@ class OtgAssistantPage(
     private lateinit var tabLayout: LinearLayout
     private lateinit var contentContainer: LinearLayout
     
-    private var pendingFileAction: ((String) -> Unit)? = null
+    private var pendingApkDisplay: TextView? = null
+    private var pendingPushDisplay: TextView? = null
+    private var pendingImgDisplay: TextView? = null
 
     fun build(): View {
         val root = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
         }
-        
+
         root.addView(buildTitleBar())
         tabLayout = buildTabBar()
         root.addView(tabLayout)
-        
+
         contentContainer = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
@@ -64,7 +66,7 @@ class OtgAssistantPage(
             ).apply { weight = 1f }
         }
         root.addView(contentContainer)
-        
+
         progressBar = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(3, density)
@@ -82,7 +84,7 @@ class OtgAssistantPage(
             ).apply { topMargin = Ui.dp(2, density) }
         }
         root.addView(operationStatus)
-        
+
         contentContainer.addView(buildAdbContent())
         val fbContent = buildFastbootContent()
         fbContent.visibility = View.GONE
@@ -90,8 +92,17 @@ class OtgAssistantPage(
         val shellContent = buildShellContent()
         shellContent.visibility = View.GONE
         contentContainer.addView(shellContent)
-        
+
         return root
+    }
+
+    fun onFilePicked(path: String) {
+        pendingApkDisplay?.text = path
+        pendingPushDisplay?.text = path
+        pendingImgDisplay?.text = path
+        pendingApkDisplay = null
+        pendingPushDisplay = null
+        pendingImgDisplay = null
     }
 
     private fun buildTitleBar(): LinearLayout {
@@ -201,17 +212,16 @@ class OtgAssistantPage(
                 text = "未选择 APK 文件"
                 textSize = 12f
                 setTextColor(Ui.secondaryText(activity))
-                setBackgroundResource(android.R.drawable.edit_text)
-                setPadding(Ui.dp(6, density).toInt(), Ui.dp(3, density).toInt(), Ui.dp(6, density).toInt(), Ui.dp(3, density).toInt())
+                setPadding(Ui.dp(8, density).toInt(), Ui.dp(6, density).toInt(), Ui.dp(8, density).toInt(), Ui.dp(6, density).toInt())
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply { bottomMargin = Ui.dp(3, density).toInt() }
-                tag = "apkDisplay"
+                background = Ui.glassButton(activity, Ui.border(activity))
             }
             addView(apkDisplay)
             addView(row2btn(
                 actionBtn("选择 APK", Ui.buttonSecondary(activity)) {
-                    pendingFileAction = { path -> apkDisplay.text = path }
+                    pendingApkDisplay = apkDisplay
                     openFilePicker("选择 APK 文件", ".apk")
                 },
                 actionBtn("安装", Ui.buttonPrimary(activity)) {
@@ -235,18 +245,18 @@ class OtgAssistantPage(
             text = "未选择文件"
             textSize = 12f
             setTextColor(Ui.secondaryText(activity))
-            setBackgroundResource(android.R.drawable.edit_text)
-            setPadding(Ui.dp(6, density).toInt(), Ui.dp(3, density).toInt(), Ui.dp(6, density).toInt(), Ui.dp(3, density).toInt())
+            setPadding(Ui.dp(8, density).toInt(), Ui.dp(6, density).toInt(), Ui.dp(8, density).toInt(), Ui.dp(6, density).toInt())
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = Ui.dp(3, density).toInt() }
+            background = Ui.glassButton(activity, Ui.border(activity))
         }
         pushCard.addView(pushDisplay)
         val pushRemoteInput = mutableEditText("远程路径", "/sdcard/")
         pushCard.addView(pushRemoteInput)
         pushCard.addView(row2btn(
                 actionBtn("选择文件", Ui.buttonSecondary(activity)) {
-                    pendingFileAction = { path -> pushDisplay.text = path }
+                    pendingPushDisplay = pushDisplay
                     openFilePicker("选择文件", isFolder = true)
                 },
             actionBtn("推送", Ui.buttonPrimary(activity)) {
@@ -456,7 +466,6 @@ class OtgAssistantPage(
             addView(input)
             addView(row2btn(
                 actionBtn("选择文件", Ui.buttonSecondary(activity)) {
-                    pendingFileAction = { input.setText(it) }
                     openFilePicker("选择文件")
                 },
                 actionBtn("执行", Ui.buttonPrimary(activity)) {
@@ -480,12 +489,11 @@ class OtgAssistantPage(
                 text = "未选择镜像文件"
                 textSize = 12f
                 setTextColor(Ui.secondaryText(activity))
-                setBackgroundResource(android.R.drawable.edit_text)
-                setPadding(Ui.dp(6, density).toInt(), Ui.dp(3, density).toInt(), Ui.dp(6, density).toInt(), Ui.dp(3, density).toInt())
+                setPadding(Ui.dp(8, density).toInt(), Ui.dp(6, density).toInt(), Ui.dp(8, density).toInt(), Ui.dp(6, density).toInt())
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply { bottomMargin = Ui.dp(3, density).toInt() }
-                tag = "imgDisplay"
+                background = Ui.glassButton(activity, Ui.border(activity))
             }
             addView(imgDisplay)
 
@@ -850,13 +858,8 @@ class OtgAssistantPage(
     }
 
     private fun openFilePickerForImg(display: TextView) {
-        pendingFileAction = { path -> display.text = path }
+        pendingImgDisplay = display
         openFilePicker("选择 .img 镜像", ".img")
-    }
-
-    fun onFilePicked(path: String) {
-        pendingFileAction?.invoke(path)
-        pendingFileAction = null
     }
 
     fun onDestroy() {
