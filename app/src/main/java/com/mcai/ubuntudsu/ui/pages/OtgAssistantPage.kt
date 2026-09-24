@@ -36,9 +36,6 @@ class OtgAssistantPage(
     private var selectedAdbSerial: String = ""
     private var selectedFbSerial: String = ""
     
-    private lateinit var adbLogView: TextView
-    private lateinit var fbLogView: TextView
-    private lateinit var shellLogView: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var operationStatus: TextView
     
@@ -285,15 +282,6 @@ class OtgAssistantPage(
             ))
         })
 
-        // 日志区域
-        adbLogView = Ui.logTextView(activity).apply {
-            background = Ui.glassButton(activity)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(100, density)
-            ).apply { topMargin = Ui.dp(4, density) }
-        }
-        out.addView(adbLogView)
-
         refreshAdbDevices()
         return out
     }
@@ -372,15 +360,6 @@ class OtgAssistantPage(
             ))
         })
 
-        // 日志区域
-        fbLogView = Ui.logTextView(activity).apply {
-            background = Ui.glassButton(activity)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(100, density)
-            ).apply { topMargin = Ui.dp(4, density) }
-        }
-        out.addView(fbLogView)
-
         refreshFbDevices()
         return out
     }
@@ -421,7 +400,7 @@ class OtgAssistantPage(
                         activity.runOnUiThread { showShellLog(OtgAssistant.buildOutput(result)) }
                     }
                 },
-                actionBtn("清空", Ui.buttonSecondary(activity)) { shellLogView.text = "" }
+                actionBtn("清空", Ui.buttonSecondary(activity)) { /* 日志在对话框中显示 */ }
             ))
         })
 
@@ -438,15 +417,6 @@ class OtgAssistantPage(
                 actionBtn("日志", Ui.buttonSecondary(activity)) { runQuickCmd("logcat -d", "当前日志") },
             ))
         })
-
-        // 终端输出
-        shellLogView = Ui.logTextView(activity).apply {
-            background = Ui.glassButton(activity)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { weight = 1f; topMargin = Ui.dp(4, density) }
-        }
-        out.addView(shellLogView)
 
         return out
     }
@@ -732,10 +702,7 @@ class OtgAssistantPage(
     }
 
     private fun showAdbLog(msg: String) {
-        val fullLog = if (::adbLogView.isInitialized) adbLogView.text.toString() else ""
-        val newLog = "$fullLog$msg\n"
-        if (::adbLogView.isInitialized) adbLogView.text = newLog
-        showLogDialog("ADB 日志", newLog)
+        showLogDialog("ADB 日志", msg)
     }
 
     private fun showLogDialog(title: String, logContent: String) {
@@ -831,10 +798,7 @@ class OtgAssistantPage(
     }
 
     private fun showFbLog(msg: String) {
-        val fullLog = if (::fbLogView.isInitialized) fbLogView.text.toString() else ""
-        val newLog = "$fullLog$msg\n"
-        if (::fbLogView.isInitialized) fbLogView.text = newLog
-        showLogDialog("Fastboot 日志", newLog)
+        showLogDialog("Fastboot 日志", msg)
     }
 
     private fun showFbToast(msg: String) {
@@ -854,11 +818,7 @@ class OtgAssistantPage(
     }
 
     private fun showShellLog(msg: String) {
-        val fullLog = if (::shellLogView.isInitialized) shellLogView.text.toString() else ""
-        val newLog = "$fullLog$msg\n"
-        if (::shellLogView.isInitialized) shellLogView.text = newLog
-        showLogDialog("Shell 日志", newLog)
-        shellLogView.post { shellLogView.parent?.requestLayout() }
+        showLogDialog("Shell 日志", msg)
     }
 
     private fun showShellToast(msg: String) {
