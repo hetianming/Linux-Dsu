@@ -288,7 +288,7 @@ class OtgAssistantPage(
         adbLogView = Ui.logTextView(activity).apply {
             background = Ui.glassButton(activity)
             layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(60, density)
+                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(100, density)
             ).apply { topMargin = Ui.dp(4, density) }
         }
         out.addView(adbLogView)
@@ -375,7 +375,7 @@ class OtgAssistantPage(
         fbLogView = Ui.logTextView(activity).apply {
             background = Ui.glassButton(activity)
             layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(60, density)
+                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(100, density)
             ).apply { topMargin = Ui.dp(4, density) }
         }
         out.addView(fbLogView)
