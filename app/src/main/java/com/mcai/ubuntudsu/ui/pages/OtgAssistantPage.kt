@@ -286,6 +286,7 @@ class OtgAssistantPage(
 
         // 日志区域
         adbLogView = Ui.logTextView(activity).apply {
+            background = Ui.glassButton(activity)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(60, density)
             ).apply { topMargin = Ui.dp(4, density) }
@@ -372,6 +373,7 @@ class OtgAssistantPage(
 
         // 日志区域
         fbLogView = Ui.logTextView(activity).apply {
+            background = Ui.glassButton(activity)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(60, density)
             ).apply { topMargin = Ui.dp(4, density) }
@@ -438,6 +440,7 @@ class OtgAssistantPage(
 
         // 终端输出
         shellLogView = Ui.logTextView(activity).apply {
+            background = Ui.glassButton(activity)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { weight = 1f; topMargin = Ui.dp(4, density) }
@@ -616,7 +619,7 @@ class OtgAssistantPage(
             this.hint = hint
             this.setText(default)
             textSize = 12f
-            setBackgroundResource(android.R.drawable.edit_text)
+            background = Ui.glassButton(activity)
             setPadding(Ui.dp(6, density).toInt(), Ui.dp(3, density).toInt(), Ui.dp(6, density).toInt(), Ui.dp(3, density).toInt())
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
