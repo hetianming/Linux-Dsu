@@ -95,12 +95,10 @@ class OtgAssistantPage(
     }
 
     fun onFilePicked(path: String) {
-        pendingApkDisplay?.text = path
-        pendingPushDisplay?.text = path
-        pendingImgDisplay?.text = path
-        pendingApkDisplay = null
-        pendingPushDisplay = null
-        pendingImgDisplay = null
+        // 只更新有 pending 标记的 TextView
+        pendingApkDisplay?.let { it.text = path; pendingApkDisplay = null }
+        pendingPushDisplay?.let { it.text = path; pendingPushDisplay = null }
+        pendingImgDisplay?.let { it.text = path; pendingImgDisplay = null }
     }
 
     private fun buildTitleBar(): LinearLayout {
