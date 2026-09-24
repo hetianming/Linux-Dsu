@@ -722,6 +722,8 @@ class OtgAssistantPage(
     private fun runAdbCmd(vararg args: String) {
         executor.execute {
             val serialArgs = if (selectedAdbSerial.isNotEmpty()) arrayOf("-s", selectedAdbSerial) else emptyArray()
+            // 先尝试 root 提权（部分设备需要）
+            OtgAssistant.adbRoot(activity, selectedAdbSerial)
             val result = OtgAssistant.run(activity, "adb", (serialArgs + args).toList(), timeoutMs = 60000)
             val output = OtgAssistant.buildOutput(result)
             activity.runOnUiThread { showAdbLog(output) }
