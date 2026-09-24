@@ -272,7 +272,12 @@ class OtgAssistantPage(
 
         // 刷入分区卡片
         val flashCard = buildFlashCard()
+        flashCard.tag = "flashCard"
         out.addView(flashCard)
+        // 初始化分区列表（异步，设备已选则立即请求）
+        if (selectedFbSerial.isNotEmpty()) {
+            refreshFbPartitions(flashCard)
+        }
 
         // BL 解锁卡片
         out.addView(buildUnlockCard())
@@ -399,6 +404,7 @@ class OtgAssistantPage(
                 adapter = android.widget.ArrayAdapter(activity, android.R.layout.simple_spinner_item, OtgAssistant.COMMON_PARTITIONS)
                 layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             }
+            spinner.tag = "flashSpinner"
             addView(spinner)
 
             val input = mutableEditText("镜像路径", "")
@@ -406,10 +412,20 @@ class OtgAssistantPage(
 
             addView(row2btn(
                 actionBtn("选择镜像", Ui.buttonSecondary(activity)) {
-                    pendingFileAction = { input.setText(it) }
-                    openFilePicker("选择 .img 镜像")
+                    openFilePickerForImg(input)
                 },
-                actionBtn("刷入", Ui.buttonPrimary(activity)) { }
+                actionBtn("刷入", Ui.buttonPrimary(activity)) {
+                    val imgPath = input.text.toString().trim()
+                    val partition = spinner.selectedItem.toString()
+                    if (selectedFbSerial.isEmpty()) { showFbToast("请先选择设备"); return@actionBtn }
+                    if (partition.isEmpty() || imgPath.isEmpty()) { showFbToast("请填写完整信息"); return@actionBtn }
+                    showProgress(true)
+                    executor.execute {
+                        val result = OtgAssistant.fastbootFlash(activity, selectedFbSerial, partition, imgPath)
+                        showProgress(false)
+                        activity.runOnUiThread { showFbLog(OtgAssistant.buildOutput(result)) }
+                    }
+                }
             ))
         }
     }
@@ -634,6 +650,26 @@ class OtgAssistantPage(
             setOnClickListener {
                 selectedFbSerial = serial
                 showFbLog("已选择: $serial")
+                // 选中设备后异步刷新分区列表
+                val flashCard = contentContainer.findViewWithTag<LinearLayout>("flashCard")
+                refreshFbPartitions(flashCard)
+            }
+        }
+    }
+
+    private fun refreshFbPartitions(flashCard: LinearLayout) {
+        if (selectedFbSerial.isEmpty()) return
+        executor.execute {
+            val partitions = OtgAssistant.fastbootPartitions(activity, selectedFbSerial)
+            activity.runOnUiThread {
+                val spinner = flashCard.findViewWithTag<Spinner>("flashSpinner")
+                if (spinner != null && partitions.isNotEmpty()) {
+                    val names = partitions.map { it.name }
+                    spinner.adapter = android.widget.ArrayAdapter(activity, android.R.layout.simple_spinner_item, names)
+                    showFbLog("已获取 ${partitions.size} 个分区")
+                } else if (partitions.isEmpty()) {
+                    showFbLog("无法获取分区列表，请检查设备连接")
+                }
             }
         }
     }
@@ -688,6 +724,17 @@ class OtgAssistantPage(
             putExtra(RootfsFilesActivity.EXTRA_PICK, true)
             putExtra(RootfsFilesActivity.EXTRA_TITLE, title)
             putExtra(RootfsFilesActivity.EXTRA_EXT_ALL, isFolder)
+        }
+        try { activity.startActivity(intent) }
+        catch (e: Exception) { showAdbToast("无法打开文件选择器: ${e.message}") }
+    }
+
+    private fun openFilePickerForImg(input: EditText) {
+        pendingFileAction = { path -> input.setText(path) }
+        val intent = android.content.Intent(activity, RootfsFilesActivity::class.java).apply {
+            putExtra(RootfsFilesActivity.EXTRA_PICK, true)
+            putExtra(RootfsFilesActivity.EXTRA_TITLE, "选择 .img 镜像")
+            putExtra(RootfsFilesActivity.EXTRA_EXT, ".img")
         }
         try { activity.startActivity(intent) }
         catch (e: Exception) { showAdbToast("无法打开文件选择器: ${e.message}") }
