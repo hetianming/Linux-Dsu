@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.util.Log
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.mcai.ubuntudsu.core.ToolInstaller
@@ -30,11 +29,6 @@ class OtgAssistantActivity : AppCompatActivity() {
                 .show()
             return
         }
-
-        // 验证工具文件
-        val adbPath = ToolInstaller.toolPath(this, "adb")
-        val fastbootPath = ToolInstaller.toolPath(this, "fastboot")
-        Log.i("OgtAssistant", "工具路径: adb=$adbPath, fastboot=$fastbootPath")
 
         page = OtgAssistantPage(this) { finish() }
         val content = page.build()
@@ -64,5 +58,10 @@ class OtgAssistantActivity : AppCompatActivity() {
             val path = data?.getStringExtra(RootfsFilesActivity.RESULT_FILE_PATH)
             if (!path.isNullOrBlank()) page.onFilePicked(path)
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        page.onDestroy()
     }
 }

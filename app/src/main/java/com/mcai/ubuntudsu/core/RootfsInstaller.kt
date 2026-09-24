@@ -174,7 +174,7 @@ object RootfsInstaller {
         cancelled.set(false)
         val root = Env.rootfs(ctx)
         check(Env.ubuntuInstalled(ctx)) { "请先安装 Ubuntu rootfs" }
-        val total = Env.dirSize(root)
+        val total = -1L // 备份进度按输出字节估算，不依赖目录大小探测
         // root 侧 tar + gzip -1 管道：压缩在 native 进程并行完成，Java 仅搬运计数
         //（此前 Java XZOutputStream 单线程约 2MB/s，7GB 需近 1 小时；现在可达闪存速度）
         val shell = ProcessBuilder("/system/bin/su", "0", "/system/bin/sh", "-c",
@@ -185,19 +185,19 @@ object RootfsInstaller {
             shell.errorStream.use { it.copyTo(errorOutput) }
         }.apply { start() }
         var completed = false
+        var written = 0L
         try {
             ctx.contentResolver.openOutputStream(destination, "wt")?.use { output ->
                 shell.inputStream.use { input ->
                     val buffer = ByteArray(1024 * 1024)
-                    var written = 0L
                     while (true) {
                         if (cancelled.get()) error("已取消")
                         val count = input.read(buffer)
                         if (count < 0) break
                         output.write(buffer, 0, count)
                         written += count
-                        // 进度以解压前字节数估算：gzip 输出约 50% 输入，用输出量*2 与总量对齐
-                        onProgress(InstallProgress("backup", (written * 2).coerceAtMost(total), total))
+                        // 进度按输出字节估算：gzip 输出约 50% 输入，用输出量*2 与总量对齐
+                        onProgress(InstallProgress("backup", (written * 2).coerceAtLeast(0), if (total > 0) total else written))
                     }
                 }
             } ?: error("无法创建备份文件，请确认目标存储仍可写")
@@ -211,8 +211,8 @@ object RootfsInstaller {
             val detail = errorOutput.toString(Charsets.UTF_8.name()).trim()
             error("root 权限打包失败${if (detail.isEmpty()) "" else ": $detail"}")
         }
-        if (total > 0) {
-            onProgress(InstallProgress("backup", total, total))
+        if (written > 0) {
+            onProgress(InstallProgress("backup", written, written))
         }
     }
 

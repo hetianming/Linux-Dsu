@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OTG 刷机助手 v1.5.1</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .container { background: rgba(255,255,255,0.05); backdrop-filter: blur(20px); border-radius: 24px; padding: 40px; max-width: 480px; width: 100%; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+        h1 { color: #fff; font-size: 28px; margin-bottom: 8px; text-align: center; }
+        .version { color: #7ec8e3; font-size: 14px; text-align: center; margin-bottom: 24px; }
+        .features { background: rgba(0,0,0,0.2); border-radius: 16px; padding: 20px; margin-bottom: 24px; }
+        .features h3 { color: #7ec8e3; font-size: 14px; margin-bottom: 12px; }
+        .features ul { list-style: none; }
+        .features li { color: #b8c5d6; font-size: 13px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .features li:last-child { border-bottom: none; }
+        .features li::before { content: "\2713 "; color: #4ade80; margin-right: 8px; }
+        .download-section { display: flex; flex-direction: column; gap: 12px; }
+        .download-btn { display: block; padding: 16px 24px; border-radius: 12px; text-align: center; text-decoration: none; font-weight: 600; transition: transform 0.2s, box-shadow 0.2s; }
+        .download-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
+        .btn-release { background: linear-gradient(135deg, #4ade80, #22c55e); color: #fff; }
+        .btn-debug { background: linear-gradient(135deg, #60a5fa, #3b82f6); color: #fff; }
+        .btn-info { font-size: 12px; opacity: 0.8; }
+        .footer { color: #6b7280; font-size: 12px; text-align: center; margin-top: 24px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>OTG 刷机助手</h1>
+        <p class="version">版本 v1.5.1 | 全能版</p>
+        
+        <div class="features">
+            <h3>新功能</h3>
+            <ul>
+                <li>ADB 设备管理、文件推送/拉取、应用安装</li>
+                <li>Fastboot 分区刷入、BL 解锁/上锁</li>
+                <li>Shell 命令执行、Root 权限切换</li>
+                <li>无线 ADB 连接支持</li>
+                <li>A/B 卡槽管理</li>
+                <li>多品牌解锁方案（Xiaomi/Pixel/OPPO 等）</li>
+            </ul>
+        </div>
+        
+        <div class="download-section">
+            <a class="download-btn btn-release" href="app-release.apk">
+                下载 Release 版本 (7.3 MB)
+                <div class="btn-info">已优化，适合正式使用</div>
+            </a>
+            <a class="download-btn btn-debug" href="app-debug.apk">
+                下载 Debug 版本 (14 MB)
+                <div class="btn-info">含调试信息，体积较大</div>
+            </a>
+        </div>
+        
+        <p class="footer">需要 Android 8.0+ (API 26) 设备</p>
+    </div>
+</body>
+</html>

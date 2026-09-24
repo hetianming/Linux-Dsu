@@ -16,6 +16,7 @@ object Env {
     fun ubuntuInstalled(ctx: Context): Boolean =
         File(rootfs(ctx), "bin/bash").isFile || File(rootfs(ctx), "usr/bin/bash").isFile
 
+    @Deprecated("No longer used; replaced by -1 sentinel in RootfsInstaller.backup")
     fun dirSize(file: File): Long {
         val virtualDirectories = setOf("proc", "sys", "dev", "run")
         val countedFiles = mutableSetOf<Any>()

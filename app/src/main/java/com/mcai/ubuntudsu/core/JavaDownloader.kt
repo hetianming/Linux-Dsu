@@ -459,6 +459,19 @@ object JavaDownloader {
         return Result(true, target, "完成")
     }
 
+    private fun formatBytes(bytes: Long): String {
+        if (bytes < 0) return "0 B"
+        if (bytes < 1024) return "$bytes B"
+        val units = arrayOf("KiB", "MiB", "GiB", "TiB")
+        var value = bytes.toDouble()
+        var unit = -1
+        while (value >= 1024 && unit < units.size - 1) {
+            value /= 1024.0
+            unit++
+        }
+        return String.format("%.1f %s", value, units[unit])
+    }
+
     private fun openConnection(url: String, rangeFrom: Long, rangeTo: Long = -1): HttpURLConnection {
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = CONNECT_TIMEOUT
@@ -483,17 +496,4 @@ object JavaDownloader {
     }
 
     private data class Segment(val index: Int, val start: Long, val end: Long, var cursor: Long)
-
-    private fun formatBytes(bytes: Long): String {
-        if (bytes < 0) return "0 B"
-        if (bytes < 1024) return "$bytes B"
-        val units = arrayOf("KiB", "MiB", "GiB", "TiB")
-        var value = bytes.toDouble()
-        var unit = -1
-        while (value >= 1024 && unit < units.size - 1) {
-            value /= 1024
-            unit++
-        }
-        return String.format("%.1f %s", value, units[unit])
-    }
 }
