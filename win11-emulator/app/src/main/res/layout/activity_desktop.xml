@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/desktop_background">
@@ -9,8 +9,8 @@
         android:id="@+id/desktopIcons"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="16dp"
+        android:layout_marginStart="64dp"
+        android:layout_marginTop="24dp"
         android:orientation="vertical">
 
         <!-- 此电脑 -->
@@ -105,14 +105,12 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- 开始菜单面板 -->
+    <!-- 开始菜单面板 - 左侧边栏 -->
     <LinearLayout
         android:id="@+id/startMenuPanel"
-        android:layout_width="320dp"
-        android:layout_height="480dp"
-        android:layout_gravity="bottom|start"
-        android:layout_marginBottom="48dp"
-        android:layout_marginStart="8dp"
+        android:layout_width="280dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
         android:background="@drawable/start_menu_background"
         android:elevation="8dp"
         android:orientation="vertical"
@@ -126,7 +124,7 @@
             android:background="@drawable/search_box_background"
             android:drawableStart="@drawable/ic_search"
             android:drawablePadding="8dp"
-            android:hint="输入应用、文档或设置以进行搜索..."
+            android:hint="搜索应用、文档..."
             android:padding="8dp"
             android:textColorHint="#80FFFFFF"
             android:textSize="14sp" />
@@ -145,11 +143,8 @@
             android:id="@+id/startMenuAppsLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:columnCount="4"
-            android:rowCount="3">
-
-            <!-- 应用项将通过代码动态添加 -->
-
+            android:columnCount="3"
+            android:rowCount="4">
         </GridLayout>
 
         <!-- 推荐区域 -->
@@ -217,11 +212,16 @@
             </LinearLayout>
         </ScrollView>
 
+        <!-- 弹簧填充 -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
         <!-- 用户头像和电源 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
             android:gravity="end"
             android:orientation="horizontal"
             android:padding="8dp">
@@ -239,7 +239,7 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- 任务栏背景遮罩 -->
+    <!-- 任务栏遮罩 -->
     <View
         android:id="@+id/taskbarOverlay"
         android:layout_width="match_parent"
@@ -247,7 +247,7 @@
         android:background="#4D000000"
         android:visibility="gone" />
 
-    <!-- 任务栏 -->
+    <!-- 任务栏 - 底部固定 -->
     <LinearLayout
         android:id="@+id/taskbar"
         android:layout_width="match_parent"
@@ -349,4 +349,4 @@
         </LinearLayout>
     </LinearLayout>
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+</FrameLayout>
