@@ -15,7 +15,5 @@
     
     <style name="Theme.Win11Emu.Desktop" parent="Theme.Win11Emu">
         <item name="android:windowFullscreen">true</item>
-        <item name="android:windowTranslucentStatus">true</item>
-        <item name="android:windowTranslucentNavigation">true</item>
     </style>
 </resources>
