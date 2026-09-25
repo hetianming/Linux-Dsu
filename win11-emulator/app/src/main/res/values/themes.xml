@@ -11,6 +11,8 @@
     <style name="Theme.Win11Emu.Boot" parent="Theme.Win11Emu">
         <item name="android:windowBackground">@drawable/boot_background</item>
         <item name="android:windowFullscreen">true</item>
+        <item name="android:windowTranslucentStatus">true</item>
+        <item name="android:windowTranslucentNavigation">true</item>
     </style>
     
     <style name="Theme.Win11Emu.Desktop" parent="Theme.Win11Emu">
