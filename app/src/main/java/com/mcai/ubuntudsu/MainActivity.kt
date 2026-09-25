@@ -219,6 +219,10 @@ class MainActivity : AppCompatActivity() {
         ViewCompat.requestApplyInsets(root)
     }
 
+    fun switchToTab(tab: Int) {
+        selectTab(tab)
+    }
+
     private fun selectTab(tab: Int) {
         if (tab == currentTab && pageHost.childCount > 0) return
         val d = resources.displayMetrics.density

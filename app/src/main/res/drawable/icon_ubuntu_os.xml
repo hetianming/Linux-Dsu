@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Ubuntu 圆形底 -->
+    <path android:fillColor="#E95420" android:pathData="M24,0C10.7,0 0,10.7 0,24s10.7,24 24,24s24,-10.7 24,-24S37.3,0 24,0z" />
+    <!-- Ubuntu 圆圈图案（三个相连圆） -->
+    <path android:fillColor="#FFFFFF" android:pathData="M15,20c0,-3.3 2.7,-6 6,-6s6,2.7 6,6s-2.7,6 -6,6S15,23.3 15,20z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M27,14c3.3,0 6,2.7 6,6s-2.7,6 -6,6s-6,-2.7 -6,-6S23.7,14 27,14z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M27,26c3.3,0 6,2.7 6,6s-2.7,6 -6,6s-6,-2.7 -6,-6S23.7,26 27,26z" />
+</vector>

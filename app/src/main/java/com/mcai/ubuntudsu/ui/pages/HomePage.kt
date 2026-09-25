@@ -1,5 +1,6 @@
 package com.mcai.ubuntudsu.ui.pages
 
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.GestureDetector
@@ -79,7 +80,90 @@ class HomePage(
         // 初始即应用默认渐变（薄荷绿）
         applyGradient()
         page.addView(unified)
+
+        // OS 入口卡片：桌面模拟器 + Ubuntu Linux 双图标入口
+        page.addView(buildOsEntryCard(d))
+
         return page
+    }
+
+    /** OS 桌面入口卡片：PC 风格桌面模拟器 + Ubuntu Linux 启动器 */
+    private fun buildOsEntryCard(d: Float): LinearLayout {
+        val card = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(Ui.dp(18, d), Ui.dp(14, d), Ui.dp(18, d), Ui.dp(12, d))
+            background = Ui.glassSurface(activity, 18f)
+            Ui.applyNeuShadow(this, 3f, 18f)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = Ui.dp(12, d); bottomMargin = Ui.dp(16, d) }
+        }
+        card.addView(TextView(activity).apply {
+            text = "操作系统入口"
+            textSize = 15f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(Ui.primaryText(activity))
+            setPadding(0, 0, 0, Ui.dp(12, d))
+        })
+        // 两列图标行
+        val row = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        // PC 桌面模拟器入口
+        row.addView(buildOsTile(activity, d, "PC 桌面", "Windows 风格模拟器", R.drawable.icon_os_desktop, Color.parseColor("#0078D4")) {
+            activity.startActivity(Intent(activity, com.mcai.ubuntudsu.OtgAssistantActivity::class.java))
+        })
+        row.addView(View(activity).apply {
+            layoutParams = LinearLayout.LayoutParams(Ui.dp(12, d), 1).also {}
+        })
+        // Ubuntu Linux 入口
+        row.addView(buildOsTile(activity, d, "Ubuntu", "Linux 容器系统", R.drawable.icon_ubuntu_os, Color.parseColor("#E95420")) {
+            activity.startActivity(Intent(activity, com.mcai.ubuntudsu.MainActivity::class.java).apply {
+                flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+            })
+            (activity as? com.mcai.ubuntudsu.MainActivity)?.switchToTab(1)
+        })
+        card.addView(row)
+        return card
+    }
+
+    private fun buildOsTile(ctx: android.content.Context, density: Float, title: String, subtitle: String, iconRes: Int, accentColor: Int, onClick: () -> Unit): View {
+        val tile = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(Ui.dp(16, density), Ui.dp(12, density), Ui.dp(16, density), Ui.dp(12, density))
+            background = Ui.glassButton(ctx, accentColor)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
+            layoutParams = LinearLayout.LayoutParams(Ui.dp(100, density), ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        tile.addView(ImageView(ctx).apply {
+            setImageResource(iconRes)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            layoutParams = LinearLayout.LayoutParams(Ui.dp(48, density), Ui.dp(48, density))
+        })
+        tile.addView(TextView(ctx).apply {
+            text = title
+            textSize = 13f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(Ui.primaryText(ctx))
+            gravity = Gravity.CENTER
+            setPadding(0, Ui.dp(6, density), 0, 0)
+        })
+        tile.addView(TextView(ctx).apply {
+            text = subtitle
+            textSize = 9.5f
+            setTextColor(Ui.secondaryText(ctx))
+            gravity = Gravity.CENTER
+            setPadding(0, Ui.dp(2, density), 0, 0)
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        Ui.pressAnimation(tile)
+        return tile
     }
 
     // 渐变档位：浅色/深色各自一组半透明渐变，叠加白/黑内衬保证文字可读

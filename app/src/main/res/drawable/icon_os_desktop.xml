@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- 圆角方块底 -->
+    <path android:fillColor="#2D64AA" android:pathData="M0,10C0,4.5 4.5,0 10,0h28c5.5,0 10,4.5 10,10v28c0,5.5 -4.5,10 -10,10H10C4.5,48 0,43.5 0,38z" />
+    <!-- 显示器外框 -->
+    <path android:fillColor="#FFFFFF" android:pathData="M8,6h32v24H8z" />
+    <!-- 屏幕内部 -->
+    <path android:fillColor="#1A3A5C" android:pathData="M10,8h28v20H10z" />
+    <!-- 任务栏 -->
+    <path android:fillColor="#3A7BD5" android:pathData="M10,24h28v4H10z" />
+    <!-- 开始按钮 -->
+    <path android:fillColor="#FFFFFF" android:pathData="M12,25.5h3v3h-3z" />
+    <!-- 窗口图标 -->
+    <path android:fillColor="#6BB5E0" android:pathData="M17,25.5h2v2h-2zM20,25.5h2v2h-2zM17,28h2v2h-2zM20,28h2v2h-2z" />
+    <!-- 显示器底座 -->
+    <path android:fillColor="#B0BEC5" android:pathData="M22,30h4v3h-4zM20,33h8v2h-8z" />
+</vector>
