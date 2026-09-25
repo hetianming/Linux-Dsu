@@ -57,10 +57,7 @@ class DesktopActivity : AppCompatActivity() {
             showSearchDialog()
         }
         
-        // 设置按钮 (使用任务视图按钮代替)
-        binding.btnTaskView.setOnClickListener {
-            openSettings()
-        }
+        // 设置按钮 (移除)
         
         // 点击阴影关闭开始菜单
         binding.taskbarOverlay.setOnClickListener {
