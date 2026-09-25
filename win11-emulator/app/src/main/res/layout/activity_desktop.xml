@@ -4,12 +4,12 @@
     android:layout_height="match_parent"
     android:background="@drawable/desktop_background">
 
-    <!-- 桌面图标区域 -->
+    <!-- 桌面图标区域 - 左对齐 -->
     <LinearLayout
         android:id="@+id/desktopIcons"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginStart="64dp"
+        android:layout_marginStart="24dp"
         android:layout_marginTop="24dp"
         android:orientation="vertical">
 
@@ -247,13 +247,12 @@
         android:background="#4D000000"
         android:visibility="gone" />
 
-    <!-- 任务栏 - 底部固定 -->
+    <!-- 任务栏 - 底部透明背景 -->
     <LinearLayout
         android:id="@+id/taskbar"
         android:layout_width="match_parent"
         android:layout_height="48dp"
         android:layout_gravity="bottom"
-        android:background="@drawable/taskbar_background"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="8dp"
@@ -276,14 +275,6 @@
             android:padding="8dp"
             android:src="@drawable/ic_search" />
 
-        <!-- 任务视图按钮 -->
-        <ImageView
-            android:id="@+id/btnTaskView"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:padding="8dp"
-            android:src="@drawable/ic_taskview" />
-
         <!-- 已固定的应用 -->
         <LinearLayout
             android:layout_width="0dp"
@@ -303,12 +294,6 @@
                 android:layout_height="40dp"
                 android:padding="8dp"
                 android:src="@drawable/ic_explorer" />
-
-            <ImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:padding="8dp"
-                android:src="@drawable/ic_store" />
         </LinearLayout>
 
         <!-- 系统托盘 -->
@@ -320,10 +305,11 @@
             android:paddingStart="8dp"
             android:paddingEnd="8dp">
 
+            <!-- 移动信号图标 -->
             <ImageView
                 android:layout_width="16dp"
                 android:layout_height="16dp"
-                android:src="@drawable/ic_wifi" />
+                android:src="@drawable/ic_signal" />
 
             <ImageView
                 android:layout_width="16dp"
