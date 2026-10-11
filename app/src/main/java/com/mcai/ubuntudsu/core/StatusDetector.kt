@@ -88,9 +88,8 @@ object StatusDetector {
     }
 
     private val gpuPaths = listOf(
-        "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
         "/sys/class/kgsl/kgsl-3d0/gpu_busy_percent",
-        "/sys/class/kgsl/kgsl-3d0/gpubusy",
+        "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
         "/sys/kernel/ged/hal/gpu_loading",
         "/sys/kernel/gpu/gpu_busy",
         "/sys/class/misc/mali0/device/utilisation",
@@ -100,7 +99,7 @@ object StatusDetector {
     )
     private var lastGpuRootAttempt = 0L
     private var lastGpuValue: Int? = null
-    // root 读 GPU 只在首次探测；失败（无 ROOT/节点均不存在）后不再反复拉起 su
+    // root 读 GPU 可用性：成功一次后持续用 root；失败（无 ROOT/节点不存在）后停止重试，永久用 lastGpuValue
     @Volatile private var gpuRootUsable: Boolean? = null
 
     private fun readGpuPercent(): Int? {
@@ -113,26 +112,18 @@ object StatusDetector {
                 return it
             }
         }
+        // root 兜底：确认 root 可用后每轮直接读（合并单条命令，10s 节流内不重复）；
+        // 尚未确认时按 10s 节流试探一次，成功转持续模式，失败则停掉避免无 ROOT 设备反复拉 su
+        if (gpuRootUsable == true) {
+            if (System.currentTimeMillis() - lastGpuRootAttempt < 2_000L) return lastGpuValue
+            lastGpuRootAttempt = System.currentTimeMillis()
+            return tryGpuRootProbe()?.also { if (it != null) lastGpuValue = it } ?: lastGpuValue
+        }
+        if (gpuRootUsable == false) return lastGpuValue
         val now = System.currentTimeMillis()
-        if (now - lastGpuRootAttempt >= 10_000L && gpuRootUsable != false) {
+        if (now - lastGpuRootAttempt >= 10_000L) {
             lastGpuRootAttempt = now
-            val script = StringBuilder()
-            gpuPaths.forEachIndexed { i, path ->
-                script.append("echo __GPU").append(i).append("__\n")
-                script.append("cat \"").append(path).append("\" 2>/dev/null\n")
-            }
-            val res = RootShell.exec(script.toString(), timeoutMs = 6000)
-            var parsed: Int? = null
-            if (res.success) {
-                val segments = res.stdout.split(Regex("__GPU\\d+__")).drop(1)
-                segments.forEachIndexed { i, seg ->
-                    val path = gpuPaths.getOrNull(i) ?: return@forEachIndexed
-                    val raw = seg.trim()
-                    if (raw.isEmpty()) return@forEachIndexed
-                    val v = if (path.endsWith("gpufreq_var_dump")) parseGpuLoadingField(raw) else parseGpuNode(raw)
-                    if (v != null && parsed == null) parsed = v
-                }
-            }
+            val parsed = tryGpuRootProbe()
             if (parsed != null) {
                 gpuRootUsable = true
                 lastGpuValue = parsed
@@ -143,6 +134,25 @@ object StatusDetector {
         return lastGpuValue
     }
 
+    /** 合并单条 root 命令读全部 GPU 节点；`gpubusy` 是 "busy total" 两数字格式，取比例。 */
+    private fun tryGpuRootProbe(): Int? {
+        val script = StringBuilder()
+        gpuPaths.forEachIndexed { i, path ->
+            script.append("echo __GPU").append(i).append("__\n")
+            script.append("cat \"").append(path).append("\" 2>/dev/null\n")
+        }
+        val res = RootShell.exec(script.toString(), timeoutMs = 6000)
+        if (!res.success) return null
+        val segments = res.stdout.split(Regex("__GPU\\d+__")).drop(1)
+        segments.forEachIndexed { i, seg ->
+            val path = gpuPaths.getOrNull(i) ?: return@forEachIndexed
+            val raw = seg.trim()
+            if (raw.isEmpty()) return@forEachIndexed
+            val v = if (path.endsWith("gpufreq_var_dump")) parseGpuLoadingField(raw) else parseGpuNode(raw)
+            if (v != null) return v
+        }
+        return null
+    }
     /** 简单数值节点：内容形如 "42 %"、"8"。 */
     private fun parseGpuNode(raw: String): Int? = runCatching {
         val text = raw.trim().lowercase().removeSuffix("%")
@@ -159,10 +169,10 @@ object StatusDetector {
 
     private fun formatBytes(bytes: Long): String {
         val gb = bytes / (1024.0 * 1024.0 * 1024.0)
-        return if (gb >= 1.0) "%.1f GB".format(java.util.Locale.US, gb) else "%.0f MB".format(java.util.Locale.US, bytes / (1024.0 * 1024.0))
+        return if (gb >= 1.0) "%.1f GB".format(java.util.Locale.US, gb) else "%.0f MB".format(java.util.Locale.US, bytes / (1024 * 1024.0))
     }
 
-    /** 首页刷新使用较短超时，避免未授权 su 让状态卡长期停在“检测中”。 */
+    /** 首页刷新使用较短超时，避免未授权 su 让状态卡长期停在"检测中"。 */
     fun rootAvailable(timeoutMs: Long = 15_000L): Boolean =
         runCatching { RootShell.available(timeoutMs) }.getOrDefault(false)
 
