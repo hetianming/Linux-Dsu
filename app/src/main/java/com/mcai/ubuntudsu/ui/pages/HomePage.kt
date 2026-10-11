@@ -1070,10 +1070,10 @@ class HomePage(
 
         applyHeroTextColors(true) // 默认壁纸/自定义图均为深色底，文字恒白
 
-        // 右上角小风车：玻璃底不转，只有图标本身持续旋转
-        val windmillWrap = android.widget.FrameLayout(activity).apply {
-            background = Ui.rounded(Color.argb(220, 255, 255, 255), 12f, d)
-            setPadding(Ui.dp(4, d), Ui.dp(4, d), Ui.dp(4, d), Ui.dp(4, d))
+        // 右上角小风车：无底容器，叶片高饱和色直接显示，持续旋转
+        val windmillIcon = ImageView(activity).apply {
+            setImageResource(R.drawable.ic_windmill)
+            scaleType = ImageView.ScaleType.FIT_CENTER
             layoutParams = FrameLayout.LayoutParams(
                 Ui.dp(44, d), Ui.dp(44, d),
                 Gravity.TOP or Gravity.END,
@@ -1081,16 +1081,7 @@ class HomePage(
                 marginEnd = Ui.dp(14, d); topMargin = Ui.dp(14, d)
             }
         }
-        val windmillIcon = ImageView(activity).apply {
-            setImageResource(R.drawable.ic_windmill)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            layoutParams = android.widget.FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            )
-        }
-        windmillWrap.addView(windmillIcon)
-        hero.addView(windmillWrap)
+        hero.addView(windmillIcon)
         android.animation.ObjectAnimator.ofFloat(windmillIcon, "rotation", 0f, 360f).apply {
             duration = 3000L
             repeatCount = android.animation.ValueAnimator.INFINITE
