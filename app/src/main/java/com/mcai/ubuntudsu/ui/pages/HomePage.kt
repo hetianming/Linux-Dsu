@@ -42,6 +42,8 @@ class HomePage(
     private var heroScrim: View? = null
     private var heroTitle: TextView? = null
     private var heroSubtitle: TextView? = null
+    // 头图左上角：实时电池温度（>40°C 红，≤40°C 蓝）
+    private var batteryTempText: TextView? = null
     // 首页不能和 Linux/DSU 的耗时任务共用 MainActivity 单线程队列：
     // 否则 GPU/ROOT 探测超时后会把“ROOT/GSI/Linux/桌面”永久堵在“检测中”。
     private val metricsExecutor = Executors.newSingleThreadExecutor()
@@ -361,18 +363,45 @@ class HomePage(
                 val result = com.mcai.ubuntudsu.core.StatusDetector.deviceMetrics(activity, cpuSample)
                 cpuSample = result.second
                 val metrics = result.first
+                val batteryTemp = readBatteryTempCelsius()
                 activity.runOnUiThread {
                     if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
                     storageValue.text = "${metrics.storagePercent}%"
                     storageDetail.text = "${metrics.storageUsed} / ${metrics.storageTotal}"
                     memoryValue.text = "${metrics.memoryPercent}%"
                     memoryDetail.text = "${metrics.memoryUsed} / ${metrics.memoryTotal}"
+                    batteryTempText?.let { tv ->
+                        if (batteryTemp != null) {
+                            tv.text = String.format(java.util.Locale.US, "电池 %.1f°C", batteryTemp)
+                            tv.setTextColor(
+                                if (batteryTemp > 40.0) Color.rgb(255, 92, 92) else Color.rgb(110, 193, 255),
+                            )
+                        } else {
+                            tv.text = "电池 --"
+                            tv.setTextColor(Color.argb(200, 255, 255, 255))
+                        }
+                    }
                     onResult(metrics.cpuPercent, metrics.gpuPercent)
                 }
             } finally {
                 metricsRunning.set(false)
             }
         }
+    }
+
+    /** 读取电池温度（°C）：sysfs 节点大多以 0.1°C 为单位，按量级自动换算。 */
+    private fun readBatteryTempCelsius(): Double? {
+        val nodes = arrayOf(
+            "/sys/class/power_supply/battery/temp",
+            "/sys/class/power_supply/bms/temp",
+        )
+        for (path in nodes) {
+            val raw = runCatching { java.io.File(path).readText().trim().toDoubleOrNull() }.getOrNull() ?: continue
+            if (raw.isNaN()) continue
+            val celsius = if (raw > 80.0 || raw < -20.0) raw / 10.0 else raw
+            if (celsius in -20.0..80.0) return celsius
+        }
+        return null
     }
 
     private fun detailMetric(title: String, color: Int): Triple<TextView, TextView, View> {
@@ -753,6 +782,23 @@ class HomePage(
                 ?: setImageResource(R.drawable.hero_default) // 内置默认壁纸
         }
         hero.addView(heroImage)
+
+        // 左上角：实时电池温度胶囊（深色半透明底衬保证任意壁纸上可读，随 2s metrics 轮询刷新）
+        batteryTempText = TextView(activity).apply {
+            text = "电池 --"
+            textSize = 11.5f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(Color.argb(200, 255, 255, 255))
+            gravity = Gravity.CENTER
+            setPadding(Ui.dp(10, d), Ui.dp(5, d), Ui.dp(10, d), Ui.dp(5, d))
+            background = Ui.rounded(Color.argb(120, 8, 12, 24), 14f, d)
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP or Gravity.START,
+            ).apply { marginStart = Ui.dp(12, d); topMargin = Ui.dp(12, d) }
+        }
+        hero.addView(batteryTempText)
 
         // 底部渐变压暗：保证白色文案可读（默认壁纸与自定义图都需要）
         heroScrim = View(activity).apply {
