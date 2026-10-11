@@ -149,7 +149,6 @@ class WorkTimePage(private val activity: Activity) {
                 Gravity.END or Gravity.CENTER_VERTICAL,
             ).apply {
                 marginEnd = Ui.dp(16, d)
-                topMargin = Ui.dp(14, d)
             }
         }
         titleContainer.addView(gearBtn!!)
@@ -169,7 +168,10 @@ class WorkTimePage(private val activity: Activity) {
             ).apply { bottomMargin = Ui.dp(10, d) }
         }
         card.addView(sectionTitle("本月统计"))
-        val statsRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+        val statsRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
         statTotal = statsRow.addStatCell("总工时", "0")
         statSalary = statsRow.addStatCell("工资", "0")
         statDays = statsRow.addStatCell("打卡天数", "0")
@@ -211,9 +213,12 @@ class WorkTimePage(private val activity: Activity) {
         })
         val valueText = TextView(activity).apply {
             text = value
-            textSize = 26f
+            textSize = 20f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(if (title == "工资") ACCENT else Ui.primaryText(activity))
+            maxLines = 1
+            isSingleLine = true
+            gravity = Gravity.CENTER
         }
         cell.addView(valueText)
         cell.addView(TextView(activity).apply {

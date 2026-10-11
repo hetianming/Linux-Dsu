@@ -306,6 +306,7 @@ public final class DnaIncrementalActivity extends DnaBaseActivity {
         pal = com.mcai.ubuntudsu.ui.Ui.INSTANCE.dnaPalette(this);
         FrameLayout root = new FrameLayout(this);
         root.setBackground(pal.bgDrawable());
+        com.mcai.ubuntudsu.ui.Ui.INSTANCE.animateLiquidBackground(root);
         com.mcai.ubuntudsu.ui.Ui.INSTANCE.applyContentInsets(root, 8, 0);
 
         ScrollView page = new ScrollView(this);
@@ -728,16 +729,17 @@ public final class DnaIncrementalActivity extends DnaBaseActivity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(18), dp(16), dp(18), dp(14));
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setColor(0xF2e9f0f7);
+        boolean dark = com.mcai.ubuntudsu.ui.Ui.INSTANCE.isDark(this);
+        bg.setColor(dark ? 0xF22A3546 : 0xF2e9f0f7);
         bg.setCornerRadius(dp(24));
-        bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
+        bg.setStroke(Math.max(1, dp(1)), dark ? 0x33FFFFFF : 0x66FFFFFF);
         panel.setBackground(bg);
 
         TextView title = new TextView(this);
         title.setText("⚡ " + t("选择要提取的分区", "Select partitions to extract"));
         title.setTextSize(15.5f);
         title.setTypeface(null, 1);
-        title.setTextColor(0xff17334f);
+        title.setTextColor(pal.title);
         panel.addView(title, new LinearLayout.LayoutParams(-1, -2));
 
         ScrollView scroll = new ScrollView(this);
@@ -754,7 +756,7 @@ public final class DnaIncrementalActivity extends DnaBaseActivity {
             final android.widget.CheckBox cb = new android.widget.CheckBox(this);
             cb.setText(p.getName());
             cb.setTextSize(13.5f);
-            cb.setTextColor(0xff17334f);
+            cb.setTextColor(pal.title);
             cb.setChecked(true);
             checked.add(p.getName());
             boxes.put(p.getName(), cb);
@@ -930,16 +932,17 @@ public final class DnaIncrementalActivity extends DnaBaseActivity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(16), dp(14), dp(16), dp(12));
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setColor(0xF2e9f0f7);
+        boolean dark = com.mcai.ubuntudsu.ui.Ui.INSTANCE.isDark(this);
+        bg.setColor(dark ? 0xF22A3546 : 0xF2e9f0f7);
         bg.setCornerRadius(dp(24));
-        bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
+        bg.setStroke(Math.max(1, dp(1)), dark ? 0x66FFFFFF : 0x66FFFFFF);
         panel.setBackground(bg);
 
         TextView title = new TextView(this);
         title.setText("🗂 " + t("选择旧镜像目录", "Pick old images dir"));
         title.setTextSize(15f);
         title.setTypeface(null, 1);
-        title.setTextColor(0xff17334f);
+        title.setTextColor(dark ? 0xFFEAF0F8 : 0xff17334f);
         panel.addView(title, new LinearLayout.LayoutParams(-1, -2));
 
         final TextView cwd = new TextView(this);
@@ -1040,16 +1043,17 @@ public final class DnaIncrementalActivity extends DnaBaseActivity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(16), dp(14), dp(16), dp(12));
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setColor(0xF2e9f0f7);
+        boolean dark = com.mcai.ubuntudsu.ui.Ui.INSTANCE.isDark(this);
+        bg.setColor(dark ? 0xF22A3546 : 0xF2e9f0f7);
         bg.setCornerRadius(dp(24));
-        bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
+        bg.setStroke(Math.max(1, dp(1)), dark ? 0x66FFFFFF : 0x66FFFFFF);
         panel.setBackground(bg);
 
         TextView title = new TextView(this);
         title.setText("📂 " + t("选择输出工程", "Pick output project"));
         title.setTextSize(15f);
         title.setTypeface(null, 1);
-        title.setTextColor(0xff17334f);
+        title.setTextColor(dark ? 0xFFEAF0F8 : 0xff17334f);
         panel.addView(title, new LinearLayout.LayoutParams(-1, -2));
 
         ScrollView scroll = new ScrollView(this);

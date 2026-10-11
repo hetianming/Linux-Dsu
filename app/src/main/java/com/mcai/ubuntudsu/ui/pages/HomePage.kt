@@ -429,16 +429,32 @@ class HomePage(
             }
         private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
 
-        /** 渐变端点：(浅色, 深色)。CPU 蓝色系，GPU 紫色系。夜间整体提亮保证深色底可读。 */
+        /** 渐变端点：(浅色, 深色)。日间 CPU 蓝 / GPU 紫；夜间由霓虹多色接管。 */
         private fun gradient(): Pair<Int, Int> {
             val dark = Ui.isDark(context)
             return if (name == "CPU") {
-                if (dark) Color.rgb(150, 200, 255) to Color.rgb(80, 150, 255)
+                if (dark) Color.rgb(255, 210, 70) to Color.rgb(255, 80, 40)
                 else Color.rgb(130, 185, 255) to Color.rgb(45, 100, 245)
             } else {
-                if (dark) Color.rgb(205, 178, 255) to Color.rgb(160, 125, 255)
+                if (dark) Color.rgb(120, 235, 150) to Color.rgb(0, 200, 95)
                 else Color.rgb(185, 150, 255) to Color.rgb(120, 74, 255)
             }
+        }
+
+        /** 夜间霓虹多色渐变（沿弧顺时针一圈）：CPU 亮黄→橙→红，GPU 鲜绿，避开呼吸气球的粉/蓝/紫色系；日间返回 null 走普通样式。 */
+        private fun neonColors(): IntArray? {
+            if (!Ui.isDark(context)) return null
+            return if (name == "CPU") intArrayOf(
+                Color.rgb(255, 215, 70),
+                Color.rgb(255, 150, 45),
+                Color.rgb(255, 80, 40),
+                Color.rgb(255, 150, 45),
+            ) else intArrayOf(
+                Color.rgb(150, 255, 180),
+                Color.rgb(60, 225, 130),
+                Color.rgb(0, 195, 90),
+                Color.rgb(60, 225, 130),
+            )
         }
 
         override fun onDraw(canvas: android.graphics.Canvas) {
@@ -449,7 +465,126 @@ class HomePage(
             val dark = Ui.isDark(context)
             val (lightC, darkC) = gradient()
             val percent = (value ?: 0).coerceIn(0, 100)
+            val neon = neonColors()
+            val radius = size * 0.34f
+            val stroke = size * 0.075f
+            val ring = android.graphics.RectF(cx - radius, cy - radius, cx + radius, cy + radius)
 
+            if (dark && neon != null) {
+                // ---- 夜间霓虹模式（参考图同款高强度：泛光外晕 + 常亮轨道 + 白热管芯） ----
+                val sweepShader = { android.graphics.SweepGradient(cx, cy, neon, null) }
+                // 1. 光晕：径向渐变从中间色淡出
+                val glowC = neon[2]
+                paint.style = android.graphics.Paint.Style.FILL
+                paint.shader = android.graphics.RadialGradient(
+                    cx, cy, size * 0.48f,
+                    intArrayOf(
+                        Color.argb(120, Color.red(glowC), Color.green(glowC), Color.blue(glowC)),
+                        Color.argb(46, Color.red(glowC), Color.green(glowC), Color.blue(glowC)),
+                        Color.TRANSPARENT,
+                    ),
+                    floatArrayOf(0f, 0.5f, 1f),
+                    android.graphics.Shader.TileMode.CLAMP,
+                )
+                canvas.drawCircle(cx, cy, size * 0.48f, paint)
+                paint.shader = null
+
+                // 2. 刻度点：扫描渐变按角度取色，模糊晕 + 亮芯两程
+                paint.style = android.graphics.Paint.Style.STROKE
+                paint.strokeCap = android.graphics.Paint.Cap.BUTT
+                val tickOuter = size * 0.47f
+                val tickInner = size * 0.435f
+                canvas.save()
+                canvas.rotate(-90f, cx, cy)
+                paint.shader = sweepShader()
+                paint.maskFilter = android.graphics.BlurMaskFilter(size * 0.022f, android.graphics.BlurMaskFilter.Blur.NORMAL)
+                paint.strokeWidth = size * 0.030f
+                paint.alpha = 210
+                for (i in 0 until 60) {
+                    val angle = Math.toRadians((i * 6).toDouble())
+                    val cos = Math.cos(angle).toFloat()
+                    val sin = Math.sin(angle).toFloat()
+                    canvas.drawLine(
+                        cx + cos * tickOuter, cy + sin * tickOuter,
+                        cx + cos * tickInner, cy + sin * tickInner,
+                        paint,
+                    )
+                }
+                paint.maskFilter = null
+                paint.strokeWidth = size * 0.013f
+                paint.alpha = 255
+                for (i in 0 until 60) {
+                    val angle = Math.toRadians((i * 6).toDouble())
+                    val cos = Math.cos(angle).toFloat()
+                    val sin = Math.sin(angle).toFloat()
+                    canvas.drawLine(
+                        cx + cos * tickOuter, cy + sin * tickOuter,
+                        cx + cos * tickInner, cy + sin * tickInner,
+                        paint,
+                    )
+                }
+                paint.shader = null
+                canvas.restore()
+
+                // 3. 轨道：整圈常亮霓虹管（晕 + 管体）
+                paint.strokeCap = android.graphics.Paint.Cap.ROUND
+                paint.shader = sweepShader()
+                paint.strokeWidth = stroke * 1.5f
+                paint.alpha = 80
+                paint.maskFilter = android.graphics.BlurMaskFilter(stroke * 0.55f, android.graphics.BlurMaskFilter.Blur.NORMAL)
+                canvas.drawArc(ring, -90f, 360f, false, paint)
+                paint.maskFilter = null
+                paint.strokeWidth = stroke * 0.95f
+                paint.alpha = 165
+                canvas.drawArc(ring, -90f, 360f, false, paint)
+                paint.alpha = 255
+                paint.shader = null
+
+                // 4. 进度弧：强泛光外晕 → 聚焦内晕 → 饱和亮芯 → 白热管芯
+                if (percent > 0) {
+                    canvas.save()
+                    canvas.rotate(-90f, cx, cy)
+                    paint.shader = sweepShader()
+                    paint.strokeCap = android.graphics.Paint.Cap.ROUND
+                    paint.strokeWidth = stroke * 2.4f
+                    paint.maskFilter = android.graphics.BlurMaskFilter(stroke * 1.1f, android.graphics.BlurMaskFilter.Blur.NORMAL)
+                    paint.alpha = 175
+                    canvas.drawArc(ring, 0f, 3.6f * percent, false, paint)
+                    paint.strokeWidth = stroke * 1.5f
+                    paint.maskFilter = android.graphics.BlurMaskFilter(stroke * 0.45f, android.graphics.BlurMaskFilter.Blur.NORMAL)
+                    paint.alpha = 225
+                    canvas.drawArc(ring, 0f, 3.6f * percent, false, paint)
+                    paint.maskFilter = null
+                    paint.strokeWidth = stroke * 0.9f
+                    paint.alpha = 255
+                    canvas.drawArc(ring, 0f, 3.6f * percent, false, paint)
+                    // 白热管芯（沿弧更亮的近白线）
+                    paint.shader = null
+                    paint.color = if (name == "CPU") Color.argb(225, 255, 244, 214) else Color.argb(225, 224, 255, 238)
+                    paint.strokeWidth = stroke * 0.30f
+                    canvas.drawArc(ring, 0f, 3.6f * percent, false, paint)
+                    canvas.restore()
+                }
+
+                // 5. 数字：辉光模糊 + 亮芯双程
+                val numC = if (name == "CPU") Color.rgb(255, 225, 95) else Color.rgb(120, 255, 165)
+                paint.style = android.graphics.Paint.Style.FILL
+                paint.textAlign = android.graphics.Paint.Align.CENTER
+                paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
+                paint.textSize = size * 0.28f
+                paint.color = numC
+                val text = if (value != null && value!! > 0) "$percent%" else "--"
+                val valueBaseline = cy - (paint.ascent() + paint.descent()) / 2f
+                paint.maskFilter = android.graphics.BlurMaskFilter(size * 0.028f, android.graphics.BlurMaskFilter.Blur.NORMAL)
+                paint.alpha = 200
+                canvas.drawText(text, cx, valueBaseline, paint)
+                paint.maskFilter = null
+                paint.alpha = 255
+                canvas.drawText(text, cx, valueBaseline, paint)
+                return
+            }
+
+            // ---- 日间普通模式 ----
             // 1. 光晕背景：径向渐变从淡彩到透明
             val haloRadius = size * 0.48f
             paint.style = android.graphics.Paint.Style.FILL
@@ -485,9 +620,6 @@ class HomePage(
             }
 
             // 3. 轨道环（淡色底环）+ 渐变进度弧
-            val radius = size * 0.34f
-            val stroke = size * 0.075f
-            val ring = android.graphics.RectF(cx - radius, cy - radius, cx + radius, cy + radius)
             paint.strokeCap = android.graphics.Paint.Cap.ROUND
             paint.strokeWidth = stroke
             paint.color = if (dark) Color.argb(90, Color.red(lightC), Color.green(lightC), Color.blue(lightC)) else Color.argb(70, Color.red(lightC), Color.green(lightC), Color.blue(lightC))

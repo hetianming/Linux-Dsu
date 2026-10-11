@@ -18,7 +18,7 @@ import java.util.zip.ZipInputStream
  * DNA 工具箱运行时（参考 Dsu-Manager DnaTools 移植，UbuntuDSU 本地化）：
  *  - 工具来源：运行期从 GsiManager 的 tools.zip（GitHub 直链 + ghproxy 国内加速线路）下载解压到
  *    app 私有目录 filesDir/dna-tools/，补可执行权限（不内置进 APK）。
- *  - 工程目录双架构（对齐原版）：WORK_ROOT=/sdcard/PDNA 工程根（源文件），TMP_ROOT=/data/PDNA 分解输出（root）。
+ *  - 工程目录双架构（对齐原版）：WORK_ROOT=/sdcard/Linux-Dsu/PDNA 工程根（源文件），TMP_ROOT=/data/Linux-Dsu/PDNA 分解输出（root）。
  *  - 二进制为 Android ARM64 ELF（含 dna 内核），执行走 RootShell（su）；
  *    root 预建伪装包目录（getcwd 校验）+ 工具经 /data/local/tmp 中转，命令 cd 到伪装目录执行，
  *    导出 DNA_DIR/DNA_TMP/DNA_PRO/DNA_DRO/TMPDIR 环境变量。
@@ -39,8 +39,8 @@ object DnaTools {
     // 执行环境（对齐参考项目 DnaTools 常量）
     const val FAKE_HOME = "/data/data/com.dna.tools/files"
     const val RELAY_PATH = "/data/local/tmp/dna-tools"
-    const val WORK_ROOT = "/sdcard/PDNA"
-    const val TMP_ROOT = "/data/PDNA"
+    const val WORK_ROOT = "/sdcard/Linux-Dsu/PDNA"
+    const val TMP_ROOT = "/data/Linux-Dsu/PDNA"
     private const val PREFS = "dna_prefs"
     private const val KEY_CURRENT = "current_project"
     private const val DNA_INI = "/data/local/tmp/DNA.ini"
@@ -98,6 +98,29 @@ object DnaTools {
         File(ctx.filesDir, "dna-tools/$bin").absolutePath
 
     // ============ 工程管理（对齐参考项目 DnaTools） ============
+
+    @JvmStatic
+    fun isDynamicPartition(ctx: Context): Boolean {
+        val r = RootShell.exec("getprop ro.boot.dynamic_partition 2>/dev/null", timeoutMs = 3000)
+        return r.stdout.trim() == "true"
+    }
+
+    @JvmStatic
+    fun slotSuffix(ctx: Context): String {
+        val r = RootShell.exec("getprop ro.boot.slot_suffix 2>/dev/null", timeoutMs = 3000)
+        return r.stdout.trim()
+    }
+
+    @JvmStatic
+    fun currentDsuPath(ctx: Context): String? {
+        val r = RootShell.exec(
+            "mount | grep 'ext4 /data/dsu' 2>/dev/null | head -1 || " +
+                "mount | grep 'ext4 /data/data/com.android.du' 2>/dev/null | head -1",
+            timeoutMs = 5000)
+        val line = r.stdout.lines().firstOrNull { it.isNotBlank() } ?: return null
+        val parts = line.split(Regex("\\s+"))
+        return if (parts.size >= 3) parts[1] else null
+    }
 
     @JvmStatic
     fun currentProject(ctx: Context): String? {
@@ -254,9 +277,9 @@ object DnaTools {
         return listDirEntries("$TMP_ROOT/$project", "dir")
     }
 
-    // 原版 more.xml 其他功能脚本（assets 内置原版 sh，root source 执行，与原版行为一致）
+    // 其他功能脚本（assets 内置 sh，root source 执行）
     private val SCRIPTS = arrayOf(
-        "del_vbmeta.sh", "patch_selinux.sh", "my_partition_merge.sh", "partition_merge.sh",
+        "my_partition_merge.sh", "partition_merge.sh",
         "merge_superchunk.sh"
     )
 
@@ -760,6 +783,8 @@ object DnaTools {
             append("export DNA_TMP=").append(TMP_ROOT).append("\n")
             append("export DNA_PRO='").append(pro).append("'\n")
             append("export DNA_DRO='").append(dro).append("'\n")
+            append("export PDNA_DIR=").append(WORK_ROOT).append("\n")
+            append("export PDNA_TMP=").append(TMP_ROOT).append("\n")
             append("export TMPDIR=/data/local/tmp\n")
             append("mkdir -p ").append(FAKE_HOME).append("\n")
             append("cd ").append(FAKE_HOME).append(" || cd /data/local/tmp\n")

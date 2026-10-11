@@ -153,7 +153,8 @@ object Ui {
      * 日间用天空冷暖光斑、夜间用低透明霓虹光斑，Drawable 可见时自动播放动画。
      */
     fun animateLiquidBackground(view: View) {
-        view.background = com.mcai.ubuntudsu.ui.glass.LiquidBackdropDrawable(isDark(view.context))
+        val d = com.mcai.ubuntudsu.ui.glass.BreathingBalloonDrawable(isDark(view.context))
+        view.background = d
     }
 
     // ==================== 基础色板（全局取色入口） ====================
@@ -272,10 +273,19 @@ object Ui {
         val radius = radiusDp.coerceAtMost(MAX_CORNER_RADIUS_DP) * density
         val layers = mutableListOf<Drawable>()
 
-        // L1 填充（与背景同色系，无玻璃透感）
+        // L1 填充：半透明玻璃，让背后的呼吸气球背景透进来（玻璃模糊透感）
+        val fillColors = if (dark) intArrayOf(
+            0x993A4355.toInt(),  // 约 60% 不透明深蓝玻璃
+            0x90313A48.toInt(),
+            0x9028303E.toInt(),
+        ) else intArrayOf(
+            0x99B7C6DA.toInt(),  // 约 60% 不透明白蓝玻璃
+            0x90AFBFCE.toInt(),
+            0x90A6B5C6.toInt(),
+        )
         layers += GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(cardTop(context), cardMid(context), cardBottom(context)),
+            fillColors,
         ).apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = radius
@@ -304,9 +314,9 @@ object Ui {
         return GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
             if (dark) {
-                intArrayOf(Color.argb(255, 24, 28, 38), Color.argb(255, 32, 38, 50))
+                intArrayOf(Color.argb(200, 24, 28, 38), Color.argb(198, 32, 38, 50))
             } else {
-                intArrayOf(Color.argb(255, 210, 219, 232), Color.argb(255, 222, 230, 242))
+                intArrayOf(Color.argb(200, 210, 219, 232), Color.argb(198, 222, 230, 242))
             },
         ).apply {
             shape = GradientDrawable.RECTANGLE
@@ -576,8 +586,8 @@ object Ui {
         }
         // 拟态玻璃渲染边框：夜间用亮霓虹外缘，保证暗玻璃上舱体边缘清晰
         val main = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-            if (dark) intArrayOf(0x5CCFD8E8.toInt(), 0x32B7D2E0.toInt(), 0x248FA8C4.toInt())
-            else intArrayOf(0x5CECF8FC.toInt(), 0x32CFE2EC.toInt(), 0x24A7C0CF.toInt())).apply {
+            if (dark) intArrayOf(0x4CCFD8E8.toInt(), 0x26B7D2E0.toInt(), 0x1A8FA8C4.toInt())
+            else intArrayOf(0x4CECF8FC.toInt(), 0x26CFE2EC.toInt(), 0x1AA7C0CF.toInt())).apply {
             cornerRadius = radius
             setStroke(dp(1, density), if (dark) 0x99FFFFFF.toInt() else 0x78F3FBFF.toInt())
         }
@@ -610,9 +620,9 @@ object Ui {
         layers += GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
             if (dark) {
-                intArrayOf(Color.argb(244, 28, 26, 40), Color.argb(242, 25, 23, 36), Color.argb(242, 21, 20, 31))
+                intArrayOf(Color.argb(235, 28, 26, 40), Color.argb(230, 25, 23, 36), Color.argb(230, 21, 20, 31))
             } else {
-                intArrayOf(Color.argb(246, 251, 253, 255), Color.argb(244, 246, 249, 253), Color.argb(244, 240, 245, 251))
+                intArrayOf(Color.argb(238, 251, 253, 255), Color.argb(232, 246, 249, 253), Color.argb(232, 240, 245, 251))
             },
         ).apply {
             cornerRadius = radius
@@ -666,7 +676,7 @@ object Ui {
             setOnClickListener { onPick() }
         }
 
-    // 首页标题行关于弹层：仅展示关于信息（主题切换入口在「更多」页全屏设置）
+    // 首页标题行关于弹层：仅展示关于信息（主题切换入口在「多功能」页全屏设置）
     fun showThemeDialog(activity: android.app.Activity, onThemeChanged: () -> Unit) {
         val density = activity.resources.displayMetrics.density
         val aboutPanel = LinearLayout(activity).apply {

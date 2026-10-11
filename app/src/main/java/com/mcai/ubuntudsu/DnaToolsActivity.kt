@@ -24,7 +24,6 @@ class DnaToolsActivity : AppCompatActivity() {
         window.setBackgroundDrawableResource(android.R.color.transparent)
 
         val root = FrameLayout(this)
-        root.background = Ui.liquidBackground(this)
         root.clipToOutline = true
         root.outlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(view: View, outline: android.graphics.Outline) {

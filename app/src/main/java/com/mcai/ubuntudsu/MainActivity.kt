@@ -27,7 +27,7 @@ class MainActivity : AppCompatActivity() {
     private val lifecycleStopHooks = mutableListOf<Runnable>()
     fun addLifecycleStopHook(hook: Runnable) { lifecycleStopHooks.add(hook) }
     private val executor = Executors.newSingleThreadExecutor()
-    private val tabs = listOf("首页", "Linux", "DSU", "更多")
+    private val tabs = listOf("首页", "多功能", "Linux", "DSU")
     private var currentTab = 0
     private lateinit var pageHost: FrameLayout
     private lateinit var pageStrip: android.widget.HorizontalScrollView
@@ -337,13 +337,13 @@ class MainActivity : AppCompatActivity() {
         tabs.forEachIndexed { index, _ ->
             if (pageCache.containsKey(index)) return@forEachIndexed
             val page: View = when (index) {
-                1 -> { if (linuxPage == null) linuxPage = LinuxPage(this, executor); linuxPage!!.build() }
-                2 -> { if (dsuPage == null) { dsuPage = DsuPage(this, executor, pickZipLauncher); dsuPage?.bindRootService() }; dsuPage!!.build() }
-                3 -> { if (settingsPage == null) settingsPage = SettingsPage(this, { recreate() }); settingsPage!!.build() }
+                1 -> { if (settingsPage == null) settingsPage = SettingsPage(this, { recreate() }); settingsPage!!.build() }
+                2 -> { if (linuxPage == null) linuxPage = LinuxPage(this, executor); linuxPage!!.build() }
+                3 -> { if (dsuPage == null) { dsuPage = DsuPage(this, executor, pickZipLauncher); dsuPage?.bindRootService() }; dsuPage!!.build() }
                 else -> { if (homePage == null) homePage = HomePage(this); homePage!!.build() }
             }
             val wrapped = ScrollView(this).apply {
-                if (index == 3) isFillViewport = true
+                if (index == 1) isFillViewport = true
                 addView(page)
             }
             pageCache[index] = wrapped
@@ -391,7 +391,7 @@ class MainActivity : AppCompatActivity() {
         for (index in navItems.indices) {
             val item = navItems[index]
             val active = index == tab
-            val isWallpaper = tab == 3 && getPreferences(android.app.Activity.MODE_PRIVATE).getBoolean("wallpaper_sync", false)
+            val isWallpaper = tab == 1 && getPreferences(android.app.Activity.MODE_PRIVATE).getBoolean("wallpaper_sync", false)
             if (isWallpaper) {
                 item.setTextColor(if (active) android.graphics.Color.WHITE else android.graphics.Color.argb(200, 255, 255, 255))
                 item.setShadowLayer(4f, 1f, 1f, android.graphics.Color.argb(180, 0, 0, 0))

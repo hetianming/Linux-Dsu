@@ -106,6 +106,7 @@ public final class DnaModuleActivity extends DnaBaseActivity {
         root.setBackground(new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{pal.bgTop, pal.bgBottom}));
+        com.mcai.ubuntudsu.ui.Ui.INSTANCE.animateLiquidBackground(root);
         com.mcai.ubuntudsu.ui.Ui.INSTANCE.applyContentInsets(root, 8, 0);
 
         ScrollView scroll = new ScrollView(this);
@@ -480,9 +481,10 @@ public final class DnaModuleActivity extends DnaBaseActivity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(18), dp(16), dp(18), dp(16));
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0xF2e9f0f7);
+        boolean dark = com.mcai.ubuntudsu.ui.Ui.INSTANCE.isDark(this);
+        bg.setColor(dark ? 0xF22A3546 : 0xF2e9f0f7);
         bg.setCornerRadius(dp(24));
-        bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
+        bg.setStroke(Math.max(1, dp(1)), dark ? 0x33FFFFFF : 0x66FFFFFF);
         panel.setBackground(bg);
         TextView title = new TextView(this);
         title.setText(t("选择工程", "Select project"));
@@ -514,9 +516,15 @@ public final class DnaModuleActivity extends DnaBaseActivity {
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(12), dp(13), dp(12), dp(13));
             GradientDrawable rowBg = new GradientDrawable();
-            rowBg.setColor(isCur ? 0x332f9c8f : 0x22FFFFFF);
-            rowBg.setCornerRadius(dp(14));
-            rowBg.setStroke(Math.max(1, dp(1)), isCur ? 0x662f9c8f : 0x33FFFFFF);
+            if (dark) {
+                rowBg.setColor(isCur ? 0x4D2f9c8f : 0x332A3546);
+                rowBg.setCornerRadius(dp(14));
+                rowBg.setStroke(Math.max(1, dp(1)), isCur ? 0x662f9c8f : 0x26FFFFFF);
+            } else {
+                rowBg.setColor(isCur ? 0x332f9c8f : 0x22FFFFFF);
+                rowBg.setCornerRadius(dp(14));
+                rowBg.setStroke(Math.max(1, dp(1)), isCur ? 0x662f9c8f : 0x33FFFFFF);
+            }
             row.setBackground(rowBg);
             LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, -2);
             rowLp.bottomMargin = dp(6);

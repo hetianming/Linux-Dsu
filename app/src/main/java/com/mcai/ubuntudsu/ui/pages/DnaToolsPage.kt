@@ -334,8 +334,6 @@ class DnaToolsPage(private val activity: Activity) {
 
         sectionTitle(body, "其他功能", Color.parseColor("#8E6FD8"))
         buildTwoColRow(body, listOf(
-            item("🛡", "去除 vbmeta 验证") { anchor -> openMode("vbmeta", null) },
-            item("🔓", "一键宽容 v2.0") { anchor -> openMode("selinux", null) },
             item("🧬", "合并 my_ 分区") { anchor -> openMode("mergeMy", null) },
             item("🗂", "合并分段 super") { anchor -> openMode("mergeSuper", null) },
             item("📦", "合并其他分区") { anchor -> openMode("mergePart", null) },
@@ -656,7 +654,7 @@ class DnaToolsPage(private val activity: Activity) {
         ))
         AlertDialog.Builder(activity)
             .setTitle("新建工程")
-            .setMessage("工程名将添加 PDNA_ 前缀，创建于 /sdcard/PDNA/ 与 /data/PDNA/")
+            .setMessage("工程名将添加 PDNA_ 前缀，创建于 /sdcard/Linux-Dsu/PDNA/ 与 /data/Linux-Dsu/PDNA/")
             .setView(wrap)
             .setPositiveButton("创建并使用") { _, _ ->
                 val name = input.text?.toString()?.trim() ?: ""
@@ -688,7 +686,7 @@ class DnaToolsPage(private val activity: Activity) {
                 val name = items[which]
                 AlertDialog.Builder(activity)
                     .setTitle("确认删除")
-                    .setMessage("将删除工程 $name（/sdcard/PDNA 与 /data/PDNA 下的目录），不可恢复。")
+                    .setMessage("将删除工程 $name（/sdcard/Linux-Dsu/PDNA 与 /data/Linux-Dsu/PDNA 下的目录），不可恢复。")
                     .setPositiveButton("删除") { _, _ ->
                         Thread {
                             val ok = DnaTools.deleteProject(name)

@@ -126,7 +126,7 @@ class DsuPage(
         // 恢复上次选中的 GSI 包（进程重建场景，fileNameText 创建时同步显示）
         restoreSelectedZip()
 
-        // 进度卡（紧凑单行：状态文字与百分比同行 + 8dp 细进度条，给下方 DSU 工具图标留空间）
+        // 安装进度卡（紧凑单行：百分比在进度条右侧同行 + 细进度条，直接作为安装进度条卡片使用）
         val progressCard = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(Ui.dp(12, d), Ui.dp(6, d), Ui.dp(12, d), Ui.dp(6, d))
@@ -141,7 +141,7 @@ class DsuPage(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        installProgressLabel = label("开始状态：未开始", 12f).apply {
+        installProgressLabel = label("", 12f).apply {
             setTextColor(Ui.secondaryText(activity))
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }

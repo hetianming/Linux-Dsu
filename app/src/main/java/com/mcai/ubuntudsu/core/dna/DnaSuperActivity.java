@@ -210,6 +210,7 @@ public final class DnaSuperActivity extends DnaBaseActivity {
         root.setBackground(new android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{pal.bgTop, pal.bgBottom}));
+        com.mcai.ubuntudsu.ui.Ui.INSTANCE.animateLiquidBackground(root);
         com.mcai.ubuntudsu.ui.Ui.INSTANCE.applyContentInsets(root, 8, 0);
 
         ScrollView page = new ScrollView(this);
@@ -239,7 +240,7 @@ public final class DnaSuperActivity extends DnaBaseActivity {
         sub.setTextColor(pal.subtitle);
         titleBox.addView(sub, new LinearLayout.LayoutParams(-1, -2));
         top.addView(titleBox, new LinearLayout.LayoutParams(0, -2, 1f));
-        // v3.30.32：顶部切换工程按钮（root 列 /sdcard/PDNA 下工程，选择后直接解析其 super.img）
+        // v3.30.32：顶部切换工程按钮（root 列 /sdcard/Linux-Dsu/PDNA 下工程，选择后直接解析其 super.img）
         projectBtn = pillButton("📁 " + (project != null ? project.replaceFirst("^PDNA_", "") : t("工程", "Proj")),
                 11f, pal.accent, dp(96), dp(32));
         projectBtn.setSingleLine(true);
@@ -635,9 +636,10 @@ public final class DnaSuperActivity extends DnaBaseActivity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(16), dp(14), dp(16), dp(12));
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setColor(0xF2e9f0f7);
+        boolean dark = com.mcai.ubuntudsu.ui.Ui.INSTANCE.isDark(this);
+        bg.setColor(dark ? 0xF22A3546 : 0xF2e9f0f7);
         bg.setCornerRadius(dp(24));
-        bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
+        bg.setStroke(Math.max(1, dp(1)), dark ? 0x33FFFFFF : 0x66FFFFFF);
         panel.setBackground(bg);
 
         final LinearLayout list = new LinearLayout(this);
@@ -693,15 +695,21 @@ public final class DnaSuperActivity extends DnaBaseActivity {
                 row.setGravity(Gravity.CENTER_VERTICAL);
                 row.setPadding(dp(10), dp(7), dp(10), dp(7));
                 android.graphics.drawable.GradientDrawable rb = new android.graphics.drawable.GradientDrawable();
-                rb.setColor(on ? 0x3335A8C4 : 0x22FFFFFF);
-                rb.setCornerRadius(dp(12));
-                rb.setStroke(Math.max(1, dp(1)), on ? pal.accent : 0x33FFFFFF);
+                if (dark) {
+                    rb.setColor(on ? 0x4D2f9c8f : 0x332A3546);
+                    rb.setCornerRadius(dp(12));
+                    rb.setStroke(Math.max(1, dp(1)), on ? pal.accent : 0x26FFFFFF);
+                } else {
+                    rb.setColor(on ? 0x3335A8C4 : 0x22FFFFFF);
+                    rb.setCornerRadius(dp(12));
+                    rb.setStroke(Math.max(1, dp(1)), on ? pal.accent : 0x33FFFFFF);
+                }
                 row.setBackground(rb);
                 View dot = new View(this);
                 android.graphics.drawable.GradientDrawable db = new android.graphics.drawable.GradientDrawable();
                 db.setShape(android.graphics.drawable.GradientDrawable.OVAL);
                 if (on) { db.setColor(pal.accent); db.setStroke(Math.max(1, dp(1)), 0xB3FFFFFF); }
-                else { db.setColor(0x00000000); db.setStroke(Math.max(1, dp(1)), 0x668fa1b8); }
+                else { db.setColor(0x00000000); db.setStroke(Math.max(1, dp(1)), dark ? 0x665a728f : 0x668fa1b8); }
                 dot.setBackground(db);
                 row.addView(dot, new LinearLayout.LayoutParams(dp(16), dp(16)));
                 TextView nameView = new TextView(this);
@@ -768,7 +776,7 @@ public final class DnaSuperActivity extends DnaBaseActivity {
 
     // ================= 切换工程（v3.30.32：顶栏按钮） =================
 
-    /** root 列 /sdcard/PDNA 下所有工程（PDNA_ 前缀），弹窗单选；选择后直接解析其 super.img */
+    /** root 列 /sdcard/Linux-Dsu/PDNA 下所有工程（PDNA_ 前缀），弹窗单选；选择后直接解析其 super.img */
     private void showProjectDialog() {
         if (isFinishing() || isDestroyed()) return;
         List<String> projects = new ArrayList<>();
@@ -782,7 +790,7 @@ public final class DnaSuperActivity extends DnaBaseActivity {
         } catch (Exception ignored) {}
         java.util.Collections.sort(projects);
         if (projects.isEmpty()) {
-            toast(t("未找到工程（/sdcard/PDNA/PDNA_*）", "No projects found"));
+            toast(t("未找到工程（/sdcard/Linux-Dsu/PDNA/PDNA_*）", "No projects found"));
             return;
         }
 
@@ -792,9 +800,10 @@ public final class DnaSuperActivity extends DnaBaseActivity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(16), dp(14), dp(16), dp(12));
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setColor(0xF2e9f0f7);
+        boolean dark = com.mcai.ubuntudsu.ui.Ui.INSTANCE.isDark(this);
+        bg.setColor(dark ? 0xF22A3546 : 0xF2e9f0f7);
         bg.setCornerRadius(dp(24));
-        bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
+        bg.setStroke(Math.max(1, dp(1)), dark ? 0x33FFFFFF : 0x66FFFFFF);
         panel.setBackground(bg);
 
         TextView title = new TextView(this);
@@ -818,15 +827,21 @@ public final class DnaSuperActivity extends DnaBaseActivity {
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(10), dp(8), dp(10), dp(8));
             android.graphics.drawable.GradientDrawable rb = new android.graphics.drawable.GradientDrawable();
-            rb.setColor(current ? 0x3335A8C4 : 0x22FFFFFF);
-            rb.setCornerRadius(dp(12));
-            rb.setStroke(Math.max(1, dp(1)), current ? pal.accent : 0x33FFFFFF);
+            if (dark) {
+                rb.setColor(current ? 0x4D2f9c8f : 0x332A3546);
+                rb.setCornerRadius(dp(12));
+                rb.setStroke(Math.max(1, dp(1)), current ? 0x662f9c8f : 0x26FFFFFF);
+            } else {
+                rb.setColor(current ? 0x3335A8C4 : 0x22FFFFFF);
+                rb.setCornerRadius(dp(12));
+                rb.setStroke(Math.max(1, dp(1)), current ? pal.accent : 0x33FFFFFF);
+            }
             row.setBackground(rb);
             View dot = new View(this);
             android.graphics.drawable.GradientDrawable db = new android.graphics.drawable.GradientDrawable();
             db.setShape(android.graphics.drawable.GradientDrawable.OVAL);
             if (current) { db.setColor(pal.accent); db.setStroke(Math.max(1, dp(1)), 0xB3FFFFFF); }
-            else { db.setColor(0x00000000); db.setStroke(Math.max(1, dp(1)), 0x668fa1b8); }
+            else { db.setColor(0x00000000); db.setStroke(Math.max(1, dp(1)), dark ? 0x665a728f : 0x668fa1b8); }
             dot.setBackground(db);
             row.addView(dot, new LinearLayout.LayoutParams(dp(14), dp(14)));
             TextView nameView = new TextView(this);

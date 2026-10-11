@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * DNA · 解压 ROM 独立二级页（v3.30.23）。
  * 对齐原版 home.sh：dna unzip --delete $silence $DNA_DIR/$ZIP $DNA_DIR
- * —— 解压目标固定为工程根目录 /sdcard/PDNA，dna 自动创建 PDNA_<zip名> 新工程。
+ * —— 解压目标固定为工程根目录 /sdcard/Linux-Dsu/PDNA，dna 自动创建 PDNA_<zip名> 新工程。
  * 文件列表点选/再点取消；浏览选择文件，不再提供手动路径输入框。
  */
 public final class DnaUnzipActivity extends DnaBaseActivity {
@@ -141,6 +141,7 @@ public final class DnaUnzipActivity extends DnaBaseActivity {
         root.setBackground(new android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{pal.bgTop, pal.bgBottom}));
+        com.mcai.ubuntudsu.ui.Ui.INSTANCE.animateLiquidBackground(root);
         com.mcai.ubuntudsu.ui.Ui.INSTANCE.applyContentInsets(root, 8, 0);
 
         ScrollView page = new ScrollView(this);

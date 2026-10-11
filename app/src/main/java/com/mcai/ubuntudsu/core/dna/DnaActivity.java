@@ -63,8 +63,6 @@ public final class DnaActivity extends DnaBaseActivity {
     public static final String MODE_ZST = "zst";
     public static final String MODE_CHUNK = "chunk";
     // v3.30.11：原版 more.xml「其它功能」组（入口在 DNA 首页"其他功能"分组，声明玻璃框上方）
-    public static final String MODE_VBMETA = "vbmeta";
-    public static final String MODE_SELINUX = "selinux";
     public static final String MODE_MERGE_MY = "mergeMy";
     public static final String MODE_MERGE_SUPER = "mergeSuper";
     public static final String MODE_MERGE_PART = "mergePart";
@@ -83,7 +81,7 @@ public final class DnaActivity extends DnaBaseActivity {
     private String project;
     // 选中的工程内文件（多选集合 / 单选即一个）
     private final Set<String> picked = new LinkedHashSet<>();
-    // 来自 /data/PDNA/工程名 分解输出目录的名字（合成 repack 数据源）
+    // 来自 /data/Linux-Dsu/PDNA/工程名 分解输出目录的名字（合成 repack 数据源）
     private final Set<String> droNames = new LinkedHashSet<>();
     // 手动输入的外部路径（空格分隔）
     private String manualPaths = "";
@@ -300,6 +298,7 @@ public final class DnaActivity extends DnaBaseActivity {
         pal = Ui.INSTANCE.dnaPalette(this);
         FrameLayout root = new FrameLayout(this);
         root.setBackground(pal.bgDrawable());
+        com.mcai.ubuntudsu.ui.Ui.INSTANCE.animateLiquidBackground(root);
         Ui.INSTANCE.applyContentInsets(root, 8, 0);
 
         ScrollView scroll = new ScrollView(this);
@@ -391,11 +390,9 @@ public final class DnaActivity extends DnaBaseActivity {
         });
         LinearLayout.LayoutParams projLp = new LinearLayout.LayoutParams(-1, -2);
         projLp.bottomMargin = dp(10);
-        // v3.30.12：根目录扫描模式（vbmeta/宽容）与工程无关，隐藏工程横幅
-        if (!rootScanMode()) {
-            content.addView(projectCard, projLp);
-            refreshProjectView();
-        }
+        // 工程横幅
+        content.addView(projectCard, projLp);
+        refreshProjectView();
 
         // ---- 说明条 ----
         TextView desc = new TextView(this);
@@ -416,8 +413,7 @@ public final class DnaActivity extends DnaBaseActivity {
         pickHead.setOrientation(LinearLayout.HORIZONTAL);
         pickHead.setGravity(Gravity.CENTER_VERTICAL);
         TextView pickTitle = new TextView(this);
-        // v3.30.12：根目录扫描模式列 /sdcard/PDMA 根目录文件（非工程目录）
-        pickTitle.setText(rootScanMode() ? t("PDNA 文件（/sdcard/PDNA）", "PDNA files (root)") : t("工程文件", "Project files"));
+        pickTitle.setText(t("工程文件", "Project files"));
         pickTitle.setTextSize(15);
         pickTitle.setTypeface(null, 1);
         pickTitle.setTextColor(pal.title);
@@ -841,8 +837,6 @@ public final class DnaActivity extends DnaBaseActivity {
             case MODE_SPARSE: return "DNA · " + t("img-simg 互转", "img-simg");
             case MODE_ZST: return "DNA · " + t("zst-img 互转", "zst-img");
             case MODE_CHUNK: return "DNA · " + t("合并 Sparse 分段", "Merge sparse chunks");
-            case MODE_VBMETA: return "DNA · " + t("去除 vbmeta 验证", "Remove vbmeta");
-            case MODE_SELINUX: return "DNA · " + t("一键宽容 v2.0", "Permissive v2.0");
             case MODE_MERGE_MY: return "DNA · " + t("合并 my_ 分区进 system", "Merge my_ into system");
             case MODE_MERGE_SUPER: return "DNA · " + t("合并分段 super", "Merge split super");
             case MODE_MERGE_PART: return "DNA · " + t("合并其他分区进 system", "Merge partitions into system");
@@ -856,7 +850,7 @@ public final class DnaActivity extends DnaBaseActivity {
                     "payload.bin / OTA zip → partition images (payload_extract reads payload.bin inside zip natively).");
             case MODE_SUPER_UNPACK: return t("super.img → 分区镜像（lpunpack）。自动识别动态分区，可勾选分区、支持提取后自动分解。",
                     "super.img → partition images (lpunpack).");
-            case MODE_REPACK: return t("分解目录 → img / dat / br 镜像（repack）。自动列出当前工程 /data/PDNA/工程名 下的分解输出目录（原版 findfile.sh dir），支持 ext4 / erofs / f2fs，可多目录同时打包。",
+            case MODE_REPACK: return t("分解目录 → img / dat / br 镜像（repack）。自动列出当前工程 /data/Linux-Dsu/PDNA/工程名 下的分解输出目录（原版 findfile.sh dir），支持 ext4 / erofs / f2fs，可多目录同时打包。",
                     "Extracted dirs → img / dat / br (repack). ext4 / erofs / f2fs.");
             case MODE_SUPER_PACK: return t("分区镜像 → super.img（lpmake）。支持 A-only / AB / Virtual-AB，raw / sparse 输出。",
                     "Partition images → super.img (lpmake).");
@@ -868,10 +862,6 @@ public final class DnaActivity extends DnaBaseActivity {
                     "zst ↔ img (zstd multithread), output to project out/.");
             case MODE_CHUNK: return t("分段 Sparse 镜像合并：xxx.img.1 + xxx.img.2 … → out/xxx.img（simg2img）。",
                     "Merge split sparse images: prefix.N → out/prefix (simg2img).");
-            case MODE_VBMETA: return t("读取 /sdcard/PDNA 根目录下的 img，vbmeta 镜像去除 AVB 验证（magiskboot hexpatch）。原版 del_vbmeta.sh：先 gettype 校验，输出到 /sdcard/PDNA/out/。",
-                    "Read img from /sdcard/PDNA root, disable AVB verification (hexpatch), output to /sdcard/PDNA/out/.");
-            case MODE_SELINUX: return t("读取 /sdcard/PDNA 根目录下的 img，boot / vendor_boot 注入 androidboot.selinux=permissive（magiskboot unpack/repack）。原版 patch_selinux.sh，输出到 /sdcard/PDNA/out/。",
-                    "Read img from /sdcard/PDNA root, inject permissive cmdline, output to /sdcard/PDNA/out/.");
             case MODE_MERGE_MY: return t("把分解出的 my_* 分区目录合并进 system 目录并同步 fs_config / file_contexts（原版 my_partition_merge.sh）。请先分解 my 分区和 system 分区。",
                     "Merge extracted my_* partition dirs into system (my_partition_merge.sh).");
             case MODE_MERGE_SUPER: return t("合并项目目录下的分段 super 文件：super.img.1 + super.img.2 … → out/super.img（原版 merge_superchunk.sh，simg2img）。",
@@ -898,9 +888,6 @@ public final class DnaActivity extends DnaBaseActivity {
             case MODE_ZST: return "zst";
             case MODE_CHUNK: return "split_sparse";
             case MODE_SUPER_UNPACK: return "img";
-            // v3.30.11：原版 findfile.sh img1 —— 工程内全部 img（vbmeta / boot 类选择）
-            case MODE_VBMETA:
-            case MODE_SELINUX: return "img";
             // 原版 findfile.sh split_sparse —— 分段文件列表显示前缀（super.img）
             case MODE_MERGE_SUPER: return "split_sparse";
             default: return filter.isEmpty() ? "img" : filter;
@@ -910,12 +897,6 @@ public final class DnaActivity extends DnaBaseActivity {
     /** 这些模式不显示工程文件选择卡（mergeMy/mergePart 直接作用于分解输出目录） */
     private boolean hideFilePicker() {
         return MODE_MERGE_MY.equals(mode) || MODE_MERGE_PART.equals(mode);
-    }
-
-    /** v3.30.12：vbmeta/宽容按原版脚本语义直接读 /sdcard/PDMA 根目录（$DNA_DIR）下的 img，
-     *  输出到 /sdcard/PDNA/out —— 与工程无关（del_vbmeta.sh / patch_selinux.sh 内部只用 $DNA_DIR） */
-    private boolean rootScanMode() {
-        return MODE_VBMETA.equals(mode) || MODE_SELINUX.equals(mode);
     }
 
     // ============ 工程文件列表（自动加载） ============
@@ -932,33 +913,11 @@ public final class DnaActivity extends DnaBaseActivity {
     }
 
     /** 选择 / 切换工程后自动读取工程内匹配文件，内嵌展示（v3.28.2 核心改动）
-     *  v3.28.3：合成 repack 列出 /data/PDNA/工程名 分解输出目录（原版 findfile.sh dir → DNA_DRO）
-     *  v3.30.12：vbmeta/宽容直接读 /sdcard/PDNA 根目录（原版脚本语义 $DNA_DIR），输出到 /sdcard/PDNA/out */
+     *  v3.28.3：合成 repack 列出 /data/Linux-Dsu/PDNA/工程名 分解输出目录（原版 findfile.sh dir → DNA_DRO） */
     private void refreshProjectFiles() {
         refreshProjectView();
         fileRows.clear();
         fileList.removeAllViews();
-        // 根目录扫描模式：不依赖工程选择，直接列 /sdcard/PDNA 下的 img
-        if (rootScanMode()) {
-            List<String> rootFiles = DnaTools.listProjectFiles(null, "img");
-            projectMeta.setText(t("识别 ", "Scan ") + DnaTools.WORK_ROOT + t(" 下的 img · 输出到 ", " for img · output to ")
-                    + DnaTools.WORK_ROOT + "/out");
-            if (rootFiles.isEmpty()) {
-                fileCountView.setText("");
-                TextView empty = emptyRow(t("/sdcard/PDNA 根目录暂无 img 文件", "No img files in /sdcard/PDMA root"));
-                fileList.addView(empty, new LinearLayout.LayoutParams(-1, -2));
-                return;
-            }
-            picked.retainAll(rootFiles);
-            for (String name : rootFiles) {
-                Row row = buildRow(name, rowExtra(name, "img"), false);
-                fileList.addView(row.view, rowParams());
-                fileRows.add(row);
-            }
-            refreshFileRows();
-            backfillFileTypes(rootFiles, null);
-            return;
-        }
         if (project == null) {
             fileCountView.setText("");
             projectMeta.setText(t("点击卡片选择或新建工程", "Tap card to pick / create a project"));
@@ -1007,7 +966,7 @@ public final class DnaActivity extends DnaBaseActivity {
     }
 
     /** 原版 findfile.sh img 分支：列表显示 dna gettype 类型（unknow 的文件需先去格式转换）。
-     *  dna 冷启动慢，后台批量取类型后回填，不阻塞 UI（proj=null 时列 /sdcard/PDNA 根目录） */
+     *  dna 冷启动慢，后台批量取类型后回填，不阻塞 UI（proj=null 时列 /sdcard/Linux-Dsu/PDNA 根目录） */
     private void backfillFileTypes(List<String> names, String proj) {
         if (names.isEmpty()) return;
         final List<String> list = new ArrayList<>(names);
@@ -1030,8 +989,7 @@ public final class DnaActivity extends DnaBaseActivity {
         if ("dro_dir".equals(type)) {
             return droNames.contains(name) ? t("分解输出", "extracted") : t("工程目录", "in project");
         }
-        // 根目录扫描模式：文件在 /sdcard/PDMA 根，不在工程目录
-        File f = new File(rootScanMode() ? DnaTools.WORK_ROOT : projectPath(), name);
+        File f = new File(projectPath(), name);
         if ("dir".equals(type)) {
             File[] children = f.listFiles();
             int n = children == null ? 0 : children.length;
@@ -1065,10 +1023,11 @@ public final class DnaActivity extends DnaBaseActivity {
         empty.setTextColor(pal.subtitle);
         empty.setGravity(Gravity.CENTER);
         empty.setPadding(dp(10), dp(18), dp(10), dp(18));
+        boolean dark = com.mcai.ubuntudsu.ui.Ui.INSTANCE.isDark(this);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0x26ffffff);
+        bg.setColor(dark ? 0x2A2A3546 : 0x26ffffff);
         bg.setCornerRadius(dp(14));
-        bg.setStroke(Math.max(1, dp(1)), 0x40ffffff);
+        bg.setStroke(Math.max(1, dp(1)), dark ? 0x4DFFFFFF : 0x40ffffff);
         empty.setBackground(bg);
         return empty;
     }
@@ -1610,15 +1569,21 @@ public final class DnaActivity extends DnaBaseActivity {
                 row.setGravity(Gravity.CENTER_VERTICAL);
                 row.setPadding(dp(11), dp(10), dp(10), dp(10));
                 android.graphics.drawable.GradientDrawable rb = new android.graphics.drawable.GradientDrawable();
-                rb.setColor(on ? 0x3335A8C4 : 0x22FFFFFF);
-                rb.setCornerRadius(dp(14));
-                rb.setStroke(Math.max(1, dp(1)), on ? 0xFF35A8C4 : 0x33FFFFFF);
+                if (dark) {
+                    rb.setColor(on ? 0x4D2f9c8f : 0x332A3546);
+                    rb.setCornerRadius(dp(14));
+                    rb.setStroke(Math.max(1, dp(1)), on ? 0x662f9c8f : 0x26FFFFFF);
+                } else {
+                    rb.setColor(on ? 0x3335A8C4 : 0x22FFFFFF);
+                    rb.setCornerRadius(dp(14));
+                    rb.setStroke(Math.max(1, dp(1)), on ? 0xFF35A8C4 : 0x33FFFFFF);
+                }
                 row.setBackground(rb);
                 View dot = new View(this);
                 android.graphics.drawable.GradientDrawable db = new android.graphics.drawable.GradientDrawable();
                 db.setShape(android.graphics.drawable.GradientDrawable.OVAL);
-                if (on) { db.setColor(0xFF35A8C4); db.setStroke(Math.max(1, dp(1)), 0xB3FFFFFF); }
-                else { db.setColor(0x00000000); db.setStroke(Math.max(1, dp(1)), 0x668fa1b8); }
+                if (on) { db.setColor(dark ? 0xFF66b0ff : 0xFF35A8C4); db.setStroke(Math.max(1, dp(1)), 0xB3FFFFFF); }
+                else { db.setColor(0x00000000); db.setStroke(Math.max(1, dp(1)), dark ? 0x665a728f : 0x668fa1b8); }
                 dot.setBackground(db);
                 row.addView(dot, new LinearLayout.LayoutParams(dp(18), dp(18)));
                 TextView nameView = new TextView(this);
@@ -1993,8 +1958,7 @@ public final class DnaActivity extends DnaBaseActivity {
     }
 
     private void execute() {
-        // 根目录扫描模式（vbmeta/宽容）不依赖工程，直接读 /sdcard/PDMA 根目录
-        if (project == null && !rootScanMode()) {
+        if (project == null) {
             toast(t("请先选择工程", "Select a project first"));
             showProjectPicker();
             return;
@@ -2046,15 +2010,10 @@ public final class DnaActivity extends DnaBaseActivity {
     }
 
     /** 工程内选中项 → 绝对路径列表（外加手动输入路径）
-     *  合成 repack：分解输出目录优先（/data/PDNA/工程名/x），回退工程目录
-     *  根目录扫描模式（vbmeta/宽容）：选中项直接映射 /sdcard/PDMA/文件名 */
+     *  合成 repack：分解输出目录优先（/data/Linux-Dsu/PDNA/工程名/x），回退工程目录 */
     private List<String> targetPaths() {
         List<String> paths = new ArrayList<>();
         for (String name : picked) {
-            if (rootScanMode()) {
-                paths.add(DnaTools.WORK_ROOT + "/" + name);
-                continue;
-            }
             if (droNames.contains(name)) paths.add(DnaTools.TMP_ROOT + "/" + project + "/" + name);
             else paths.add(projectPath() + "/" + name);
         }
@@ -2091,10 +2050,6 @@ public final class DnaActivity extends DnaBaseActivity {
                 return t("开始打包", "Pack");
             case MODE_SUPER_PACK:
                 return t("开始打包 SUPER", "Pack SUPER");
-            case MODE_VBMETA:
-                return t("开始去除验证", "Remove AVB");
-            case MODE_SELINUX:
-                return t("开始注入宽容", "Go permissive");
             case MODE_MERGE_MY:
             case MODE_MERGE_SUPER:
             case MODE_MERGE_PART:
@@ -2103,22 +2058,6 @@ public final class DnaActivity extends DnaBaseActivity {
             default:
                 return t("开始转换", "Convert");
         }
-    }
-
-    /** 根目录扫描模式（vbmeta/宽容）：组装 "cp 外部文件; export IMG='基名列表'; "
-     *  脚本按 $DNA_DIR/基名 访问（$DNA_DIR=/sdcard/PDNA），工程外手动输入的路径先复制进 PDNA 根目录 */
-    private String rootScanImgExport(List<String> targets) {
-        StringBuilder pre = new StringBuilder();
-        StringBuilder imgs = new StringBuilder();
-        for (String p : targets) {
-            String name = new File(p).getName();
-            if (!p.startsWith(DnaTools.WORK_ROOT + "/")) {
-                pre.append("cp -f ").append(DnaTools.quote(p)).append(" ")
-                        .append(DnaTools.quote(DnaTools.WORK_ROOT + "/" + name)).append("; ");
-            }
-            imgs.append(" ").append(name);
-        }
-        return pre.append("export IMG='").append(imgs.toString().trim()).append("'; ").toString();
     }
 
     private String buildCommand() {
@@ -2248,21 +2187,7 @@ public final class DnaActivity extends DnaBaseActivity {
                         .append("echo \"> 合并: $__p (${__files})\"; simg2img ${__files} out/$__p || __rc=1; done; cd /; [ \"$__rc\" = \"0\" ]");
                 return cmd.toString();
             }
-            // ============ v3.30.11：原版「其它功能」（assets 内置原版 sh，export 参数后 source 执行） ============
-            case MODE_VBMETA: {
-                if (targets.isEmpty()) { toast(t("请选择 vbmeta 镜像", "Pick vbmeta images first")); return null; }
-                // 原版 del_vbmeta.sh：IMG="a b c"（空格分隔基名），读 $DNA_DIR/基名 → magiskboot hexpatch → $DNA_DIR/out
-                cmd.append(rootScanImgExport(targets)).append(". ")
-                        .append(DnaTools.quote(new File(DnaTools.scriptsDir(this), "del_vbmeta.sh").getAbsolutePath()));
-                return cmd.toString();
-            }
-            case MODE_SELINUX: {
-                if (targets.isEmpty()) { toast(t("请选择 boot 镜像", "Pick boot images first")); return null; }
-                // 原版 patch_selinux.sh：IMG="a b c"，读 $DNA_DIR/基名，magiskboot unpack → sed cmdline → repack → $DNA_DIR/out
-                cmd.append(rootScanImgExport(targets)).append(". ")
-                        .append(DnaTools.quote(new File(DnaTools.scriptsDir(this), "patch_selinux.sh").getAbsolutePath()));
-                return cmd.toString();
-            }
+            // ============ 原版「其它功能」（assets 内置 sh，export 参数后 source 执行） ============
             case MODE_MERGE_MY: {
                 // 原版 my_partition_merge.sh：无参数，遍历 $DNA_DRO 下 my_* 目录合并进 system/
                 cmd.append(". ").append(DnaTools.quote(
@@ -2336,9 +2261,15 @@ public final class DnaActivity extends DnaBaseActivity {
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(12), dp(13), dp(12), dp(13));
             GradientDrawable rowBg = new GradientDrawable();
-            rowBg.setColor(current ? 0x332f9c8f : 0x22FFFFFF);
-            rowBg.setCornerRadius(dp(14));
-            rowBg.setStroke(Math.max(1, dp(1)), current ? 0x662f9c8f : 0x33FFFFFF);
+            if (dark) {
+                rowBg.setColor(current ? 0x4D2f9c8f : 0x332A3546);
+                rowBg.setCornerRadius(dp(14));
+                rowBg.setStroke(Math.max(1, dp(1)), current ? 0x662f9c8f : 0x26FFFFFF);
+            } else {
+                rowBg.setColor(current ? 0x332f9c8f : 0x22FFFFFF);
+                rowBg.setCornerRadius(dp(14));
+                rowBg.setStroke(Math.max(1, dp(1)), current ? 0x662f9c8f : 0x33FFFFFF);
+            }
             row.setBackground(rowBg);
             LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, -2);
             rowLp.bottomMargin = dp(6);

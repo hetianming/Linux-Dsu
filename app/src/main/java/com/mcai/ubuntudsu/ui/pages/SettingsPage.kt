@@ -15,7 +15,7 @@ import com.mcai.ubuntudsu.R
 import android.view.MotionEvent
 import com.mcai.ubuntudsu.ui.Ui
 
-// 「更多」页：桌面图标式网格布局，聚合扩展功能入口
+// 「多功能」页：桌面图标式网格布局，聚合扩展功能入口
 class SettingsPage(
     private val activity: Activity,
     private val onThemeChanged: () -> Unit,
@@ -547,7 +547,7 @@ class SettingsPage(
     }
 
     /**
-     * 将系统壁纸设置为更多页面的背景（仅此页面，不影响其他界面）
+     * 将系统壁纸设置为多功能页面的背景（仅此页面，不影响其他界面）
      * 多种方式降级获取壁纸，确保兼容性
      */
     private fun applyWallpaperBackground(page: View) {

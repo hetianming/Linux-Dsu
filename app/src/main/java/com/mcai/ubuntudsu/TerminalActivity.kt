@@ -11,7 +11,6 @@ import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.content.Context
 import android.widget.LinearLayout
-import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import android.widget.FrameLayout
@@ -117,64 +116,137 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
 
     private fun createShortcutBar(): View {
         val density = resources.displayMetrics.density
+
+        // 深色玻璃按键背景工厂
+        fun darkKey(active: Boolean = false): android.graphics.drawable.GradientDrawable {
+            val radius = 7f * density
+            return android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = radius
+                setColor(if (active) Color.argb(255, 40, 180, 100) else Color.argb(190, 34, 44, 68))
+                setStroke(
+                    (1 * density).toInt(),
+                    if (active) Color.argb(180, 80, 220, 140) else Color.argb(90, 140, 170, 200),
+                )
+            }
+        }
+
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            // 拟态深色玻璃工具条：深海军蓝渐变 + 顶部高光边（与终端深色场景协调）
-            background = android.graphics.drawable.LayerDrawable(
-                arrayOf(
-                    android.graphics.drawable.GradientDrawable(
-                        android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                        intArrayOf(Color.rgb(22, 31, 53), Color.rgb(14, 21, 38)),
-                    ).apply { cornerRadius = 0f },
-                    android.graphics.drawable.GradientDrawable().apply {
-                        setColor(Color.TRANSPARENT)
-                        setStroke((1 * density).toInt(), Color.argb(56, 168, 214, 255))
-                    },
-                ),
-            )
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.argb(235, 20, 28, 50), Color.argb(235, 14, 21, 38)),
+            ).apply {
+                cornerRadius = 10f * density
+                setStroke((1 * density).toInt(), Color.argb(60, 168, 214, 255))
+            }
+            setPadding((4 * density).toInt(), (5 * density).toInt(), (4 * density).toInt(), (4 * density).toInt())
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                marginStart = (6 * density).toInt()
+                marginEnd = (6 * density).toInt()
+                bottomMargin = (12 * density).toInt()
+            }
+        }
+        val keys = listOf(
+            listOf("Ctrl" to null, "Tab" to byteArrayOf(9), "PgUp" to byteArrayOf(27, 91, 53, 126), "Home" to byteArrayOf(27, 91, 72), "↑" to byteArrayOf(27, 91, 65), "End" to byteArrayOf(27, 91, 70), "Esc" to byteArrayOf(27)),
+            listOf("Alt" to null, "PgDn" to byteArrayOf(27, 91, 54, 126), "←" to byteArrayOf(27, 91, 68), "↓" to byteArrayOf(27, 91, 66), "→" to byteArrayOf(27, 91, 67), "Enter" to byteArrayOf(13)),
+        )
+        var altActive = false
+        val keyHeight = (24 * density).toInt()
+        val rowGap = (4 * density).toInt()
+        val keyGap = (2 * density).toInt()
+        val rows = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             )
         }
-        val keys = listOf(
-            listOf("Esc" to byteArrayOf(27), "Tab" to byteArrayOf(9), "PgUp" to byteArrayOf(27, 91, 53, 126), "Home" to byteArrayOf(27, 91, 72), "↑" to byteArrayOf(27, 91, 65), "End" to byteArrayOf(27, 91, 70), "Ctrl" to null),
-            listOf("Alt" to null, "PgDn" to byteArrayOf(27, 91, 54, 126), "←" to byteArrayOf(27, 91, 68), "↓" to byteArrayOf(27, 91, 66), "→" to byteArrayOf(27, 91, 67), "Enter" to byteArrayOf(13)),
-        )
-        var altActive = false
-        val rows = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+        // 第一行：安装桌面 + 启动桌面 + 菜单（与下方按键行同高）
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, rowGap, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, keyHeight + rowGap,
+            )
         }
-        keys.forEach { keyRow ->
+        fun actionPill(label: String, bgTop: Int, bgBottom: Int, onClick: (View) -> Unit): View {
+            return TextView(this).apply {
+                text = label
+                textSize = 11f
+                setTypeface(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD)
+                gravity = Gravity.CENTER
+                setTextColor(Color.WHITE)
+                includeFontPadding = false
+                maxLines = 1
+                isSingleLine = true
+                background = android.graphics.drawable.GradientDrawable(
+                    android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                    intArrayOf(bgTop, bgBottom),
+                ).apply {
+                    cornerRadius = 7f * density
+                    setStroke((1 * density).toInt(), Color.argb(110, 255, 255, 255))
+                }
+                setPadding((8 * density).toInt(), 0, (8 * density).toInt(), 0)
+                layoutParams = LinearLayout.LayoutParams(0, keyHeight, 1f).apply {
+                    marginEnd = keyGap
+                }
+                setOnClickListener { onClick(this) }
+                Ui.pressAnimation(this)
+            }
+        }
+        actionRow.addView(
+            actionPill("菜单", Color.rgb(96, 108, 134), Color.rgb(58, 68, 92)) { showTerminalMenu(it) },
+        )
+        actionRow.addView(actionPill("安装桌面", Color.rgb(200, 70, 70), Color.rgb(150, 45, 45)) { installVncDesktop() })
+        actionRow.addView(actionPill("启动桌面", Color.rgb(70, 165, 150), Color.rgb(45, 125, 110)) { startVnc() })
+        rows.addView(actionRow)
+        // 分隔线：隔开功能排与按键排
+        val divider = View(this).apply {
+            background = android.graphics.drawable.ColorDrawable(Color.argb(80, 150, 190, 235))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, (1 * density).toInt(),
+            ).apply {
+                topMargin = rowGap
+                bottomMargin = rowGap
+            }
+        }
+        rows.addView(divider)
+        keys.forEachIndexed { rowIdx, keyRow ->
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding((2 * density).toInt(), 0, (2 * density).toInt(), 0)
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+                // 行高含行间距，按键贴顶，避免 clipToPadding 裁掉按键顶部
+                gravity = Gravity.TOP
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    if (rowIdx < keys.lastIndex) keyHeight + rowGap else keyHeight,
+                )
             }
             keyRow.forEach { (label, bytes) ->
                 val key = TextView(this).apply {
                     text = label
-                    textSize = 8f
+                    textSize = 10f
                     setTypeface(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD)
                     includeFontPadding = false
                     maxLines = 1
                     isSingleLine = true
                     setHorizontallyScrolling(false)
                     gravity = Gravity.CENTER
-                    setTextColor(Color.BLACK)
-                    background = Ui.lightGlassButton(this@TerminalActivity, 8f)
-                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
-                        marginEnd = (2 * density).toInt()
+                    setTextColor(Color.argb(230, 210, 225, 245))
+                    background = darkKey(false)
+                    layoutParams = LinearLayout.LayoutParams(0, keyHeight, 1f).apply {
+                        marginEnd = if (label == keyRow.last()?.first) 0 else keyGap
                     }
                     setOnClickListener {
                         if (label == "Ctrl") {
                             ctrlKeyActive = !ctrlKeyActive
-                            background = Ui.lightGlassButton(this@TerminalActivity, 8f, if (ctrlKeyActive) Color.rgb(80, 220, 140) else null)
+                            background = darkKey(ctrlKeyActive)
                         } else if (label == "Alt") {
                             altActive = !altActive
-                            background = Ui.lightGlassButton(this@TerminalActivity, 8f, if (altActive) Color.rgb(80, 220, 140) else null)
+                            background = darkKey(altActive)
                         } else {
                             val output = if (ctrlKeyActive && bytes != null && bytes.size == 1) {
                                 byteArrayOf((bytes[0].toInt() and 0x1f).toByte())
@@ -184,9 +256,12 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
                             output?.let { sendShortcut(it) }
                             if (ctrlKeyActive) {
                                 ctrlKeyActive = false
-                                background = Ui.lightGlassButton(this@TerminalActivity, 8f)
+                                background = darkKey(false)
                             }
-                            if (altActive) altActive = false
+                            if (altActive) {
+                                altActive = false
+                                background = darkKey(false)
+                            }
                         }
                         terminalView.requestFocus()
                     }
@@ -196,42 +271,7 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
             }
             rows.addView(row)
         }
-        val menu = TextView(this).apply {
-            text = "⋮"
-            textSize = 24f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            setPadding((12 * density).toInt(), 0, (12 * density).toInt(), 0)
-            setOnClickListener { showTerminalMenu(this) }
-        }
-        val vncInstall = ImageView(this).apply {
-            setImageResource(R.drawable.ic_desktop_install)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(0, 0, 0, 0)
-            setClickable(true)
-            isFocusable = true
-            background = null
-            layoutParams = LinearLayout.LayoutParams((44 * density).toInt(), (44 * density).toInt()).apply {
-                marginStart = (2 * density).toInt()
-            }
-            setOnClickListener { installVncDesktop() }
-        }
-        val vncOpen = ImageView(this).apply {
-            setImageResource(R.drawable.ic_desktop_start)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(0, 0, 0, 0)
-            setClickable(true)
-            isFocusable = true
-            background = null
-            layoutParams = LinearLayout.LayoutParams((44 * density).toInt(), (44 * density).toInt()).apply {
-                marginStart = (2 * density).toInt()
-            }
-            setOnClickListener { startVnc() }
-        }
         bar.addView(rows)
-        bar.addView(vncInstall)
-        bar.addView(vncOpen)
-        bar.addView(menu, LinearLayout.LayoutParams((44 * density).toInt(), ViewGroup.LayoutParams.MATCH_PARENT))
         return bar
     }
 
@@ -394,7 +434,13 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
         popup = PopupWindow(menu, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
             isOutsideTouchable = true
             elevation = (8 * density)
-            showAtLocation(anchor, Gravity.BOTTOM or Gravity.END, 0, anchor.height + Ui.dp(8, density))
+            // 按菜单按钮实际屏幕坐标向上弹：弹窗底部悬在按钮上方 8dp，左缘与按钮对齐，完全避开快捷键栏
+            val anchorLoc = IntArray(2)
+            anchor.getLocationOnScreen(anchorLoc)
+            val rootLoc = IntArray(2)
+            anchor.rootView.getLocationOnScreen(rootLoc)
+            val y = (rootLoc[1] + anchor.rootView.height) - anchorLoc[1] + Ui.dp(8, density)
+            showAtLocation(anchor, Gravity.BOTTOM or Gravity.START, anchorLoc[0], y)
         }
     }
 

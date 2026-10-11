@@ -191,6 +191,7 @@ public final class DnaBinActivity extends DnaBaseActivity {
         pal = com.mcai.ubuntudsu.ui.Ui.INSTANCE.dnaPalette(this);
         FrameLayout root = new FrameLayout(this);
         root.setBackground(pal.bgDrawable());
+        com.mcai.ubuntudsu.ui.Ui.INSTANCE.animateLiquidBackground(root);
         com.mcai.ubuntudsu.ui.Ui.INSTANCE.applyContentInsets(root, 8, 0);
 
         ScrollView page = new ScrollView(this);
@@ -792,7 +793,8 @@ public final class DnaBinActivity extends DnaBaseActivity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(18), dp(16), dp(18), dp(14));
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setColor(0xF2e9f0f7);
+        boolean dark = com.mcai.ubuntudsu.ui.Ui.INSTANCE.isDark(this);
+        bg.setColor(dark ? 0xF22A3546 : 0xF2e9f0f7);
         bg.setCornerRadius(dp(24));
         bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
         panel.setBackground(bg);
@@ -836,16 +838,22 @@ public final class DnaBinActivity extends DnaBaseActivity {
                 row.setGravity(Gravity.CENTER_VERTICAL);
                 row.setPadding(dp(11), dp(10), dp(10), dp(10));
                 android.graphics.drawable.GradientDrawable rb = new android.graphics.drawable.GradientDrawable();
-                rb.setColor(on ? 0x3335A8C4 : 0x22FFFFFF);
-                rb.setCornerRadius(dp(14));
-                rb.setStroke(Math.max(1, dp(1)), on ? pal.accent : 0x33FFFFFF);
+                if (dark) {
+                    rb.setColor(on ? 0x4D2f9c8f : 0x332A3546);
+                    rb.setCornerRadius(dp(14));
+                    rb.setStroke(Math.max(1, dp(1)), on ? pal.accent : 0x26FFFFFF);
+                } else {
+                    rb.setColor(on ? 0x3335A8C4 : 0x22FFFFFF);
+                    rb.setCornerRadius(dp(14));
+                    rb.setStroke(Math.max(1, dp(1)), on ? pal.accent : 0x33FFFFFF);
+                }
                 row.setBackground(rb);
                 // 勾选圆点
                 View dot = new View(this);
                 android.graphics.drawable.GradientDrawable db = new android.graphics.drawable.GradientDrawable();
                 db.setShape(android.graphics.drawable.GradientDrawable.OVAL);
                 if (on) { db.setColor(pal.accent); db.setStroke(Math.max(1, dp(1)), 0xB3FFFFFF); }
-                else { db.setColor(0x00000000); db.setStroke(Math.max(1, dp(1)), 0x668fa1b8); }
+                else { db.setColor(0x00000000); db.setStroke(Math.max(1, dp(1)), dark ? 0x665a728f : 0x668fa1b8); }
                 dot.setBackground(db);
                 row.addView(dot, new LinearLayout.LayoutParams(dp(18), dp(18)));
                 // 名称
@@ -1236,9 +1244,10 @@ public final class DnaBinActivity extends DnaBaseActivity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(18), dp(16), dp(18), dp(16));
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setColor(0xF2e9f0f7);
+        boolean dark = com.mcai.ubuntudsu.ui.Ui.INSTANCE.isDark(this);
+        bg.setColor(dark ? 0xF22A3546 : 0xF2e9f0f7);
         bg.setCornerRadius(dp(24));
-        bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
+        bg.setStroke(Math.max(1, dp(1)), dark ? 0x33FFFFFF : 0x66FFFFFF);
         panel.setBackground(bg);
         TextView title = new TextView(this);
         title.setText(t("选择工程", "Select project"));
@@ -1270,9 +1279,15 @@ public final class DnaBinActivity extends DnaBaseActivity {
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(12), dp(13), dp(12), dp(13));
             android.graphics.drawable.GradientDrawable rb = new android.graphics.drawable.GradientDrawable();
-            rb.setColor(cur ? 0x332f9c8f : 0x22FFFFFF);
-            rb.setCornerRadius(dp(14));
-            rb.setStroke(Math.max(1, dp(1)), cur ? 0x662f9c8f : 0x33FFFFFF);
+            if (dark) {
+                rb.setColor(cur ? 0x4D2f9c8f : 0x332A3546);
+                rb.setCornerRadius(dp(14));
+                rb.setStroke(Math.max(1, dp(1)), cur ? 0x662f9c8f : 0x26FFFFFF);
+            } else {
+                rb.setColor(cur ? 0x332f9c8f : 0x22FFFFFF);
+                rb.setCornerRadius(dp(14));
+                rb.setStroke(Math.max(1, dp(1)), cur ? 0x662f9c8f : 0x33FFFFFF);
+            }
             row.setBackground(rb);
             LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(-1, -2);
             rLp.bottomMargin = dp(6);
