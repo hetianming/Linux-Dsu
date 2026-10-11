@@ -47,6 +47,8 @@ class HomePage(
     private var chargeStateText: TextView? = null
     private var tempValueText: TextView? = null
     private var tempStatePill: TextView? = null
+    // sysfs 直读被限制时是否可用 root 兜底（缓存探测结果）
+    @Volatile private var rootBatteryFallback: Boolean? = null
     // 首页不能和 Linux/DSU 的耗时任务共用 MainActivity 单线程队列：
     // 否则 GPU/ROOT 探测超时后会把“ROOT/GSI/Linux/桌面”永久堵在“检测中”。
     private val metricsExecutor = Executors.newSingleThreadExecutor()
@@ -366,39 +368,27 @@ class HomePage(
                 val result = com.mcai.ubuntudsu.core.StatusDetector.deviceMetrics(activity, cpuSample)
                 cpuSample = result.second
                 val metrics = result.first
-                val batteryTemp = readBatteryTempCelsius()
-                val base = "/sys/class/power_supply/battery"
-                val level = runCatching { java.io.File("$base/capacity").readText().trim().toIntOrNull() }
-                    .getOrNull()?.takeIf { it in 0..100 }
-                val statusRaw = runCatching { java.io.File("$base/status").readText().trim() }.getOrNull() ?: ""
-                val chargeLabel = when (statusRaw.lowercase()) {
-                    "charging" -> "充电中"
-                    "full" -> "已充满"
-                    "discharging" -> "放电中"
-                    "not charging" -> "未充电"
-                    else -> if (statusRaw.isEmpty()) "--" else statusRaw
-                }
-                val charging = statusRaw.equals("charging", true)
+                val battery = readBatteryData()
                 activity.runOnUiThread {
                     if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
                     storageValue.text = "${metrics.storagePercent}%"
                     storageDetail.text = "${metrics.storageUsed} / ${metrics.storageTotal}"
                     memoryValue.text = "${metrics.memoryPercent}%"
                     memoryDetail.text = "${metrics.memoryUsed} / ${metrics.memoryTotal}"
-                    batteryIcon?.level = level ?: -1
-                    batteryIcon?.charging = charging
-                    chargeStateText?.text = chargeLabel
+                    batteryIcon?.level = battery.level ?: -1
+                    batteryIcon?.charging = battery.charging
+                    chargeStateText?.text = battery.statusLabel
                     tempValueText?.let { tv ->
-                        if (batteryTemp != null) {
-                            tv.text = String.format(java.util.Locale.US, "%.1f°C", batteryTemp)
-                            tv.setTextColor(if (batteryTemp > 40.0) Color.rgb(255, 92, 92) else Color.rgb(110, 193, 255))
+                        if (battery.temp != null) {
+                            tv.text = String.format(java.util.Locale.US, "%.1f°C", battery.temp)
+                            tv.setTextColor(if (battery.temp > 40.0) Color.rgb(255, 92, 92) else Color.rgb(110, 193, 255))
                         } else {
                             tv.text = "--.-°C"
                             tv.setTextColor(Color.argb(200, 255, 255, 255))
                         }
                     }
                     tempStatePill?.let { pill ->
-                        val hot = batteryTemp != null && batteryTemp > 40.0
+                        val hot = battery.temp != null && battery.temp > 40.0
                         pill.text = if (hot) "过热" else "正常"
                         pill.background = Ui.rounded(
                             if (hot) Color.argb(235, 226, 68, 56) else Color.argb(235, 46, 170, 108),
@@ -414,19 +404,60 @@ class HomePage(
         }
     }
 
-    /** 读取电池温度（°C）：sysfs 节点大多以 0.1°C 为单位，按量级自动换算。 */
-    private fun readBatteryTempCelsius(): Double? {
-        val nodes = arrayOf(
-            "/sys/class/power_supply/battery/temp",
-            "/sys/class/power_supply/bms/temp",
-        )
-        for (path in nodes) {
-            val raw = runCatching { java.io.File(path).readText().trim().toDoubleOrNull() }.getOrNull() ?: continue
-            if (raw.isNaN()) continue
-            val celsius = if (raw > 80.0 || raw < -20.0) raw / 10.0 else raw
-            if (celsius in -20.0..80.0) return celsius
+    /** 电池实时数据：电量 / 充电状态 / 温度。 */
+    private class BatteryData(
+        val level: Int?,
+        val statusLabel: String,
+        val charging: Boolean,
+        val temp: Double?,
+    )
+
+    /** 读取电池数据：优先直读 sysfs；部分机型 SELinux 拦截直读时，合并一条 root cat 兜底（单次 su 开销）。 */
+    private fun readBatteryData(): BatteryData {
+        val base = "/sys/class/power_supply/battery"
+        fun direct(path: String) = runCatching { java.io.File(path).readText().trim() }.getOrNull() ?: ""
+        var cap = direct("$base/capacity")
+        var sta = direct("$base/status")
+        var tmp = direct("$base/temp")
+        if (cap.isEmpty() || sta.isEmpty() || tmp.isEmpty()) {
+            // 仅在 ROOT 可用时走 root 兜底；结果缓存，避免每 2s 轮询反复探测 su。
+            val fallback = rootBatteryFallback ?: run {
+                val ok = runCatching { com.mcai.ubuntudsu.core.RootShell.available(timeoutMs = 3000) }.getOrDefault(false)
+                rootBatteryFallback = ok
+                ok
+            }
+            if (fallback) {
+                val result = com.mcai.ubuntudsu.core.RootShell.exec(
+                    "cat $base/capacity 2>/dev/null; echo ---; cat $base/status 2>/dev/null; echo ---; " +
+                        "cat $base/temp 2>/dev/null || cat /sys/class/power_supply/bms/temp 2>/dev/null",
+                    timeoutMs = 5000,
+                )
+                if (result.success) {
+                    val parts = result.stdout.replace("\r", "").trim().split("---")
+                    if (parts.size >= 3) {
+                        if (cap.isEmpty()) cap = parts[0].trim()
+                        if (sta.isEmpty()) sta = parts[1].trim()
+                        if (tmp.isEmpty()) tmp = parts[2].trim()
+                    }
+                }
+            }
+            if (tmp.isEmpty()) tmp = direct("/sys/class/power_supply/bms/temp")
         }
-        return null
+        val level = cap.toIntOrNull()?.takeIf { it in 0..100 }
+        val statusLabel = when (sta.lowercase()) {
+            "charging" -> "充电中"
+            "full" -> "已充满"
+            "discharging" -> "放电中"
+            "not charging" -> "未充电"
+            else -> if (sta.isEmpty()) "--" else sta
+        }
+        val temp = tmp.toDoubleOrNull()?.let { raw ->
+            if (raw.isNaN()) null else {
+                val c = if (raw > 80.0 || raw < -20.0) raw / 10.0 else raw
+                if (c in -20.0..80.0) c else null
+            }
+        }
+        return BatteryData(level, statusLabel, sta.equals("charging", true), temp)
     }
 
     private fun detailMetric(title: String, color: Int): Triple<TextView, TextView, View> {
@@ -896,8 +927,8 @@ class HomePage(
         val battCard = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(Ui.dp(12, d), Ui.dp(7, d), Ui.dp(12, d), Ui.dp(7, d))
-            background = Ui.rounded(Color.argb(125, 8, 12, 24), 14f, d)
+            setPadding(Ui.dp(9, d), Ui.dp(6, d), Ui.dp(9, d), Ui.dp(6, d))
+            background = Ui.rounded(Color.argb(125, 8, 12, 24), 12f, d)
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -911,15 +942,15 @@ class HomePage(
             gravity = Gravity.CENTER_HORIZONTAL
         }
         batteryIcon = BatteryIconView(activity).apply {
-            layoutParams = LinearLayout.LayoutParams(Ui.dp(46, d), Ui.dp(20, d))
+            layoutParams = LinearLayout.LayoutParams(Ui.dp(38, d), Ui.dp(16, d))
         }
         leftCol.addView(batteryIcon)
         chargeStateText = TextView(activity).apply {
             text = "读取中"
-            textSize = 9.5f
+            textSize = 9f
             setTextColor(Color.argb(225, 255, 255, 255))
             gravity = Gravity.CENTER
-            setPadding(0, Ui.dp(3, d), 0, 0)
+            setPadding(0, Ui.dp(2, d), 0, 0)
         }
         leftCol.addView(chargeStateText)
         battCard.addView(leftCol)
@@ -928,19 +959,20 @@ class HomePage(
         val rightCol = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(Ui.dp(12, d), 0, 0, 0)
+            setPadding(Ui.dp(10, d), 0, 0, 0)
         }
         val tempRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        tempRow.addView(ThermoIconView(activity), LinearLayout.LayoutParams(Ui.dp(10, d), Ui.dp(20, d)))
+        tempRow.addView(ThermoIconView(activity), LinearLayout.LayoutParams(Ui.dp(8, d), Ui.dp(16, d)))
         tempValueText = TextView(activity).apply {
             text = "--.-°C"
-            textSize = 12.5f
+            textSize = 11.5f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Color.rgb(110, 193, 255))
             setPadding(Ui.dp(4, d), 0, 0, 0)
+            includeFontPadding = false
         }
         tempRow.addView(tempValueText)
         rightCol.addView(tempRow)
@@ -950,12 +982,12 @@ class HomePage(
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-            setPadding(Ui.dp(9, d), Ui.dp(1, d), Ui.dp(9, d), Ui.dp(1, d))
+            setPadding(Ui.dp(7, d), Ui.dp(1, d), Ui.dp(7, d), Ui.dp(1, d))
             background = Ui.rounded(Color.argb(235, 46, 170, 108), 9f, d)
         }
         rightCol.addView(tempStatePill, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-        ).apply { topMargin = Ui.dp(3, d) })
+        ).apply { topMargin = Ui.dp(2, d) })
         battCard.addView(rightCol)
 
         hero.addView(battCard)
