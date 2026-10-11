@@ -88,10 +88,10 @@ object StatusDetector {
     }
 
     private val gpuPaths = listOf(
-        "/sys/class/kgsl/kgsl-3d0/gpu_busy_percent",
         "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
         "/sys/kernel/ged/hal/gpu_loading",
         "/sys/kernel/gpu/gpu_busy",
+        "/sys/class/kgsl/kgsl-3d0/gpu_busy_percent",
         "/sys/class/misc/mali0/device/utilisation",
         "/proc/gpufreq/gpufreq_var_dump",
         "/sys/devices/platform/13000000.mali/gpu_busy",
@@ -142,7 +142,8 @@ object StatusDetector {
             script.append("cat \"").append(path).append("\" 2>/dev/null\n")
         }
         val res = RootShell.exec(script.toString(), timeoutMs = 6000)
-        if (!res.success) return null
+        // 不依赖退出码：脚本里任一 cat 失败（节点不存在）都会让 $? 非 0，
+        // 但前面已成功节点的输出仍在 stdout 里，直接解析分段即可。
         val segments = res.stdout.split(Regex("__GPU\\d+__")).drop(1)
         segments.forEachIndexed { i, seg ->
             val path = gpuPaths.getOrNull(i) ?: return@forEachIndexed
@@ -153,11 +154,18 @@ object StatusDetector {
         }
         return null
     }
-    /** 简单数值节点：内容形如 "42 %"、"8"。 */
+    /** 简单数值节点：单数值百分比（"42 %"、"8"）或 "busy total" 两数字（取比例）。 */
     private fun parseGpuNode(raw: String): Int? = runCatching {
-        val text = raw.trim().lowercase().removeSuffix("%")
-        val digits = Regex("""(\d+(?:\.\d+)?)""").find(text)?.groupValues?.get(1)
-        digits?.toFloatOrNull()?.toInt()?.coerceIn(0, 100)
+        val nums = Regex("""\d+(?:\.\d+)?""").findAll(raw.trim()).map { it.value.toFloat() }.toList()
+        val value = when {
+            nums.size >= 2 && nums[1] > 0f -> (nums[0] * 100f / nums[1]).toInt().coerceIn(0, 100)
+            nums.isNotEmpty() -> {
+                val v = nums[0].toInt()
+                if (v in 0..100) v else return@runCatching null
+            }
+            else -> return@runCatching null
+        }
+        value
     }.getOrNull()
 
     /** MTK gpufreq_var_dump：整行含 "loading = 17%"，需按字段提取（首个数字是频率）。 */
