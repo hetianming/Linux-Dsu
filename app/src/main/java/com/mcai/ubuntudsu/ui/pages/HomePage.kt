@@ -1075,10 +1075,10 @@ class HomePage(
             setImageResource(R.drawable.ic_windmill)
             scaleType = ImageView.ScaleType.FIT_CENTER
             layoutParams = FrameLayout.LayoutParams(
-                Ui.dp(44, d), Ui.dp(44, d),
+                Ui.dp(34, d), Ui.dp(34, d),
                 Gravity.TOP or Gravity.END,
             ).apply {
-                marginEnd = Ui.dp(14, d); topMargin = Ui.dp(14, d)
+                marginEnd = Ui.dp(14, d); topMargin = Ui.dp(6, d)
             }
         }
         hero.addView(windmillIcon)
