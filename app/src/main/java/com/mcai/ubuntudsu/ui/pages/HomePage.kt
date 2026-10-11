@@ -1076,10 +1076,10 @@ class HomePage(
             alpha = 0.85f
             scaleType = ImageView.ScaleType.FIT_CENTER
             layoutParams = FrameLayout.LayoutParams(
-                Ui.dp(20, d), Ui.dp(20, d),
+                Ui.dp(36, d), Ui.dp(36, d),
                 Gravity.TOP or Gravity.END,
             ).apply {
-                marginEnd = Ui.dp(14, d); topMargin = Ui.dp(12, d)
+                marginEnd = Ui.dp(12, d); topMargin = Ui.dp(10, d)
             }
         }
         hero.addView(windmill)

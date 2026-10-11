@@ -1,21 +1,68 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+
+    <!-- 上叶：蓝绿渐变 -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M12,12 L12,3 C13.5,4.5 13.5,9 12,12 Z" />
+        android:pathData="M24,24 L24,4 C33,8 36,16 24,24 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="24" android:startY="4"
+                android:endX="36"  android:endY="24">
+                <item android:offset="0" android:color="#FF8ED2F0" />
+                <item android:offset="1" android:color="#FFB9E8F5" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 右叶：绿色 -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M12,12 L21,12 C19.5,13.5 15,13.5 12,12 Z" />
+        android:pathData="M24,24 L44,24 C40,33 32,36 24,24 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="24" android:startY="16"
+                android:endX="44"  android:endY="32">
+                <item android:offset="0" android:color="#FF9FEBC4" />
+                <item android:offset="1" android:color="#FF6ED8A0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 下叶：蓝绿渐变（对角） -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M12,12 L12,21 C10.5,19.5 10.5,15 12,12 Z" />
+        android:pathData="M24,24 L24,44 C15,40 12,32 24,24 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="12" android:startY="24"
+                android:endX="24"  android:endY="44">
+                <item android:offset="0" android:color="#FF8ED2F0" />
+                <item android:offset="1" android:color="#FFB9E8F5" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 左叶：绿色（对角） -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M12,12 L3,12 C4.5,10.5 9,10.5 12,12 Z" />
+        android:pathData="M24,24 L4,24 C8,15 16,12 24,24 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="4"  android:startY="24"
+                android:endX="24"   android:endY="36">
+                <item android:offset="0" android:color="#FF6ED8A0" />
+                <item android:offset="1" android:color="#FF9FEBC4" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 中心圆帽 -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M13.5,12 a1.5,1.5 0 1 1 -3,0 a1.5,1.5 0 1 1 3,0 z" />
+        android:fillColor="#FFD4F5E8"
+        android:pathData="M27,24 a3,3 0 1 1 -6,0 a3,3 0 1 1 6,0 z" />
 </vector>
