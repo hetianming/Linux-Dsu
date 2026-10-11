@@ -42,8 +42,11 @@ class HomePage(
     private var heroScrim: View? = null
     private var heroTitle: TextView? = null
     private var heroSubtitle: TextView? = null
-    // 头图左上角：实时电池温度（>40°C 红，≤40°C 蓝）
-    private var batteryTempText: TextView? = null
+    // 头图左上角：电池/温度双列状态卡（样式对齐参考图，数据实时读 sysfs）
+    private var batteryIcon: BatteryIconView? = null
+    private var chargeStateText: TextView? = null
+    private var tempValueText: TextView? = null
+    private var tempStatePill: TextView? = null
     // 首页不能和 Linux/DSU 的耗时任务共用 MainActivity 单线程队列：
     // 否则 GPU/ROOT 探测超时后会把“ROOT/GSI/Linux/桌面”永久堵在“检测中”。
     private val metricsExecutor = Executors.newSingleThreadExecutor()
@@ -364,22 +367,44 @@ class HomePage(
                 cpuSample = result.second
                 val metrics = result.first
                 val batteryTemp = readBatteryTempCelsius()
+                val base = "/sys/class/power_supply/battery"
+                val level = runCatching { java.io.File("$base/capacity").readText().trim().toIntOrNull() }
+                    .getOrNull()?.takeIf { it in 0..100 }
+                val statusRaw = runCatching { java.io.File("$base/status").readText().trim() }.getOrNull() ?: ""
+                val chargeLabel = when (statusRaw.lowercase()) {
+                    "charging" -> "充电中"
+                    "full" -> "已充满"
+                    "discharging" -> "放电中"
+                    "not charging" -> "未充电"
+                    else -> if (statusRaw.isEmpty()) "--" else statusRaw
+                }
+                val charging = statusRaw.equals("charging", true)
                 activity.runOnUiThread {
                     if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
                     storageValue.text = "${metrics.storagePercent}%"
                     storageDetail.text = "${metrics.storageUsed} / ${metrics.storageTotal}"
                     memoryValue.text = "${metrics.memoryPercent}%"
                     memoryDetail.text = "${metrics.memoryUsed} / ${metrics.memoryTotal}"
-                    batteryTempText?.let { tv ->
+                    batteryIcon?.level = level ?: -1
+                    batteryIcon?.charging = charging
+                    chargeStateText?.text = chargeLabel
+                    tempValueText?.let { tv ->
                         if (batteryTemp != null) {
-                            tv.text = String.format(java.util.Locale.US, "电池 %.1f°C", batteryTemp)
-                            tv.setTextColor(
-                                if (batteryTemp > 40.0) Color.rgb(255, 92, 92) else Color.rgb(110, 193, 255),
-                            )
+                            tv.text = String.format(java.util.Locale.US, "%.1f°C", batteryTemp)
+                            tv.setTextColor(if (batteryTemp > 40.0) Color.rgb(255, 92, 92) else Color.rgb(110, 193, 255))
                         } else {
-                            tv.text = "电池 --"
+                            tv.text = "--.-°C"
                             tv.setTextColor(Color.argb(200, 255, 255, 255))
                         }
+                    }
+                    tempStatePill?.let { pill ->
+                        val hot = batteryTemp != null && batteryTemp > 40.0
+                        pill.text = if (hot) "过热" else "正常"
+                        pill.background = Ui.rounded(
+                            if (hot) Color.argb(235, 226, 68, 56) else Color.argb(235, 46, 170, 108),
+                            9f,
+                            activity.resources.displayMetrics.density,
+                        )
                     }
                     onResult(metrics.cpuPercent, metrics.gpuPercent)
                 }
@@ -445,6 +470,90 @@ class HomePage(
             addView(detailView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
         return Triple(valueView, detailView, card)
+    }
+
+    /** 电池图标：白色描边外壳 + 按电量比例填充，百分比文字内嵌（参考图同款）。 */
+    private class BatteryIconView(context: android.content.Context) : View(context) {
+        var level: Int = -1
+            set(value) { field = value; invalidate() }
+        var charging: Boolean = false
+            set(value) { field = value; invalidate() }
+
+        private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        private val textPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            textAlign = android.graphics.Paint.Align.CENTER
+            setShadowLayer(2f, 0f, 1f, Color.argb(160, 0, 0, 0))
+        }
+
+        private fun fillColor(): Int = when {
+            charging || level >= 50 -> Color.rgb(76, 217, 123)
+            level >= 20 -> Color.rgb(251, 191, 36)
+            else -> Color.rgb(255, 92, 92)
+        }
+
+        override fun onDraw(canvas: android.graphics.Canvas) {
+            super.onDraw(canvas)
+            val w = width.toFloat()
+            val h = height.toFloat()
+            val nubW = w * 0.08f
+            val bodyW = w - nubW
+            val stroke = h * 0.11f
+            val radius = h * 0.24f
+
+            // 外壳描边
+            paint.style = android.graphics.Paint.Style.STROKE
+            paint.strokeWidth = stroke
+            paint.color = Color.argb(240, 255, 255, 255)
+            canvas.drawRoundRect(stroke / 2, stroke / 2, bodyW - stroke / 2, h - stroke / 2, radius, radius, paint)
+
+            // 正极凸头
+            paint.style = android.graphics.Paint.Style.FILL
+            canvas.drawRoundRect(bodyW + stroke * 0.4f, h * 0.32f, w, h * 0.68f, stroke, stroke, paint)
+
+            // 电量填充
+            if (level in 0..100) {
+                val inset = stroke * 1.7f
+                val availW = (bodyW - stroke / 2) - inset
+                val fillW = availW * level.coerceIn(0, 100) / 100f
+                paint.color = fillColor()
+                canvas.drawRoundRect(inset, inset, inset + fillW, h - inset, radius * 0.55f, radius * 0.55f, paint)
+            }
+
+            // 百分比内嵌文字
+            if (level in 0..100) {
+                textPaint.textSize = h * 0.52f
+                val label = "$level%"
+                val baseline = h / 2f - (textPaint.ascent() + textPaint.descent()) / 2f
+                canvas.drawText(label, (bodyW - stroke / 2) / 2f, baseline, textPaint)
+            }
+        }
+    }
+
+    /** 温度计图标：白色轮廓 + 红色汞柱（参考图同款）。 */
+    private class ThermoIconView(context: android.content.Context) : View(context) {
+        private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+
+        override fun onDraw(canvas: android.graphics.Canvas) {
+            super.onDraw(canvas)
+            val w = width.toFloat()
+            val h = height.toFloat()
+            val cx = w / 2f
+            val bulbR = w * 0.5f
+            val bulbCy = h - bulbR
+
+            // 白色轮廓
+            paint.style = android.graphics.Paint.Style.FILL
+            paint.color = Color.argb(240, 255, 255, 255)
+            canvas.drawRoundRect(cx - w * 0.42f, 0f, cx + w * 0.42f, bulbCy + bulbR * 0.4f, w * 0.42f, w * 0.42f, paint)
+            canvas.drawCircle(cx, bulbCy, bulbR, paint)
+
+            // 红色汞柱 + 汞泡
+            paint.color = Color.rgb(255, 82, 70)
+            canvas.drawRoundRect(cx - w * 0.19f, h * 0.10f, cx + w * 0.19f, bulbCy + bulbR * 0.2f, w * 0.19f, w * 0.19f, paint)
+            canvas.drawCircle(cx, bulbCy, bulbR * 0.62f, paint)
+        }
     }
 
     private class UsageGauge(
@@ -783,22 +892,73 @@ class HomePage(
         }
         hero.addView(heroImage)
 
-        // 左上角：实时电池温度胶囊（深色半透明底衬保证任意壁纸上可读，随 2s metrics 轮询刷新）
-        batteryTempText = TextView(activity).apply {
-            text = "电池 --"
-            textSize = 11.5f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setTextColor(Color.argb(200, 255, 255, 255))
-            gravity = Gravity.CENTER
-            setPadding(Ui.dp(10, d), Ui.dp(5, d), Ui.dp(10, d), Ui.dp(5, d))
-            background = Ui.rounded(Color.argb(120, 8, 12, 24), 14f, d)
+        // 左上角：电池/温度双列状态卡（深色半透明底衬保证任意壁纸上可读，随 2s metrics 轮询刷新）
+        val battCard = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(Ui.dp(12, d), Ui.dp(7, d), Ui.dp(12, d), Ui.dp(7, d))
+            background = Ui.rounded(Color.argb(125, 8, 12, 24), 14f, d)
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP or Gravity.START,
             ).apply { marginStart = Ui.dp(12, d); topMargin = Ui.dp(12, d) }
         }
-        hero.addView(batteryTempText)
+
+        // 左列：电池图标（电量内嵌）+ 充电状态
+        val leftCol = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+        batteryIcon = BatteryIconView(activity).apply {
+            layoutParams = LinearLayout.LayoutParams(Ui.dp(46, d), Ui.dp(20, d))
+        }
+        leftCol.addView(batteryIcon)
+        chargeStateText = TextView(activity).apply {
+            text = "读取中"
+            textSize = 9.5f
+            setTextColor(Color.argb(225, 255, 255, 255))
+            gravity = Gravity.CENTER
+            setPadding(0, Ui.dp(3, d), 0, 0)
+        }
+        leftCol.addView(chargeStateText)
+        battCard.addView(leftCol)
+
+        // 右列：温度计图标 + 温度值 / 状态徽章
+        val rightCol = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(Ui.dp(12, d), 0, 0, 0)
+        }
+        val tempRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        tempRow.addView(ThermoIconView(activity), LinearLayout.LayoutParams(Ui.dp(10, d), Ui.dp(20, d)))
+        tempValueText = TextView(activity).apply {
+            text = "--.-°C"
+            textSize = 12.5f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(Color.rgb(110, 193, 255))
+            setPadding(Ui.dp(4, d), 0, 0, 0)
+        }
+        tempRow.addView(tempValueText)
+        rightCol.addView(tempRow)
+        tempStatePill = TextView(activity).apply {
+            text = "正常"
+            textSize = 9f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(Ui.dp(9, d), Ui.dp(1, d), Ui.dp(9, d), Ui.dp(1, d))
+            background = Ui.rounded(Color.argb(235, 46, 170, 108), 9f, d)
+        }
+        rightCol.addView(tempStatePill, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = Ui.dp(3, d) })
+        battCard.addView(rightCol)
+
+        hero.addView(battCard)
 
         // 底部渐变压暗：保证白色文案可读（默认壁纸与自定义图都需要）
         heroScrim = View(activity).apply {
