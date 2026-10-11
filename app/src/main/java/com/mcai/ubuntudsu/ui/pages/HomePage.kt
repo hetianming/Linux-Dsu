@@ -751,7 +751,7 @@ class HomePage(
                 paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
                 paint.textSize = size * 0.28f
                 paint.color = numC
-                val text = if (value != null && value!! > 0) "$percent%" else "--"
+                val text = if (value != null) "$percent%" else "--"
                 val valueBaseline = cy - (paint.ascent() + paint.descent()) / 2f
                 paint.maskFilter = android.graphics.BlurMaskFilter(size * 0.028f, android.graphics.BlurMaskFilter.Blur.NORMAL)
                 paint.alpha = 200
@@ -814,7 +814,7 @@ class HomePage(
             paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
             paint.textSize = size * 0.28f
             paint.color = if (dark) lightC else darkC
-            val text = if (value != null && value!! > 0) "$percent%" else "--"
+            val text = if (value != null) "$percent%" else "--"
             val valueBaseline = cy - (paint.ascent() + paint.descent()) / 2f
             canvas.drawText(text, cx, valueBaseline, paint)
         }

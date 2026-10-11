@@ -179,9 +179,9 @@ object StatusDetector {
         readGpuPercent()
     }
 
-    /** 暴露当前 GPU 值（可能是 null，表盘据此决定显示 "--" 或数值）。 */
+    /** 暴露当前 GPU 值（表盘据此渲染；从未读到过值时返回 0 表示空闲，避免首帧闪 "--"）。 */
     @JvmStatic
-    fun currentGpuPercent(): Int? = lastGpuValue
+    fun currentGpuPercent(): Int? = lastGpuValue ?: 0
 
     /** MTK gpufreq_var_dump：整行含 "loading = 17%"，需按字段提取（首个数字是频率）。 */
     private fun parseGpuLoadingField(raw: String): Int? = runCatching {
