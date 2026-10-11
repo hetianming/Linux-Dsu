@@ -931,7 +931,7 @@ class HomePage(
             setPadding(Ui.dp(10, d), Ui.dp(6, d), Ui.dp(10, d), Ui.dp(6, d))
             background = Ui.rounded(Color.argb(125, 8, 12, 24), 12f, d)
             layoutParams = FrameLayout.LayoutParams(
-                Ui.dp(120, d),
+                Ui.dp(108, d),
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP or Gravity.START,
             ).apply { marginStart = Ui.dp(12, d); topMargin = Ui.dp(12, d) }
@@ -960,19 +960,20 @@ class HomePage(
         val rightCol = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(Ui.dp(6, d), 0, 0, 0)
+            setPadding(Ui.dp(4, d), 0, 0, 0)
         }
         val tempRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        tempRow.addView(ThermoIconView(activity), LinearLayout.LayoutParams(Ui.dp(8, d), Ui.dp(16, d)))
+        tempRow.addView(ThermoIconView(activity), LinearLayout.LayoutParams(Ui.dp(7, d), Ui.dp(14, d)))
         tempValueText = TextView(activity).apply {
             text = "--.-°C"
-            textSize = 11.5f
+            textSize = 10f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Color.rgb(110, 193, 255))
-            setPadding(Ui.dp(4, d), 0, 0, 0)
+            setPadding(Ui.dp(3, d), 0, 0, 0)
+            isSingleLine = true
         }
         tempRow.addView(tempValueText)
         rightCol.addView(tempRow)
@@ -982,7 +983,7 @@ class HomePage(
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-            setPadding(Ui.dp(7, d), Ui.dp(1, d), Ui.dp(7, d), Ui.dp(1, d))
+            setPadding(Ui.dp(6, d), Ui.dp(1, d), Ui.dp(6, d), Ui.dp(1, d))
             background = Ui.rounded(Color.argb(235, 46, 170, 108), 9f, d)
         }
         rightCol.addView(tempStatePill, LinearLayout.LayoutParams(
