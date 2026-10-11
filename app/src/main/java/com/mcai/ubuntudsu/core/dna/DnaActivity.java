@@ -322,7 +322,7 @@ public final class DnaActivity extends DnaBaseActivity {
         modeChip.setText("PDNA");
         modeChip.setTextSize(11f);
         modeChip.setTypeface(null, 1);
-        modeChip.setTextColor(pal.success);
+        modeChip.setTextColor(Ui.INSTANCE.isDark(this) ? 0xFFFFFFFF : 0xFF000000);
         modeChip.setGravity(Gravity.CENTER);
         GradientDrawable chipBg = new GradientDrawable();
         chipBg.setCornerRadius(dp(13));
