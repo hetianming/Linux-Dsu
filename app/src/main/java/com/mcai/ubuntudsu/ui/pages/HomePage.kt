@@ -923,14 +923,15 @@ class HomePage(
         }
         hero.addView(heroImage)
 
-        // 左上角：电池/温度双列状态卡（深色半透明底衬保证任意壁纸上可读，随 2s metrics 轮询刷新）
+        // 左上角：电池/温度双列状态卡（宽度对齐下方"Ubuntu DSU"标题，左右两列等宽居中）
         val battCard = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(Ui.dp(9, d), Ui.dp(6, d), Ui.dp(9, d), Ui.dp(6, d))
+            weightSum = 2f
+            setPadding(Ui.dp(10, d), Ui.dp(6, d), Ui.dp(10, d), Ui.dp(6, d))
             background = Ui.rounded(Color.argb(125, 8, 12, 24), 12f, d)
             layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Ui.dp(120, d),
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP or Gravity.START,
             ).apply { marginStart = Ui.dp(12, d); topMargin = Ui.dp(12, d) }
@@ -953,13 +954,13 @@ class HomePage(
             setPadding(0, Ui.dp(2, d), 0, 0)
         }
         leftCol.addView(chargeStateText)
-        battCard.addView(leftCol)
+        battCard.addView(leftCol, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
         // 右列：温度计图标 + 温度值 / 状态徽章
         val rightCol = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(Ui.dp(10, d), 0, 0, 0)
+            setPadding(Ui.dp(6, d), 0, 0, 0)
         }
         val tempRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -972,7 +973,6 @@ class HomePage(
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Color.rgb(110, 193, 255))
             setPadding(Ui.dp(4, d), 0, 0, 0)
-            includeFontPadding = false
         }
         tempRow.addView(tempValueText)
         rightCol.addView(tempRow)
@@ -988,7 +988,7 @@ class HomePage(
         rightCol.addView(tempStatePill, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { topMargin = Ui.dp(2, d) })
-        battCard.addView(rightCol)
+        battCard.addView(rightCol, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
         hero.addView(battCard)
 
