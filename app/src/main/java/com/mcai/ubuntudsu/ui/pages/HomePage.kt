@@ -390,7 +390,7 @@ class HomePage(
                     tempValueText?.let { tv ->
                         if (battery.temp != null) {
                             tv.text = String.format(java.util.Locale.US, "%.1f°C", battery.temp)
-                            tv.setTextColor(if (battery.temp > 40.0) Color.rgb(255, 92, 92) else Color.rgb(110, 193, 255))
+                            tv.setTextColor(if (battery.temp > 40.0) Color.rgb(255, 92, 92) else Color.rgb(255, 214, 64))
                         } else {
                             tv.text = "--.-°C"
                             tv.setTextColor(Color.argb(200, 255, 255, 255))
@@ -980,7 +980,7 @@ class HomePage(
             text = "--.-°C"
             textSize = 10f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setTextColor(Color.rgb(110, 193, 255))
+            setTextColor(Color.rgb(255, 214, 64))
             setPadding(Ui.dp(3, d), 0, 0, 0)
             isSingleLine = true
         }
