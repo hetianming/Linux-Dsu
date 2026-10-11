@@ -39,6 +39,7 @@ class HomePage(
     private var unifiedCard: LinearLayout? = null
     // 顶部头图卡片：自定义背景图（Env.background），自动居中裁切适配
     private var heroImage: ImageView? = null
+    private var heroDriftAnimator: android.animation.ValueAnimator? = null
     private var heroScrim: View? = null
     private var heroTitle: TextView? = null
     private var heroSubtitle: TextView? = null
@@ -64,6 +65,11 @@ class HomePage(
             metricsExecutor.shutdownNow()
             statusExecutor.shutdownNow()
             imageExecutor.shutdownNow()
+            heroDriftAnimator?.cancel()
+            heroDriftAnimator = null
+            heroImage?.let {
+                it.scaleX = 1f; it.scaleY = 1f; it.translationY = 0f; it.rotation = 0f
+            }
         })
         val page = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -1069,7 +1075,29 @@ class HomePage(
         }
 
         applyHeroTextColors(true) // 默认壁纸/自定义图均为深色底，文字恒白
+        startHeroDrift()
         return hero
+    }
+
+    /** 头图"漂游"动画：缓慢缩放 + 上下浮动 + 极缓左右旋转，让画面有"活着"的感觉 */
+    private fun startHeroDrift() {
+        heroDriftAnimator?.cancel()
+        val a = heroImage ?: return
+        heroDriftAnimator = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 5000L
+            repeatCount = android.animation.ValueAnimator.INFINITE
+            repeatMode = android.animation.ValueAnimator.REVERSE
+            interpolator = android.view.animation.LinearInterpolator()
+            addUpdateListener { anim ->
+                val t = anim.animatedFraction // 0→1→0
+                a.scaleX = 1.02f + 0.06f * t // 1.02 → 1.08 缓慢呼吸
+                a.scaleY = a.scaleX
+                a.translationY = -4f * a.context.resources.displayMetrics.density * (t - 0.5f) // ±4dp 上下浮动
+                a.rotation = 0.5f * (t - 0.5f) // ±0.25° 极缓左右摆动
+                a.invalidate()
+            }
+            start()
+        }
     }
 
     // 有图时文字白色（落在压暗渐变上），无图时跟随主题文字色
