@@ -44,8 +44,8 @@ android {
         applicationId = "com.mcai.ubuntudsu"
         minSdk = 26
         targetSdk = 28
-        versionCode = 72
-        versionName = "1.8.23"
+        versionCode = 73
+        versionName = "1.8.24"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
