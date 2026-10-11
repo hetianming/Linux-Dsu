@@ -252,6 +252,15 @@ class HomePage(
             }
         }
         metricsHandler.post(updater)
+        // GPU 首次值依赖 root 探测（比 CPU 直读慢），页面就绪时另起轻线程立即探一次，
+        // 不占用 metricsExecutor（避免拖累 CPU 首值节奏）
+        Thread {
+            runCatching { com.mcai.ubuntudsu.core.StatusDetector.warmupGpuProbe() }
+            activity.runOnUiThread {
+                if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+                gpuGauge.value = com.mcai.ubuntudsu.core.StatusDetector.currentGpuPercent()
+            }
+        }.start()
         activity.addLifecycleStopHook(Runnable { metricsHandler.removeCallbacks(updater) })
 
         // 水晶玻璃分隔条

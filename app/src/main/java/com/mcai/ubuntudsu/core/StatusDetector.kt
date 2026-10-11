@@ -112,14 +112,18 @@ object StatusDetector {
                 return it
             }
         }
-        // root 兜底：确认 root 可用后每轮直接读（合并单条命令，10s 节流内不重复）；
-        // 尚未确认时按 10s 节流试探一次，成功转持续模式，失败则停掉避免无 ROOT 设备反复拉 su
-        if (gpuRootUsable == true) {
-            if (System.currentTimeMillis() - lastGpuRootAttempt < 2_000L) return lastGpuValue
-            lastGpuRootAttempt = System.currentTimeMillis()
-            return tryGpuRootProbe()?.also { if (it != null) lastGpuValue = it } ?: lastGpuValue
+        // 从未读到过值（idle 时 GPU 节点本就返回 0，读到 0 也算有值）才需要 root 探测；
+        // 一旦有值，后续 root 探测失败一律保留旧值，绝不回落 "--"。
+        if (lastGpuValue != null) {
+            if (gpuRootUsable == true && System.currentTimeMillis() - lastGpuRootAttempt < 1_500L) return lastGpuValue
+            if (gpuRootUsable == false) return lastGpuValue
         }
-        if (gpuRootUsable == false) return lastGpuValue
+        if (gpuRootUsable == true) {
+            lastGpuRootAttempt = System.currentTimeMillis()
+            val v = tryGpuRootProbe()
+            if (v != null) lastGpuValue = v
+            return v ?: lastGpuValue
+        }
         val now = System.currentTimeMillis()
         if (now - lastGpuRootAttempt >= 10_000L) {
             lastGpuRootAttempt = now
@@ -129,7 +133,9 @@ object StatusDetector {
                 lastGpuValue = parsed
                 return parsed
             }
-            gpuRootUsable = false
+            // 探测失败：若已有旧值则永久停止再拉 su（防无 ROOT 设备反复超时空转），
+            // 若尚无值则 10s 后再试一次（可能是 su 授权弹窗未处理，稍后再探测）
+            if (lastGpuValue != null) gpuRootUsable = false
         }
         return lastGpuValue
     }
@@ -141,7 +147,7 @@ object StatusDetector {
             script.append("echo __GPU").append(i).append("__\n")
             script.append("cat \"").append(path).append("\" 2>/dev/null\n")
         }
-        val res = RootShell.exec(script.toString(), timeoutMs = 6000)
+        val res = RootShell.exec(script.toString(), timeoutMs = 4000)
         // 不依赖退出码：脚本里任一 cat 失败（节点不存在）都会让 $? 非 0，
         // 但前面已成功节点的输出仍在 stdout 里，直接解析分段即可。
         val segments = res.stdout.split(Regex("__GPU\\d+__")).drop(1)
@@ -161,12 +167,21 @@ object StatusDetector {
             nums.size >= 2 && nums[1] > 0f -> (nums[0] * 100f / nums[1]).toInt().coerceIn(0, 100)
             nums.isNotEmpty() -> {
                 val v = nums[0].toInt()
-                if (v in 0..100) v else return@runCatching null
+                if (v in 0..100) v else null
             }
-            else -> return@runCatching null
+            else -> null
         }
         value
     }.getOrNull()
+
+    /** 页面 build 时立即触发一次 GPU root 探测（后台），让表盘尽早拿到首值而非卡在 "--"。 */
+    fun warmupGpuProbe() {
+        readGpuPercent()
+    }
+
+    /** 暴露当前 GPU 值（可能是 null，表盘据此决定显示 "--" 或数值）。 */
+    @JvmStatic
+    fun currentGpuPercent(): Int? = lastGpuValue
 
     /** MTK gpufreq_var_dump：整行含 "loading = 17%"，需按字段提取（首个数字是频率）。 */
     private fun parseGpuLoadingField(raw: String): Int? = runCatching {
