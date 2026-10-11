@@ -59,18 +59,19 @@ object StatusDetector {
     private var suProbed = false
 
     private fun readCpuSample(): CpuSample {
+        // /proc/stat 应用直读即可（每 2s 轮询，直读零开销）；su 仅在直读被 SELinux 拦截时兜底，
+        // 且探测一次后缓存，避免每次轮询反复拉起 su 拖慢实时刷新。
+        runCatching { parseCpuLine(File("/proc/stat").readText()) }.getOrNull()?.let { return it }
         if (!suProbed) {
             suProbed = true
-            val probe = RootShell.exec("grep '^cpu ' /proc/stat", timeoutMs = 1500)
-            if (probe.success && parseCpuLine(probe.stdout) != null) {
-                suCpuReadable = true
-                parseCpuLine(probe.stdout)?.let { return it }
+            val probe = RootShell.exec("grep '^cpu ' /proc/stat", timeoutMs = 3000)
+            if (probe.success) {
+                parseCpuLine(probe.stdout)?.let { suCpuReadable = true; return it }
             }
         } else if (suCpuReadable) {
-            val res = RootShell.exec("grep '^cpu ' /proc/stat", timeoutMs = 1500)
+            val res = RootShell.exec("grep '^cpu ' /proc/stat", timeoutMs = 3000)
             parseCpuLine(res.stdout)?.let { return it }
         }
-        runCatching { parseCpuLine(File("/proc/stat").readText()) }.getOrNull()?.let { return it }
         return CpuSample(0L, 0L)
     }
 
@@ -89,37 +90,71 @@ object StatusDetector {
     private val gpuPaths = listOf(
         "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
         "/sys/class/kgsl/kgsl-3d0/gpu_busy_percent",
-        "/sys/devices/platform/kgsl-3d0.0/kgsl/kgsl-3d0/gpu_busy_percentage",
+        "/sys/class/kgsl/kgsl-3d0/gpubusy",
+        "/sys/kernel/ged/hal/gpu_loading",
+        "/sys/kernel/gpu/gpu_busy",
+        "/sys/class/misc/mali0/device/utilisation",
+        "/proc/gpufreq/gpufreq_var_dump",
         "/sys/devices/platform/13000000.mali/gpu_busy",
+        "/sys/devices/platform/kgsl-3d0.0/kgsl/kgsl-3d0/gpu_busy_percentage",
     )
     private var lastGpuRootAttempt = 0L
     private var lastGpuValue: Int? = null
+    // root 读 GPU 只在首次探测；失败（无 ROOT/节点均不存在）后不再反复拉起 su
+    @Volatile private var gpuRootUsable: Boolean? = null
 
     private fun readGpuPercent(): Int? {
         gpuPaths.forEach { path ->
-            runCatching { parseGpuNode(File(path).readText()) }.getOrNull()?.let {
+            runCatching {
+                if (path.endsWith("gpufreq_var_dump")) parseGpuLoadingField(File(path).readText())
+                else parseGpuNode(File(path).readText())
+            }.getOrNull()?.let {
                 lastGpuValue = it
                 return it
             }
         }
         val now = System.currentTimeMillis()
-        if (now - lastGpuRootAttempt >= 5_000L) {
+        if (now - lastGpuRootAttempt >= 10_000L && gpuRootUsable != false) {
             lastGpuRootAttempt = now
-            for (path in gpuPaths) {
-                val res = RootShell.exec("cat \"$path\" 2>/dev/null", timeoutMs = 2000)
-                parseGpuNode(res.stdout)?.let {
-                    lastGpuValue = it
-                    return it
+            val script = StringBuilder()
+            gpuPaths.forEachIndexed { i, path ->
+                script.append("echo __GPU").append(i).append("__\n")
+                script.append("cat \"").append(path).append("\" 2>/dev/null\n")
+            }
+            val res = RootShell.exec(script.toString(), timeoutMs = 6000)
+            var parsed: Int? = null
+            if (res.success) {
+                val segments = res.stdout.split(Regex("__GPU\\d+__")).drop(1)
+                segments.forEachIndexed { i, seg ->
+                    val path = gpuPaths.getOrNull(i) ?: return@forEachIndexed
+                    val raw = seg.trim()
+                    if (raw.isEmpty()) return@forEachIndexed
+                    val v = if (path.endsWith("gpufreq_var_dump")) parseGpuLoadingField(raw) else parseGpuNode(raw)
+                    if (v != null && parsed == null) parsed = v
                 }
             }
+            if (parsed != null) {
+                gpuRootUsable = true
+                lastGpuValue = parsed
+                return parsed
+            }
+            gpuRootUsable = false
         }
         return lastGpuValue
     }
 
+    /** 简单数值节点：内容形如 "42 %"、"8"。 */
     private fun parseGpuNode(raw: String): Int? = runCatching {
         val text = raw.trim().lowercase().removeSuffix("%")
         val digits = Regex("""(\d+(?:\.\d+)?)""").find(text)?.groupValues?.get(1)
         digits?.toFloatOrNull()?.toInt()?.coerceIn(0, 100)
+    }.getOrNull()
+
+    /** MTK gpufreq_var_dump：整行含 "loading = 17%"，需按字段提取（首个数字是频率）。 */
+    private fun parseGpuLoadingField(raw: String): Int? = runCatching {
+        Regex("loading\\s*[=:]?\\s*(\\d+)")
+            .find(raw.lowercase())?.groupValues?.get(1)
+            ?.toIntOrNull()?.coerceIn(0, 100)
     }.getOrNull()
 
     private fun formatBytes(bytes: Long): String {
