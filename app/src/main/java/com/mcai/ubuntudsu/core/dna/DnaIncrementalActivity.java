@@ -332,7 +332,7 @@ public final class DnaIncrementalActivity extends DnaBaseActivity {
         badge.setText("⚡ PDNA");
         badge.setTextSize(12f);
         badge.setTypeface(null, 1);
-        badge.setTextColor(pal.warning);
+        badge.setTextColor(com.mcai.ubuntudsu.ui.Ui.INSTANCE.isDark(this) ? 0xFFFFFFFF : 0xFF000000);
         badge.setGravity(Gravity.CENTER);
         badge.setPadding(dp(12), 0, dp(12), 0);
         android.graphics.drawable.GradientDrawable badgeBg = new android.graphics.drawable.GradientDrawable();

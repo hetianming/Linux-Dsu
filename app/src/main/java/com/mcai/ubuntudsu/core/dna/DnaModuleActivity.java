@@ -134,7 +134,7 @@ public final class DnaModuleActivity extends DnaBaseActivity {
         importTop.setTextSize(13f);
         importTop.setAllCaps(false);
         importTop.setTypeface(null, 1);
-        importTop.setTextColor(pal.success);
+        importTop.setTextColor(com.mcai.ubuntudsu.ui.Ui.INSTANCE.isDark(this) ? 0xFFFFFFFF : 0xFF000000);
         importTop.setMinWidth(0);
         importTop.setMinHeight(0);
         importTop.setGravity(Gravity.CENTER);
