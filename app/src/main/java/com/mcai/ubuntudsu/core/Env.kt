@@ -11,6 +11,8 @@ object Env {
     fun downloads(ctx: Context): File = File(ctx.filesDir, "downloads").apply { mkdirs() }
     fun logs(ctx: Context): File = File(ctx.filesDir, "logs").apply { mkdirs() }
     fun background(ctx: Context): File = File(ctx.filesDir, "card_bg.jpg")
+    // 用户自定义视频背景（mp4）
+    fun backgroundVideo(ctx: Context): File = File(ctx.filesDir, "card_bg.mp4")
     // host 侧音频 FIFO（AudioBridge 直接读写，proot -b 映射到容器内 /run/android-audio.pcm）
     fun audioPipeHost(ctx: Context): File = File(ctx.filesDir, "run/android-audio.pcm").apply { parentFile?.mkdirs() }
     // 容器内视角的音频管道路径（proot 会话中的 bashrc/VNC 脚本引用此路径）

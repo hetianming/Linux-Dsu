@@ -63,9 +63,10 @@ class MainActivity : AppCompatActivity() {
         }
 
     fun pickHeroImage() {
-        runCatching { pickHeroImageLauncher.launch(arrayOf("image/*")) }
+        // 同时接受图片和视频：选图走静态背景，选 mp4 走视频动态背景
+        runCatching { pickHeroImageLauncher.launch(arrayOf("image/*", "video/*")) }
             .onFailure {
-                android.widget.Toast.makeText(this, "无法打开图片选择器", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(this, "无法打开背景选择器", android.widget.Toast.LENGTH_SHORT).show()
             }
     }
 

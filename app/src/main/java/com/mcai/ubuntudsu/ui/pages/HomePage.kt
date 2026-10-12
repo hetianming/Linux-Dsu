@@ -39,6 +39,9 @@ class HomePage(
     private var unifiedCard: LinearLayout? = null
     // 顶部头图卡片：自定义背景图（Env.background），自动居中裁切适配
     private var heroImage: ImageView? = null
+    // 头图视频背景：默认循环播放的 mp4（自带动态效果），选择自定义图片时隐藏
+    private var heroVideo: android.view.TextureView? = null
+    private var heroMediaPlayer: android.media.MediaPlayer? = null
     private var heroScrim: View? = null
     private var heroTitle: TextView? = null
     private var heroSubtitle: TextView? = null
@@ -64,6 +67,7 @@ class HomePage(
             metricsExecutor.shutdownNow()
             statusExecutor.shutdownNow()
             imageExecutor.shutdownNow()
+            releaseHeroVideo()
         })
         val page = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -929,8 +933,28 @@ class HomePage(
             )
             loadHeroBitmap()?.let { setImageBitmap(it) }
                 ?: setImageResource(R.drawable.hero_default) // 内置默认壁纸
+            // 默认隐藏（视频背景生效）；仅当用户选了自定义图才显示
+            visibility = if (loadHeroBitmap() != null) View.VISIBLE else View.INVISIBLE
         }
-        hero.addView(heroImage)
+
+        // 视频背景层：TextureView 播放 mp4，铺满卡片；选自定义图时隐藏、显示 heroImage
+        val videoView = android.view.TextureView(activity).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+            // 跟随卡片 22dp 圆角裁切，避免视频矩形溢出卡片圆角
+            clipToOutline = true
+            outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(v: View, outline: android.graphics.Outline) {
+                    outline.setRoundRect(0, 0, v.width, v.height, Ui.dp(22, d).toFloat())
+                }
+            }
+        }
+        heroVideo = videoView
+        hero.addView(videoView)      // 视频在底层
+        hero.addView(heroImage)     // 自定义图在顶层（INVISIBLE 时透出视频）
+        startHeroVideo(videoView)
 
         // 左上角：电池/温度双列状态卡（宽度对齐下方"Ubuntu DSU"标题，左右两列等宽居中）
         val battCard = LinearLayout(activity).apply {
@@ -1039,7 +1063,7 @@ class HomePage(
 
         // 右下「更换背景」玻璃胶囊：唤起系统图片选择器
         val chip = TextView(activity).apply {
-            text = "更换背景"
+            text = "更换背景（视频/图）"
             textSize = 11f
             gravity = Gravity.CENTER
             setPadding(Ui.dp(12, d), Ui.dp(6, d), Ui.dp(12, d), Ui.dp(6, d))
@@ -1055,15 +1079,15 @@ class HomePage(
         }
         hero.addView(chip)
 
-        // 长按恢复内置默认壁纸（有自定义图时删除并回退）
+        // 长按恢复默认：删除用户自定义视频/静图，回到内置视频动态背景
         hero.setOnLongClickListener {
-            val file = Env.background(activity)
-            if (file.exists() && file.delete()) {
-                heroImage?.setImageResource(R.drawable.hero_default)
-                applyHeroTextColors(true)
-                Toast.makeText(activity, "已恢复默认壁纸", Toast.LENGTH_SHORT).show()
+            val uv = Env.backgroundVideo(activity)
+            val uimg = Env.background(activity)
+            if (uv.exists() || uimg.exists()) {
+                resetHeroBackground()
+                Toast.makeText(activity, "已恢复默认动态背景", Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(activity, "当前已是默认壁纸", Toast.LENGTH_SHORT).show()
+                Toast.makeText(activity, "当前已是默认动态背景", Toast.LENGTH_SHORT).show()
             }
             true
         }
@@ -1089,6 +1113,8 @@ class HomePage(
             start()
         }
 
+        // 活体效果改由背景视频自带（hero_video.mp4），不再叠加 2D 光斑/飞鸟层
+
         return hero
     }
 
@@ -1098,6 +1124,68 @@ class HomePage(
         heroSubtitle?.setTextColor(
             if (onImage) Color.argb(215, 255, 255, 255) else Ui.secondaryText(activity),
         )
+    }
+
+    // 启动头图视频背景：TextureView + MediaPlayer 循环静音播放，按原视频分辨率渲染，不做缩放裁切
+    // 优先用用户自定义视频（Env.backgroundVideo），否则内置默认 hero_video
+    private fun startHeroVideo(tex: android.view.TextureView) {
+        if (heroMediaPlayer != null) return
+        val mp = android.media.MediaPlayer()
+        heroMediaPlayer = mp
+        val userVideo = Env.backgroundVideo(activity)
+        val sourcePath = if (userVideo.exists()) userVideo.path else null
+        var prepared = false
+        fun doPrepare() {
+            if (prepared) return
+            prepared = true
+            runCatching {
+                if (sourcePath != null) {
+                    mp.setDataSource(sourcePath)
+                } else {
+                    val uri = android.net.Uri.parse("android.resource://${activity.packageName}/raw/${R.raw.hero_video}")
+                    mp.setDataSource(activity, uri)
+                }
+                mp.isLooping = true
+                mp.setOnPreparedListener { p ->
+                    p.setAudioAttributes(
+                        android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MOVIE)
+                            .build(),
+                    )
+                    p.setVolume(0f, 0f)
+                    p.start()
+                }
+                mp.prepare()
+            }.onFailure {
+                mp.release()
+                heroMediaPlayer = null
+                heroImage?.visibility = View.VISIBLE
+            }
+        }
+        val st0 = tex.surfaceTexture
+        if (st0 != null) {
+            runCatching { mp.setSurface(android.view.Surface(st0)) }
+            doPrepare()
+        }
+        tex.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
+                runCatching { mp.setSurface(android.view.Surface(st)) }
+                doPrepare()
+            }
+            override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
+            override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture) = false
+            override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
+        }
+    }
+
+    // 释放头图视频（生命周期 stop 时调用）
+    private fun releaseHeroVideo() {
+        heroMediaPlayer?.runCatching {
+            try { stop() } catch (_: Exception) {}
+            release()
+        }
+        heroMediaPlayer = null
     }
 
     // 解码头图：按卡片尺寸降采样，避免大图内存压力
@@ -1117,26 +1205,76 @@ class HomePage(
         }.getOrNull()
     }
 
-    // 图片选择回调：拷贝到应用私有目录（持久保存），刷新头图
+    // 背景选择回调：按 MIME 分流——视频存 card_bg.mp4（隐藏静图、播放视频），图片存 card_bg.jpg（隐藏视频、显示静图）
     fun onHeroImagePicked(uri: android.net.Uri) {
         imageExecutor.execute {
+            val mime = activity.contentResolver.getType(uri) ?: ""
+            val isVideo = mime.startsWith("video/") || uri.path?.lowercase()?.endsWith(".mp4") == true
             val copied = runCatching {
-                val target = Env.background(activity)
+                val target = if (isVideo) Env.backgroundVideo(activity) else Env.background(activity)
+                // 切换类型时清掉另一种残留，保证单一背景源
+                val other = if (isVideo) Env.background(activity) else Env.backgroundVideo(activity)
+                if (other.exists()) other.delete()
                 activity.contentResolver.openInputStream(uri)?.use { input ->
                     target.outputStream().use { output -> input.copyTo(output) }
                 } != null
             }.getOrDefault(false)
             activity.runOnUiThread {
-                val bmp = if (copied) loadHeroBitmap() else null
-                if (bmp != null) {
-                    heroImage?.setImageBitmap(bmp)
-                    heroImage?.visibility = View.VISIBLE
-                    heroScrim?.visibility = View.VISIBLE
+                if (!copied) {
+                    Toast.makeText(activity, "背景读取失败", Toast.LENGTH_SHORT).show()
+                    return@runOnUiThread
+                }
+                if (isVideo) {
+                    // 视频背景：隐藏静图，重播视频（用户视频优先）
+                    heroImage?.visibility = View.INVISIBLE
+                    heroVideo?.visibility = View.VISIBLE
+                    startHeroVideoSafe()
                     applyHeroTextColors(true)
                 } else {
-                    Toast.makeText(activity, "图片读取失败", Toast.LENGTH_SHORT).show()
+                    // 静态图背景：隐藏视频，显示静图
+                    val bmp = loadHeroBitmap()
+                    if (bmp != null) {
+                        heroImage?.setImageBitmap(bmp)
+                        heroImage?.visibility = View.VISIBLE
+                        heroVideo?.visibility = View.INVISIBLE
+                        stopHeroVideo()
+                        heroScrim?.visibility = View.VISIBLE
+                        applyHeroTextColors(true)
+                    } else {
+                        Toast.makeText(activity, "图片读取失败", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
+    }
+
+    // 恢复默认背景（长按）：删除用户自定义的视频和静图，回到内置视频
+    private fun resetHeroBackground() {
+        val uv = Env.backgroundVideo(activity)
+        val uimg = Env.background(activity)
+        if (uv.exists()) uv.delete()
+        if (uimg.exists()) uimg.delete()
+        heroImage?.visibility = View.INVISIBLE
+        heroVideo?.visibility = View.VISIBLE
+        startHeroVideoSafe()
+        applyHeroTextColors(true)
+    }
+
+    // 恢复视频背景（长按删除自定义图后调用）
+    private fun startHeroVideoSafe() {
+        runCatching {
+            heroMediaPlayer?.release()
+            heroMediaPlayer = null
+            heroVideo?.let { startHeroVideo(it) }
+        }
+    }
+
+    // 停止并释放视频（选自定义图或页面 stop 时调用）
+    private fun stopHeroVideo() {
+        runCatching {
+            heroMediaPlayer?.stop()
+            heroMediaPlayer?.release()
+        }
+        heroMediaPlayer = null
     }
 }
