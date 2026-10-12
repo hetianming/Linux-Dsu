@@ -16,8 +16,79 @@ object ChrootRunner {
         script.writeText(rootCommand(rootfs, Env.audioPipeHost(ctx)), Charsets.UTF_8)
         script.setReadable(true, false)
         script.setExecutable(true, false)
+
+        // 同步写入国内 apt 源配置脚本（host 侧），由 chroot 启动脚本调用
+        val mirrorScript = File(rootfs.parentFile, ".linux-dsu-apt-mirror.sh")
+        mirrorScript.writeText(aptMirrorScript(), Charsets.UTF_8)
+        mirrorScript.setReadable(true, false)
+        mirrorScript.setExecutable(true, false)
+
         val scriptRef = script.path.replace("'", "'\\''")
         return SU to arrayOf(SU, "0", "-c", "sh '$scriptRef'")
+    }
+
+    // 国内 apt 源配置脚本：识别 /etc/os-release 的 ID + VERSION_CODENAME，
+    // 为 Ubuntu 写入清华 ubuntu-ports（arm64 必须用 ports 路径），为 Debian 写入清华 debian + debian-security。
+    // 仅当 rootfs 里尚未包含国内镜像域名时写入，避免覆盖用户手动修改的源。
+    // 兼容传统 sources.list；清掉 deb822 格式 .sources 文件（Ubuntu 23.10+/Debian 13+）避免冲突。
+    private fun aptMirrorScript(): String {
+        // ${'$'} = 字面 $ 符号，供 shell 变量使用
+        return """
+#!/system/bin/sh
+# 用法: .linux-dsu-apt-mirror.sh <rootfs 绝对路径>
+set -e
+ROOTFS="${'$'}1"
+[ -z "${'$'}ROOTFS" ] && exit 0
+OS_RELEASE="${'$'}ROOTFS/etc/os-release"
+[ -f "${'$'}OS_RELEASE" ] || OS_RELEASE="${'$'}ROOTFS/usr/lib/os-release"
+[ -f "${'$'}OS_RELEASE" ] || exit 0
+
+. "${'$'}OS_RELEASE"
+DISTRO="${'$'}ID"
+CODENAME="${'$'}VERSION_CODENAME"
+[ -n "${'$'}CODENAME" ] || exit 0
+
+# 若现有源文件已包含国内镜像域名，说明已配置过，直接退出
+EXISTING="${'$'}ROOTFS/etc/apt/sources.list"
+if [ -f "${'$'}EXISTING" ] && /system/bin/toybox grep -q -E 'tuna\.tsinghua\.edu\.cn|mirrors\.ustc\.edu\.cn' "${'$'}EXISTING" 2>/dev/null; then
+    exit 0
+fi
+
+case "${'$'}DISTRO" in
+    ubuntu)
+        [ -f "${'$'}EXISTING" ] && /system/bin/toybox cp -f "${'$'}EXISTING" "${'$'}EXISTING.dsu.bak" 2>/dev/null || true
+        /system/bin/toybox printf '%s\n' \
+            "# Ubuntu ${'$'}CODENAME - China mirrors (TUNA, auto-configured)" \
+            "deb [arch=arm64] https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/ ${'$'}CODENAME main restricted universe multiverse" \
+            "deb [arch=arm64] https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/ ${'$'}CODENAME-updates main restricted universe multiverse" \
+            "deb [arch=arm64] https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/ ${'$'}CODENAME-backports main restricted universe multiverse" \
+            "deb [arch=arm64] https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/ ${'$'}CODENAME-security main restricted universe multiverse" \
+            > "${'$'}EXISTING"
+        /system/bin/toybox rm -f "${'$'}ROOTFS/etc/apt/sources.list.d/ubuntu.sources" 2>/dev/null || true
+        ;;
+    debian)
+        [ -f "${'$'}EXISTING" ] && /system/bin/toybox cp -f "${'$'}EXISTING" "${'$'}EXISTING.dsu.bak" 2>/dev/null || true
+        /system/bin/toybox printf '%s\n' \
+            "# Debian ${'$'}CODENAME - China mirrors (TUNA, auto-configured)" \
+            "deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${'$'}CODENAME main" \
+            "deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${'$'}CODENAME-updates main" \
+            "deb https://mirrors.tuna.tsinghua.edu.cn/debian-security/ ${'$'}CODENAME-security main" \
+            > "${'$'}EXISTING"
+        /system/bin/toybox rm -f "${'$'}ROOTFS/etc/apt/sources.list.d/debian.sources" 2>/dev/null || true
+        ;;
+    *)
+        exit 0
+        ;;
+esac
+
+# 清掉 sources.list.d/ 里的官方源 .list 文件（防止与 sources.list 冲突）
+for f in "${'$'}ROOTFS/etc/apt/sources.list.d/"*.list; do
+    [ -f "${'$'}f" ] || continue
+    /system/bin/toybox grep -q -E 'archive\.ubuntu\.com|security\.ubuntu\.com|deb\.debian\.org' "${'$'}f" 2>/dev/null && /system/bin/toybox rm -f "${'$'}f"
+done
+
+exit 0
+"""
     }
 
     fun terminalEnvironment(): Array<String> = arrayOf(
@@ -84,6 +155,10 @@ object ChrootRunner {
             /system/bin/toybox printf '%s\n' \
               '. /root/.bashrc' \
               > "${'$'}ROOTFS/root/.bash_profile"
+
+            # 配置国内 apt 源（仅当源尚未配置为国内镜像时写入，避免覆盖用户手动修改）
+            # 识别 /etc/os-release 的 ID 和 VERSION_CODENAME，写入清华源（Ubuntu 用 ubuntu-ports）
+            /system/bin/toybox sh "${'$'}HOST_FILES/.linux-dsu-apt-mirror.sh" "${'$'}ROOTFS" 2>/dev/null || true
 
             # 修复 Tigervnc 默认 session wrapper：它引用 host 的 /system/bin/sh，chroot 里不存在
             /system/bin/toybox printf '%s\n' \
