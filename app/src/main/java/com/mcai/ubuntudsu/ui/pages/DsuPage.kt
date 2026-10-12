@@ -511,18 +511,25 @@ class DsuPage(
                 if (!service.setAshmem(fd, bufferSize.toLong())) error("共享内存初始化失败：$name")
                 val mapped = memory.mapReadWrite()
                 try {
-                    val buffer = ByteArray(1024 * 1024)
+                    val buffer = ByteArray(bufferSize)
                     var written = 0L
+                    var lastUiUpdate = 0L
                     while (true) {
                         val count = input.read(buffer)
                         if (count < 0) break
+                        // 一次读满 4MB 或末尾块，整块写入 ashmem 再提交，Binder IPC 次数减至 1/4
                         mapped.position(0)
                         mapped.put(buffer, 0, count)
                         if (!service.submitFromAshmem(count.toLong())) error("写入失败：$name")
                         written += count
-                        val imageProgress = if (size > 0) (written * 80L / size).toInt() else 0
-                        val progress = (10 + imageProgress).coerceIn(10, 90)
-                        activity.runOnUiThread { setInstallProgress(progress, "安装 GSI：写入 $name") }
+                        if (written - lastUiUpdate >= 256L * 1024 * 1024 || written >= size) {
+                            lastUiUpdate = written
+                            val imageProgress = if (size > 0) (written * 80L / size).toInt() else 0
+                            val progress = (10 + imageProgress).coerceIn(10, 90)
+                            val gbDone = written / 1073741824.0
+                            val totalGb = if (size > 0) " / " + (size / 1073741824.0).let { String.format("%.1f", it) } + "GB" else ""
+                            activity.runOnUiThread { setInstallProgress(progress, "安装 GSI：写入 $name  " + String.format("%.1f", gbDone) + "GB" + totalGb) }
+                        }
                     }
                 } finally { SharedMemory.unmap(mapped) }
             }
