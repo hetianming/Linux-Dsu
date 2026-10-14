@@ -855,7 +855,7 @@ class OtgAssistantPage(
                 isFocusable = true
                 background = android.graphics.drawable.RippleDrawable(
                     android.content.res.ColorStateList.valueOf(
-                        if (Ui.isDark(activity)) android.graphics.Color.argb(60, 111, 168, 255) else android.graphics.Color.argb(50, 47, 124, 246)
+                        if (Ui.isDark(activity)) android.graphics.Color.argb(60, 255, 255, 255) else android.graphics.Color.argb(50, 47, 124, 246)
                     ),
                     Ui.frostedSurface(activity, 18f) as android.graphics.drawable.Drawable,
                     null,

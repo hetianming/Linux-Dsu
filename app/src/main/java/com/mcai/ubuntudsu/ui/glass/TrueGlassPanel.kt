@@ -47,21 +47,21 @@ class TrueGlassPanel @JvmOverloads constructor(
 
     /** 玻璃主体三色（左上透亮 → 收敛 → 底部回白） */
     private val bodyColors: IntArray = if (dark) {
-        intArrayOf(0xD95C7A9E.toInt(), 0x9C4C6A8A.toInt(), 0xB4566E8C.toInt())
+        intArrayOf(0x00000000, 0x00000000, 0x00000000)
     } else {
         intArrayOf(0xC4FFFFFF.toInt(), 0x84FFFFFF.toInt(), 0xA8FFFFFF.toInt())
     }
 
     private val refractionColors: IntArray = if (dark) {
-        intArrayOf(0x2438D3FF.toInt(), 0x20B9A8EC.toInt())   // 青蓝 + 淡紫渗透
+        intArrayOf(0x00000000, 0x00000000)
     } else {
         intArrayOf(0x2C8FB8E8.toInt(), 0x28B9A8EC.toInt())
     }
 
-    private val bottomTint: Int = if (dark) 0x386E8DA3.toInt() else 0x2E9FBFD8.toInt()
+    private val bottomTint: Int = if (dark) 0x00000000 else 0x2E9FBFD8.toInt()
 
     private val rimStroke: IntArray = if (dark) {
-        intArrayOf(0xE6F4FBFF.toInt(), 0x59F4FBFF.toInt(), 0x2EF4FBFF.toInt(), 0x8CF4FBFF.toInt())
+        intArrayOf(0xE6FFFFFF.toInt(), 0x59FFFFFF.toInt(), 0x2EFFFFFF.toInt(), 0x8CFFFFFF.toInt())
     } else {
         intArrayOf(0xE6FFFFFF.toInt(), 0x59FFFFFF.toInt(), 0x2EFFFFFF.toInt(), 0x8CFFFFFF.toInt())
     }
@@ -83,11 +83,11 @@ class TrueGlassPanel @JvmOverloads constructor(
                 }
             }
         }
-        setElevation(6 * d)
+        setElevation(if (dark) 0f else 6 * d)
         @Suppress("DEPRECATION")
-        setOutlineSpotShadowColor(if (dark) 0x55000000 else 0x33395273)
+        setOutlineSpotShadowColor(if (dark) 0x00000000 else 0x33395273)
         @Suppress("DEPRECATION")
-        setOutlineAmbientShadowColor(if (dark) 0x40000000 else 0x24395273)
+        setOutlineAmbientShadowColor(if (dark) 0x00000000 else 0x24395273)
     }
 
     override fun onDraw(canvas: Canvas) {

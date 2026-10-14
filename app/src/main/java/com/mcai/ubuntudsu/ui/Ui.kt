@@ -57,17 +57,17 @@ object Ui {
 
     /** 夜间拟态调色板（#2C3340 底 + 低光比双影，微霓虹外缘） */
     private object Night {
-        const val BG = 0xFF2C3340.toInt()
-        const val CARD_TOP = 0xFF3A4355.toInt()      // 凸起面（比背景亮一档，提亮保证白字对比）
-        const val CARD_MID = 0xFF313A48.toInt()
-        const val CARD_BOTTOM = 0xFF28303E.toInt()
+        const val BG = 0xFF222622.toInt()
+        const val CARD_TOP = Color.TRANSPARENT      // 夜间卡片按钮保持通透，移除透明蓝底色
+        const val CARD_MID = Color.TRANSPARENT
+        const val CARD_BOTTOM = Color.TRANSPARENT
         const val SHADOW_RING = 0xFF0E121A.toInt()   // 右下深黑投影
         const val HIGHLIGHT_RING = 0x24FFFFFF.toInt() // 左上淡白高光
         const val NEON_EDGE = 0x33FFFFFF.toInt()     // 夜间微光外缘（提亮，保证暗卡边缘可见）
         const val TRACK = 0xFF20242E.toInt()
-        const val PRIMARY = 0xFF3572E0.toInt()
-        const val PRIMARY_TOP = 0xFF5B9DFF.toInt()
-        const val PRIMARY_BOTTOM = 0xFF3572E0.toInt()
+        const val PRIMARY = 0xFF3D4440.toInt()
+        const val PRIMARY_TOP = 0xFF5E6A5E.toInt()
+        const val PRIMARY_BOTTOM = 0xFF3D4440.toInt()
     }
 
     private fun cardTop(c: android.content.Context) = if (isDark(c)) Night.CARD_TOP else Day.CARD_TOP
@@ -149,8 +149,8 @@ object Ui {
 
     /**
      * 全屏背景：动态弥散光斑（Liquid Backdrop）。
-     * 底层蓝灰渐变 + 六个缓慢漂移/呼吸的彩色光斑，玻璃的折射感来自背景色彩流动。
-     * 日间用天空冷暖光斑、夜间用低透明霓虹光斑，Drawable 可见时自动播放动画。
+     * 底层蓝灰渐变 + 缓慢漂移的淡色光斑（弱化后），玻璃的折射感来自背景色彩流动。
+     * Drawable 可见时自动播放动画。
      */
     fun animateLiquidBackground(view: View) {
         val d = com.mcai.ubuntudsu.ui.glass.BreathingBalloonDrawable(isDark(view.context))
@@ -162,14 +162,14 @@ object Ui {
     fun surface(context: android.content.Context): Int = if (isDark(context)) Night.BG else Day.BG
     fun surfaceMuted(context: android.content.Context): Int = if (isDark(context)) Color.rgb(36, 42, 54) else Color.parseColor("#DCE3EE")
     /** 玻璃按钮日间填充：蓝灰玻璃（不随主题变化），夜间为深蓝玻璃 */
-    fun surfaceGlass(context: android.content.Context): Int = if (isDark(context)) Night.BG else 0xFFB7C6DA.toInt()
+    fun surfaceGlass(context: android.content.Context): Int = if (isDark(context)) Color.TRANSPARENT else 0xFFB7C6DA.toInt()
     fun dsuCard(context: android.content.Context): Int = if (isDark(context)) Night.BG else Day.BG
     fun dsuEntry(context: android.content.Context): Int = if (isDark(context)) Color.rgb(36, 42, 54) else Color.parseColor("#DCE3EE")
     fun border(context: android.content.Context): Int = if (isDark(context)) Color.argb(50, 255, 255, 255) else Color.parseColor("#C4D2E6")
     fun primaryText(context: android.content.Context): Int = if (isDark(context)) Color.parseColor("#EAF0F8") else Color.parseColor("#243244")
-    fun secondaryText(context: android.content.Context): Int = if (isDark(context)) Color.parseColor("#B8C4D6") else Color.parseColor("#5C6A7C")
+    fun secondaryText(context: android.content.Context): Int = if (isDark(context)) Color.parseColor("#F3F7FF") else Color.parseColor("#5C6A7C")
     fun buttonPrimary(context: android.content.Context): Int = if (isDark(context)) Night.PRIMARY else Day.PRIMARY
-    fun buttonSecondary(context: android.content.Context): Int = if (isDark(context)) Color.parseColor("#8172C4") else Color.parseColor("#7C8AA6")
+    fun buttonSecondary(context: android.content.Context): Int = if (isDark(context)) Color.parseColor("#5A6B58") else Color.parseColor("#7C8AA6")
     fun buttonSuccess(context: android.content.Context): Int = if (isDark(context)) Color.parseColor("#34B06A") else Color.parseColor("#1E8A60")
     fun buttonWarning(context: android.content.Context): Int = if (isDark(context)) Color.parseColor("#FBBF24") else Color.parseColor("#B57623")
     fun buttonDanger(context: android.content.Context): Int = if (isDark(context)) Color.parseColor("#F87171") else Color.parseColor("#C62828")
@@ -275,9 +275,9 @@ object Ui {
 
         // L1 填充：半透明玻璃，让背后的呼吸气球背景透进来（玻璃模糊透感）
         val fillColors = if (dark) intArrayOf(
-            0x993A4355.toInt(),  // 约 60% 不透明深蓝玻璃
-            0x90313A48.toInt(),
-            0x9028303E.toInt(),
+            Color.TRANSPARENT,
+            Color.TRANSPARENT,
+            Color.TRANSPARENT,
         ) else intArrayOf(
             0x99B7C6DA.toInt(),  // 约 60% 不透明白蓝玻璃
             0x90AFBFCE.toInt(),
@@ -405,9 +405,9 @@ object Ui {
         })
         panel.addView(View(activity).apply {
             background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(
-                if (dark) Color.argb(46, 111, 168, 255) else Color.argb(140, 214, 228, 248),
-                if (dark) Color.argb(110, 168, 214, 255) else Color.argb(220, 255, 255, 255),
-                if (dark) Color.argb(46, 111, 168, 255) else Color.argb(140, 214, 228, 248),
+                if (dark) Color.argb(46, 255, 255, 255) else Color.argb(140, 214, 228, 248),
+                if (dark) Color.argb(110, 255, 255, 255) else Color.argb(220, 255, 255, 255),
+                if (dark) Color.argb(46, 255, 255, 255) else Color.argb(140, 214, 228, 248),
             )).apply {
                 cornerRadius = dp(1, density).toFloat()
             }
@@ -448,8 +448,8 @@ object Ui {
                 gravity = Gravity.CENTER
                 setTextColor(if (index == 0) buttonText(activity) else primaryText(activity))
                 background = neuSolidButton(
-                    if (index == 0) Night.PRIMARY_TOP else (if (dark) Color.argb(120, 130, 130, 190) else Color.argb(255, 176, 190, 208)),
-                    if (index == 0) Night.PRIMARY_BOTTOM else (if (dark) Color.argb(110, 90, 90, 150) else Color.argb(255, 168, 182, 200)),
+                    if (index == 0) Night.PRIMARY_TOP else (if (dark) Color.argb(120, 255, 255, 255) else Color.argb(255, 176, 190, 208)),
+                    if (index == 0) Night.PRIMARY_BOTTOM else (if (dark) Color.argb(110, 255, 255, 255) else Color.argb(255, 168, 182, 200)),
                     12f, activity,
                 )
                 setPadding(0, dp(10, density), 0, dp(10, density))
@@ -489,7 +489,7 @@ object Ui {
         val content = neuCard(context, 16f, accent)
         val rippleColor = accent?.let {
             Color.argb(70, Color.red(it), Color.green(it), Color.blue(it))
-        } ?: if (isDark(context)) Color.argb(60, 111, 168, 255) else Color.argb(50, 47, 124, 246)
+        } ?: if (isDark(context)) Color.argb(60, 255, 255, 255) else Color.argb(50, 47, 124, 246)
         return RippleDrawable(ColorStateList.valueOf(rippleColor), content, null)
     }
 
@@ -582,11 +582,11 @@ object Ui {
         val dark = isDark(context)
         val shadow = GradientDrawable().apply {
             cornerRadius = radius
-            setColor(0x3827465C.toInt())
+            setColor(if (dark) 0x00000000 else 0x3827465C.toInt())
         }
         // 拟态玻璃渲染边框：夜间用亮霓虹外缘，保证暗玻璃上舱体边缘清晰
         val main = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-            if (dark) intArrayOf(0x4CCFD8E8.toInt(), 0x26B7D2E0.toInt(), 0x1A8FA8C4.toInt())
+            if (dark) intArrayOf(0x4CFFFFFF.toInt(), 0x26FFFFFF.toInt(), 0x1AFFFFFF.toInt())
             else intArrayOf(0x4CECF8FC.toInt(), 0x26CFE2EC.toInt(), 0x1AA7C0CF.toInt())).apply {
             cornerRadius = radius
             setStroke(dp(1, density), if (dark) 0x99FFFFFF.toInt() else 0x78F3FBFF.toInt())
@@ -647,8 +647,8 @@ object Ui {
     /** 水晶玻璃分隔条：拼接卡内分区之间的横向高光玻璃线 */
     fun crystalDivider(context: android.content.Context, density: Float): View {
         val dark = isDark(context)
-        val track = if (dark) Color.argb(46, 111, 168, 255) else Color.argb(140, 214, 228, 248)
-        val highlight = if (dark) Color.argb(110, 168, 214, 255) else Color.argb(220, 255, 255, 255)
+        val track = if (dark) Color.argb(46, 255, 255, 255) else Color.argb(140, 214, 228, 248)
+        val highlight = if (dark) Color.argb(110, 255, 255, 255) else Color.argb(220, 255, 255, 255)
         return View(context).apply {
             layoutParams = android.view.ViewGroup.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,

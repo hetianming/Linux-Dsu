@@ -13,7 +13,7 @@ object ChrootRunner {
     // 返回 (executable, args)，供 TerminalSession 直接 execve
     fun terminalLaunchSpec(ctx: Context, rootfs: File): Pair<String, Array<String>> {
         val script = File(rootfs.parentFile, ".linux-dsu-chroot.sh")
-        script.writeText(rootCommand(rootfs, Env.audioPipeHost(ctx)), Charsets.UTF_8)
+        script.writeText(rootCommand(rootfs), Charsets.UTF_8)
         script.setReadable(true, false)
         script.setExecutable(true, false)
 
@@ -99,8 +99,28 @@ exit 0
 
     fun terminalSetupCommand(rootfs: File): ByteArray = ByteArray(0)
 
-    private fun rootCommand(rootfs: File, audioHost: File): String {
-        val hostAudio = audioHost.absolutePath.replace("'", "'\\''")
+    /**
+     * 确保 rootfs 内音频 FIFO 就绪（幂等，root 执行）。
+     * 旧版本会话可能遗留：绝对路径死软链（chroot 内永远解析失败）或普通文件。
+     * 必须在启动 VNC 前调用——root 脚本只在会话创建时执行一次，不能依赖它修复旧会话。
+     * 成功时输出 __FIFO_OK__ 供调用方校验。
+     */
+    fun ensureAudioFifo(rootfs: File): ShellResult {
+        val runDir = File(rootfs, "run").absolutePath.replace("'", "'\\''")
+        val fifo = File(rootfs, "run/android-audio.pcm").absolutePath.replace("'", "'\\''")
+        val script = """
+            mkdir -p '$runDir'
+            if [ -e '$fifo' ] || [ -L '$fifo' ]; then
+              [ -p '$fifo' ] || rm -f '$fifo'
+            fi
+            [ -p '$fifo' ] || /system/bin/toybox mkfifo '$fifo'
+            /system/bin/toybox chmod 666 '$fifo' 2>/dev/null || chmod 666 '$fifo'
+            [ -p '$fifo' ] && echo __FIFO_OK__
+        """.trimIndent()
+        return RootShell.exec(script, timeoutMs = 10000)
+    }
+
+    private fun rootCommand(rootfs: File): String {
         return """
             export PATH=/system/bin:/system/xbin:/sbin:/vendor/bin
             set +x
@@ -137,20 +157,22 @@ exit 0
               /system/bin/toybox printf '%s\n' 'nameserver 114.114.114.114' 'nameserver 223.5.5.5' > "${'$'}ROOTFS/etc/resolv.conf"
             fi
 
-            # 音频 FIFO：host 侧 audioPipeHost 映射到 rootfs /run/android-audio.pcm
+            # 音频 FIFO：直接建在 rootfs /run 下（rootfs 位于应用数据目录内，
+            # AudioBridge 以应用身份直读同一 FIFO；chroot 内外是同一 inode，无软链/绑定）。
+            # 仅在缺失时创建：绝不能 unlink，否则仍持有旧 inode 的 PulseAudio sink 会写向死管道
             /system/bin/toybox mkdir -p "${'$'}ROOTFS/run"
-            # 确保 host 侧路径是真正的 FIFO：先删再 mkfifo（AudioBridge 会读它）
-            /system/bin/toybox rm -f "$hostAudio" 2>/dev/null
-            /system/bin/toybox mkfifo "$hostAudio" 2>/dev/null || { /system/bin/toybox touch "$hostAudio" 2>/dev/null; }
-            /system/bin/toybox rm -f "${'$'}ROOTFS/run/android-audio.pcm"
-            /system/bin/toybox ln -s "$hostAudio" "${'$'}ROOTFS/run/android-audio.pcm" 2>/dev/null || true
+            if [ ! -p "${'$'}ROOTFS/run/android-audio.pcm" ]; then
+              /system/bin/toybox rm -f "${'$'}ROOTFS/run/android-audio.pcm" 2>/dev/null
+              /system/bin/toybox mkfifo "${'$'}ROOTFS/run/android-audio.pcm" 2>/dev/null || true
+            fi
+            /system/bin/toybox chmod 666 "${'$'}ROOTFS/run/android-audio.pcm" 2>/dev/null || true
 
             # bashrc：pulse 音频 + VNC 桌面环境变量
             /system/bin/toybox printf '%s\n' \
               'if [ -r /usr/lib/os-release ]; then . /usr/lib/os-release; else . /etc/os-release 2>/dev/null; fi' \
               'export PS1="root@${'$'}{PRETTY_NAME:-Linux}:\\w# "' \
               'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' \
-              'export XDG_RUNTIME_DIR=/run/user/0; mkdir -p /run/user/0 /run/pulse; export PULSE_SERVER=unix:/run/pulse/native; export PULSE_SINK=android_audio; export LANG=zh_CN.UTF-8; export LANGUAGE=zh_CN:en; export LC_ALL=' \
+              'export XDG_RUNTIME_DIR=/run/user/$(id -u); mkdir -p "${'$'}XDG_RUNTIME_DIR/pulse" 2>/dev/null || true; export PULSE_SERVER=unix:${'$'}XDG_RUNTIME_DIR/pulse/native; export PULSE_SINK=android_audio; export LANG=zh_CN.UTF-8; export LANGUAGE=zh_CN:en; export LC_ALL=' \
               > "${'$'}ROOTFS/root/.bashrc"
             /system/bin/toybox printf '%s\n' \
               '. /root/.bashrc' \
@@ -168,11 +190,12 @@ exit 0
               'export HOME=/root' \
               'export XDG_VNC_SESSION=1' \
               'export DISPLAY=${'$'}{DISPLAY:-:1}' \
-              'export PULSE_SERVER=unix:/run/pulse/native' \
+              'export PULSE_SERVER=unix:${'$'}{XDG_RUNTIME_DIR:-/run/pulse}/pulse/native' \
               'export PULSE_SINK=android_audio' \
               'export LANG=zh_CN.UTF-8' \
               'export LANGUAGE=zh_CN:en' \
               'export LC_ALL=' \
+              'if [ -z "${'$'}DBUS_SESSION_BUS_ADDRESS" ] && command -v dbus-launch >/dev/null 2>&1; then eval "dbus-launch sh -c \\"exec ${'$'}0 "$"; fi' \
               'if [ -x /root/.vnc/xstartup ]; then exec /root/.vnc/xstartup; else for c in startxfce4 startplasma-x11 gnome-shell; do command -v "${'$'}c" >/dev/null 2>&1 && { exec "${'$'}c"; }; done; echo "no desktop" >&2; exit 1; fi' \
               > "${'$'}ROOTFS/etc/X11/Xtigervnc-session" 2>/dev/null || true
             /system/bin/toybox chmod +x "${'$'}ROOTFS/etc/X11/Xtigervnc-session" 2>/dev/null || true
@@ -185,7 +208,7 @@ exit 0
               TERM="${'$'}TERM" \
               LANG=zh_CN.UTF-8 \
               LANGUAGE=zh_CN:en \
-              PULSE_SERVER=unix:/run/pulse/native \
+              PULSE_SERVER=unix:/run/user/0/pulse/native \
               PULSE_SINK=android_audio \
               /bin/bash --login
             status=${'$'}?

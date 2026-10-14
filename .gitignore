@@ -28,3 +28,6 @@ twrp_dodge/
 native/payload_extract_jni/target/
 *.pyc
 blob_download_1791229037373.png
+
+# 本地签名配置（含密码，禁止提交）
+signing-gradle.properties

@@ -131,12 +131,18 @@ class MainActivity : AppCompatActivity() {
                 val dx = event.x - swipeDownX
                 val dy = event.y - swipeDownY
                 if (!dragActive) {
-                    val slop = android.view.ViewConfiguration.get(this).scaledTouchSlop * 2.2f
-                    if (kotlin.math.abs(dx) > slop && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.5f) {
+                    val slop = android.view.ViewConfiguration.get(this).scaledTouchSlop * 0.38f
+                    if (kotlin.math.abs(dx) > slop && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 0.52f) {
                         val target = if (dx < 0) currentTab + 1 else currentTab - 1
                         if (target in tabs.indices) {
                             dragActive = true
                             dragTargetTab = target
+                            // ColorOS 式防误触：滑动一旦成立，立即向整棵视图树发 CANCEL，
+                            // 正被按住的按钮终止本次触摸序列，后续 UP 不会再触发它的点击
+                            val cancel = MotionEvent.obtain(event)
+                            cancel.action = MotionEvent.ACTION_CANCEL
+                            super.dispatchTouchEvent(cancel)
+                            cancel.recycle()
                             liquidIndicator?.animate()?.cancel()
                             liquidIndicator?.setLiquidPressed(true)
                         }
@@ -154,13 +160,15 @@ class MainActivity : AppCompatActivity() {
                         dragHalfHaptic = true
                         Haptics.perform(liquidIndicator)
                     }
+                    // 切页手势接管：事件不再下发给任何页面控件
+                    return true
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 if (dragActive && dragTargetTab != -1) {
                     val sw = pageStrip.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
                     val commit = event.actionMasked == MotionEvent.ACTION_UP &&
-                        kotlin.math.abs(event.x - swipeDownX) >= sw * 0.3f
+                        kotlin.math.abs(event.x - swipeDownX) >= sw * 0.18f
                     if (commit) {
                         selectTab(dragTargetTab)
                     } else {
@@ -168,6 +176,10 @@ class MainActivity : AppCompatActivity() {
                         animatePageSlide(currentTab, 220)
                     }
                     liquidIndicator?.setLiquidPressed(false)
+                    dragActive = false
+                    dragTargetTab = -1
+                    // 抬手同样由切页手势消费，绝不下发，杜绝滑动结束误点按钮
+                    return true
                 } else if (event.actionMasked == MotionEvent.ACTION_UP && dragDownInNav) {
                     tabAtPoint(event.rawX, event.rawY).takeIf { it >= 0 }?.let { selectTab(it) }
                 }

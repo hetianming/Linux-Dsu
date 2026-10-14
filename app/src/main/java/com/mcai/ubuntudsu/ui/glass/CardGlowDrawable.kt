@@ -50,9 +50,9 @@ class CardGlowDrawable(private val dark: Boolean) : Drawable() {
         0x3D9FC8F0.toInt(), 0x3079D9CE.toInt(), 0x28B9A8EC.toInt(),
     )
 
-    /** 夜间：低透明霓虹（蓝 / 青绿 / 紫） */
+    /** 夜间：低透明中性光斑（白灰 / 浅绿 / 深灰），避免夜间卡片泛蓝 */
     private val nightGlow = intArrayOf(
-        0x305B9DFF.toInt(), 0x2834D399.toInt(), 0x248B5CF6.toInt(),
+        0x30FFFFFF.toInt(), 0x289ACD6F.toInt(), 0x246B6B7A.toInt(),
     )
 
     private val glow = if (dark) nightGlow else dayGlow

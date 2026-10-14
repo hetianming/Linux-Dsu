@@ -53,6 +53,7 @@ class DsuPage(
         }
     }
     private lateinit var fileNameText: TextView
+    private lateinit var installProgressCard: LinearLayout
     private lateinit var installProgressLabel: TextView
     private lateinit var installProgressBar: ProgressBar
     private lateinit var installPercentText: TextView
@@ -129,6 +130,7 @@ class DsuPage(
         // 安装进度卡（紧凑单行：百分比在进度条右侧同行 + 细进度条，直接作为安装进度条卡片使用）
         val progressCard = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
             setPadding(Ui.dp(12, d), Ui.dp(6, d), Ui.dp(12, d), Ui.dp(6, d))
             background = Ui.glassSurface(activity, 18f)
             Ui.applyNeuShadow(this, 3f, 18f)
@@ -137,6 +139,7 @@ class DsuPage(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply { bottomMargin = Ui.dp(8, d) }
         }
+        installProgressCard = progressCard
         val statusRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -450,14 +453,17 @@ class DsuPage(
                     input.use { installWithRootService(it, service) }
                 }.onFailure {
                     log("读取 GSI ZIP 失败：${it.message}")
-                    activity.runOnUiThread { installProgressLabel.text = "安装 GSI：读取失败" }
+                    activity.runOnUiThread { installProgressLabel.text = "安装状态：读取失败" }
                 }
             }
         }
     }
 
     private fun installWithRootService(input: java.io.InputStream, service: IPrivilegedService) {
-        activity.runOnUiThread { setInstallProgress(0, "安装 GSI：解析镜像") }
+        activity.runOnUiThread {
+            installProgressCard.visibility = View.VISIBLE
+            setInstallProgress(0, "安装状态：解析镜像")
+        }
         var started = false
         var completed = false
         try {
@@ -496,11 +502,19 @@ class DsuPage(
                 if (!service.setEnable(false, false)) error("停用 DSU 自动启动失败")
                 completed = true
             }
-            activity.runOnUiThread { setInstallProgress(100, "安装 GSI：完成"); Toast.makeText(activity, "GSI 已安装，请在需要时点击“重启到 DSU”", Toast.LENGTH_LONG).show() }
+            activity.runOnUiThread {
+            setInstallProgress(100, "安装状态：完成")
+            installProgressCard.visibility = View.GONE
+            Toast.makeText(activity, "GSI 已安装，请在需要时点击“重启到 DSU”", Toast.LENGTH_LONG).show()
+        }
         } catch (e: Exception) {
             if (started && !completed) runCatching { service.abort() }
             log("ROOT DSU 安装失败：${e.message}")
-            activity.runOnUiThread { installProgressLabel.text = "安装 GSI：失败"; Toast.makeText(activity, "安装失败：${e.message}", Toast.LENGTH_LONG).show() }
+            activity.runOnUiThread {
+            installProgressCard.visibility = View.VISIBLE
+            installProgressLabel.text = "安装状态：失败"
+            Toast.makeText(activity, "安装失败：${e.message}", Toast.LENGTH_LONG).show()
+        }
         }
     }
 
@@ -528,7 +542,7 @@ class DsuPage(
                             val progress = (10 + imageProgress).coerceIn(10, 90)
                             val gbDone = written / 1073741824.0
                             val totalGb = if (size > 0) " / " + (size / 1073741824.0).let { String.format("%.1f", it) } + "GB" else ""
-                            activity.runOnUiThread { setInstallProgress(progress, "安装 GSI：写入 $name  " + String.format("%.1f", gbDone) + "GB" + totalGb) }
+                            activity.runOnUiThread { setInstallProgress(progress, "安装状态：写入 $name  " + String.format("%.1f", gbDone) + "GB" + totalGb) }
                         }
                     }
                 } finally { SharedMemory.unmap(mapped) }

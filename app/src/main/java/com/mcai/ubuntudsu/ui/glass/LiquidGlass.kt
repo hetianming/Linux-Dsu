@@ -53,8 +53,8 @@ object LiquidGlass {
 
     val cardDark = GlassPreset(
         blurRadius = 20f,
-        tint = Color.argb(35, 255, 255, 255),
-        tintAlpha = 0.08f,
+        tint = Color.TRANSPARENT,
+        tintAlpha = 0f,
         cornerRadiusDp = 22f,
         specularIntensity = 0.4f,
         refractionIntensity = 0.3f,
@@ -103,8 +103,8 @@ object LiquidGlass {
 
     val buttonDark = GlassPreset(
         blurRadius = 12f,
-        tint = Color.argb(25, 255, 255, 255),
-        tintAlpha = 0.06f,
+        tint = Color.TRANSPARENT,
+        tintAlpha = 0f,
         cornerRadiusDp = 18f,
         specularIntensity = 0.3f,
         refractionIntensity = 0.2f,
