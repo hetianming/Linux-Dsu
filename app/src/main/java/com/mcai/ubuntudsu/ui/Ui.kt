@@ -153,7 +153,7 @@ object Ui {
      * Drawable 可见时自动播放动画。
      */
     fun animateLiquidBackground(view: View) {
-        val d = com.mcai.ubuntudsu.ui.glass.BreathingBalloonDrawable(isDark(view.context))
+        val d = com.mcai.ubuntudsu.ui.glass.BreathingBalloonDrawable(view.context, isDark(view.context))
         view.background = d
     }
 
@@ -166,8 +166,8 @@ object Ui {
     fun dsuCard(context: android.content.Context): Int = if (isDark(context)) Night.BG else Day.BG
     fun dsuEntry(context: android.content.Context): Int = if (isDark(context)) Color.rgb(36, 42, 54) else Color.parseColor("#DCE3EE")
     fun border(context: android.content.Context): Int = if (isDark(context)) Color.argb(50, 255, 255, 255) else Color.parseColor("#C4D2E6")
-    fun primaryText(context: android.content.Context): Int = if (isDark(context)) Color.parseColor("#EAF0F8") else Color.parseColor("#243244")
-    fun secondaryText(context: android.content.Context): Int = if (isDark(context)) Color.parseColor("#F3F7FF") else Color.parseColor("#5C6A7C")
+    fun primaryText(context: android.content.Context): Int = if (isDark(context)) Color.parseColor("#FFFFFF") else Color.parseColor("#141B26")
+    fun secondaryText(context: android.content.Context): Int = if (isDark(context)) Color.parseColor("#EDF3FB") else Color.parseColor("#3B4A5E")
     fun buttonPrimary(context: android.content.Context): Int = if (isDark(context)) Night.PRIMARY else Day.PRIMARY
     fun buttonSecondary(context: android.content.Context): Int = if (isDark(context)) Color.parseColor("#5A6B58") else Color.parseColor("#7C8AA6")
     fun buttonSuccess(context: android.content.Context): Int = if (isDark(context)) Color.parseColor("#34B06A") else Color.parseColor("#1E8A60")
@@ -274,14 +274,15 @@ object Ui {
         val layers = mutableListOf<Drawable>()
 
         // L1 填充：半透明玻璃，让背后的呼吸气球背景透进来（玻璃模糊透感）
+        // 夜间给深色玻璃半透明底（不再全透明），保证卡内文字在背景图片上清晰可读
         val fillColors = if (dark) intArrayOf(
-            Color.TRANSPARENT,
-            Color.TRANSPARENT,
-            Color.TRANSPARENT,
+            0xD9161D2B.toInt(),  // 约 85% 深蓝玻璃
+            0xD4111720.toInt(),
+            0xD00D131B.toInt(),
         ) else intArrayOf(
-            0x99B7C6DA.toInt(),  // 约 60% 不透明白蓝玻璃
-            0x90AFBFCE.toInt(),
-            0x90A6B5C6.toInt(),
+            0xD9CDD9E8.toInt(),  // 约 85% 不透明白蓝玻璃
+            0xD4C3D0E2.toInt(),
+            0xD0BAC9DD.toInt(),
         )
         layers += GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,

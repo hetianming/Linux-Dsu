@@ -280,7 +280,8 @@ object DnaTools {
     // 其他功能脚本（assets 内置 sh，root source 执行）
     private val SCRIPTS = arrayOf(
         "my_partition_merge.sh", "partition_merge.sh",
-        "merge_superchunk.sh"
+        "merge_superchunk.sh", "selinux_boot.sh", "selinux_local.sh",
+        "vbmeta_boot.sh", "vbmeta_local.sh"
     )
 
     @JvmStatic

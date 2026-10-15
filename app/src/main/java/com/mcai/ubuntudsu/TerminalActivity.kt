@@ -307,12 +307,112 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
             this,
             "VNC 分辨率",
             option.name,
-            listOf("竖屏：720x1584", "横屏：1584x720"),
+            listOf("竖屏：720x1584", "横屏：1584x720", "自定义分辨率"),
             onPick = { which ->
-                if (which == 0) startVnc(720, 1584, "portrait", option)
-                else startVnc(1584, 720, "landscape", option)
+                when (which) {
+                    0 -> startVnc(720, 1584, "portrait", option)
+                    1 -> startVnc(1584, 720, "landscape", option)
+                    2 -> showCustomResolutionDialog(option)
+                }
             },
         )
+    }
+
+    private fun showCustomResolutionDialog(option: DesktopOption) {
+        val density = resources.displayMetrics.density
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Ui.frostedSurface(this@TerminalActivity, 24f)
+            setPadding(Ui.dp(16, density), Ui.dp(16, density), Ui.dp(16, density), Ui.dp(12, density))
+            layoutParams = android.view.ViewGroup.LayoutParams(
+                (resources.displayMetrics.widthPixels * 0.6f).toInt(),
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
+        }
+        panel.addView(TextView(this).apply {
+            text = "自定义 VNC 分辨率"
+            textSize = 15f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(Ui.primaryText(this@TerminalActivity))
+        })
+        panel.addView(TextView(this).apply {
+            text = "输入宽度和高度（像素），如 1920 x 1080"
+            textSize = 11f
+            setTextColor(Ui.secondaryText(this@TerminalActivity))
+            setPadding(0, 0, 0, Ui.dp(8, density))
+        })
+        val widthInput = android.widget.EditText(this).apply {
+            hint = "宽度"
+            textSize = 14f
+            setTextColor(Ui.primaryText(this@TerminalActivity))
+            setHintTextColor(Ui.secondaryText(this@TerminalActivity))
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            background = Ui.neuInset(this@TerminalActivity, 10f)
+            setPadding(Ui.dp(12, density), Ui.dp(10, density), Ui.dp(12, density), Ui.dp(10, density))
+            isSingleLine = true
+        }
+        panel.addView(widthInput, LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { bottomMargin = Ui.dp(8, density) })
+        val heightInput = android.widget.EditText(this).apply {
+            hint = "高度"
+            textSize = 14f
+            setTextColor(Ui.primaryText(this@TerminalActivity))
+            setHintTextColor(Ui.secondaryText(this@TerminalActivity))
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            background = Ui.neuInset(this@TerminalActivity, 10f)
+            setPadding(Ui.dp(12, density), Ui.dp(10, density), Ui.dp(12, density), Ui.dp(10, density))
+            isSingleLine = true
+        }
+        panel.addView(heightInput)
+        val dialog = android.app.Dialog(this).apply {
+            window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+            window?.setDimAmount(0.45f)
+            setContentView(panel)
+            setCanceledOnTouchOutside(true)
+        }
+        val okBtn = TextView(this).apply {
+            text = "确定"
+            textSize = 13f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            gravity = android.view.Gravity.CENTER
+            setTextColor(Ui.buttonText(this@TerminalActivity))
+            background = Ui.neuSolidButton(
+                0xFF4A90E2.toInt(), 0xFF2E5FB8.toInt(), 12f, this@TerminalActivity,
+            )
+            setPadding(0, Ui.dp(10, density), 0, Ui.dp(10, density))
+            setOnClickListener {
+                val w = widthInput.text.toString().toIntOrNull() ?: 0
+                val h = heightInput.text.toString().toIntOrNull() ?: 0
+                if (w < 320 || h < 200 || w > 3840 || h > 2160) {
+                    android.widget.Toast.makeText(this@TerminalActivity, "分辨率范围 320x200 ~ 3840x2160", android.widget.Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                val orientation = if (w > h) "landscape" else "portrait"
+                startVnc(w, h, orientation, option)
+            }
+        }
+        panel.addView(okBtn, LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = Ui.dp(10, density) })
+        val cancelBtn = TextView(this).apply {
+            text = "取消"
+            textSize = 12f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            gravity = android.view.Gravity.CENTER
+            setTextColor(Ui.secondaryText(this@TerminalActivity))
+            background = Ui.neuInset(this@TerminalActivity, 10f)
+            setPadding(0, Ui.dp(8, density), 0, Ui.dp(8, density))
+            setOnClickListener { dialog.dismiss() }
+        }
+        panel.addView(cancelBtn, LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = Ui.dp(6, density) })
+        dialog.show()
     }
 
     private fun startVnc(width: Int, height: Int, orientation: String, option: DesktopOption) {

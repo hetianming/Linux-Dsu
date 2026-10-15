@@ -68,6 +68,9 @@ class WorkTimePage(private val activity: Activity) {
     private val ACCENT = Color.parseColor("#00A98F")
     /** 当日高亮用的半透明主题色 */
     private val ACCENT_SOFT = Color.argb(56, 0, 169, 143)
+    /** 主题色文字：日间压深、夜间提亮，保证在玻璃卡片上清晰可读 */
+    private val accentText: Int
+        get() = if (Ui.isDark(activity)) Color.parseColor("#3DD9BE") else Color.parseColor("#00614F")
 
     fun build(): View {
         val scroll = ScrollView(activity).apply {
@@ -179,7 +182,7 @@ class WorkTimePage(private val activity: Activity) {
         card.addView(TextView(activity).apply {
             text = "复制当月记录"
             textSize = 11f
-            setTextColor(ACCENT)
+            setTextColor(accentText)
             background = Ui.neuInset(activity, 10f)
             setPadding(Ui.dp(10, d), Ui.dp(4, d), Ui.dp(10, d), Ui.dp(4, d))
             isClickable = true
@@ -208,14 +211,14 @@ class WorkTimePage(private val activity: Activity) {
         cell.addView(TextView(activity).apply {
             text = title
             textSize = 12f
-            setTextColor(if (title == "工资") ACCENT else Ui.secondaryText(activity))
+            setTextColor(if (title == "工资") accentText else Ui.secondaryText(activity))
             setPadding(0, 0, 0, Ui.dp(6, d))
         })
         val valueText = TextView(activity).apply {
             text = value
             textSize = 20f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(if (title == "工资") ACCENT else Ui.primaryText(activity))
+            setTextColor(if (title == "工资") accentText else Ui.primaryText(activity))
             maxLines = 1
             isSingleLine = true
             gravity = Gravity.CENTER
@@ -224,7 +227,7 @@ class WorkTimePage(private val activity: Activity) {
         cell.addView(TextView(activity).apply {
             text = if (title == "总工时") "小时" else if (title == "工资") "元" else "天"
             textSize = 10f
-            setTextColor(if (title == "工资") ACCENT else Ui.secondaryText(activity))
+            setTextColor(if (title == "工资") accentText else Ui.secondaryText(activity))
             setPadding(0, Ui.dp(2, d), 0, 0)
         })
         addView(cell)
@@ -343,7 +346,7 @@ class WorkTimePage(private val activity: Activity) {
             text = "00:00:00"
             textSize = 24f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(ACCENT)
+            setTextColor(accentText)
             gravity = Gravity.CENTER
             letterSpacing = 0.04f
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -452,7 +455,7 @@ class WorkTimePage(private val activity: Activity) {
             setTypeface(typeface, if (isSel || isToday) Typeface.BOLD else Typeface.NORMAL)
             setTextColor(when {
                 isSel -> Color.WHITE
-                isToday -> ACCENT
+                isToday -> accentText
                 restDay -> Ui.secondaryText(activity)
                 else -> Ui.primaryText(activity)
             })
@@ -539,7 +542,7 @@ class WorkTimePage(private val activity: Activity) {
         val workValue = if (record.inProgress) "进行中"
         else String.format(Locale.getDefault(), "%.2f", store.netHours(record))
         row.addView(buildDetailCell("工时", workValue,
-            if (record.inProgress) ACCENT else Ui.primaryText(activity)))
+            if (record.inProgress) accentText else Ui.primaryText(activity)))
         val del = TextView(activity).apply {
             text = "删除"
             textSize = 11f
@@ -575,7 +578,7 @@ class WorkTimePage(private val activity: Activity) {
         text = label
         textSize = 12f
         setTypeface(typeface, Typeface.BOLD)
-        setTextColor(ACCENT)
+        setTextColor(accentText)
         gravity = Gravity.CENTER
         background = Ui.neuInset(activity, 10f)
         setPadding(Ui.dp(10, d), Ui.dp(6, d), Ui.dp(10, d), Ui.dp(6, d))
@@ -745,7 +748,7 @@ class WorkTimePage(private val activity: Activity) {
                 clockInBtn?.isEnabled = false; clockInBtn?.alpha = 0.4f
                 clockOutBtn?.isEnabled = true; clockOutBtn?.alpha = 1f
                 liveTimer?.textSize = 24f
-                liveTimer?.setTextColor(ACCENT)
+                liveTimer?.setTextColor(accentText)
                 startTimer(record)
             }
             else -> {
@@ -858,7 +861,7 @@ class WorkTimePage(private val activity: Activity) {
                     cornerRadius = Ui.dp(8, d).toFloat()
                     setColor(if (on) ACCENT else 0x22FFFFFF.toInt())
                     setStroke(Ui.dp(1, d).toInt(),
-                        if (on) ACCENT else Ui.secondaryText(activity))
+                        if (on) accentText else Ui.secondaryText(activity))
                 }
                 setPadding(Ui.dp(8, d), Ui.dp(6, d), Ui.dp(8, d), Ui.dp(6, d))
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -873,7 +876,7 @@ class WorkTimePage(private val activity: Activity) {
                         cornerRadius = Ui.dp(8, d).toFloat()
                         setColor(if (bits[i]) ACCENT else 0x22FFFFFF.toInt())
                         setStroke(Ui.dp(1, d).toInt(),
-                            if (bits[i]) ACCENT else Ui.secondaryText(activity))
+                            if (bits[i]) accentText else Ui.secondaryText(activity))
                     }
                 }
             }
@@ -1034,7 +1037,7 @@ class WorkTimePage(private val activity: Activity) {
                         cornerRadius = Ui.dp(8, d).toFloat()
                         setColor(if (sel) ACCENT else 0x22FFFFFF.toInt())
                         setStroke(Ui.dp(1, d).toInt(),
-                            if (sel) ACCENT else Ui.secondaryText(activity))
+                            if (sel) accentText else Ui.secondaryText(activity))
                     }
                 }
             }

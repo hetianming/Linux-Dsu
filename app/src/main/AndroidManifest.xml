@@ -107,6 +107,14 @@
             android:exported="false"
             android:theme="@style/Theme.App"
             android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".core.dna.DnaSelinuxActivity"
+            android:exported="false"
+            android:theme="@style/Theme.App"
+            android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".core.dna.DnaVbmetaActivity"
+            android:exported="false"
+            android:theme="@style/Theme.App"
+            android:windowSoftInputMode="adjustResize" />
         <activity android:name=".core.dna.DnaUnzipActivity"
             android:exported="false"
             android:theme="@style/Theme.App"

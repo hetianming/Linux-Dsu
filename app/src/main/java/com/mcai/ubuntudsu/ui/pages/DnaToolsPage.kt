@@ -23,6 +23,7 @@ import com.mcai.ubuntudsu.core.DnaTools
 import com.mcai.ubuntudsu.core.RootShell
 import com.mcai.ubuntudsu.ui.Haptics
 import com.mcai.ubuntudsu.ui.Ui
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -337,6 +338,8 @@ class DnaToolsPage(private val activity: Activity) {
             item("🧬", "合并 my_ 分区") { anchor -> openMode("mergeMy", null) },
             item("🗂", "合并分段 super") { anchor -> openMode("mergeSuper", null) },
             item("📦", "合并其他分区") { anchor -> openMode("mergePart", null) },
+            item("🛡", "SELinux 功能") { anchor -> launchScaleUp(anchor, com.mcai.ubuntudsu.core.dna.DnaSelinuxActivity::class.java) },
+            item("🔒", "禁用 AVB / dm-verity") { anchor -> launchScaleUp(anchor, com.mcai.ubuntudsu.core.dna.DnaVbmetaActivity::class.java) },
         ))
     }
 
@@ -344,7 +347,10 @@ class DnaToolsPage(private val activity: Activity) {
         Pair(Pair(icon, label), action)
 
     private fun launchScaleUp(anchor: View, target: Class<out Activity>) {
-        val intent = Intent(activity, target)
+        launchScaleUpIntent(anchor, Intent(activity, target))
+    }
+
+    private fun launchScaleUpIntent(anchor: View, intent: Intent) {
         if (anchor.width > 0 && anchor.height > 0) {
             runCatching {
                 val options = android.app.ActivityOptions.makeScaleUpAnimation(anchor, 0, 0, anchor.width, anchor.height)
