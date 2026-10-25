@@ -169,8 +169,8 @@ class DsuPage(
                 text = "$size GB"
                 textSize = 12f
                 gravity = Gravity.CENTER
-                setTextColor(if (index == 0) Ui.buttonText(activity) else Ui.primaryText(activity))
-                background = Ui.glassButton(activity, if (index == 0) Ui.buttonPrimary(activity) else null)
+                setTextColor(if (index == 0) Color.WHITE else Ui.primaryText(activity))
+                background = if (index == 0) Ui.chipSelected(activity) else Ui.glassButton(activity)
                 layoutParams = LinearLayout.LayoutParams(0, Ui.dp(30, d), 1f).apply {
                     marginEnd = if (index == DsuManager.userdataOptions.lastIndex) 0 else Ui.dp(5, d)
                 }
@@ -214,7 +214,7 @@ class DsuPage(
         }
         customRow.addView(customCapacityInput)
         customRow.addView(
-            smallAction("确定容量", Ui.buttonPrimary(activity), minWidthDp = 88) {
+            smallAction("确定容量", Ui.buttonPrimary(activity), minWidthDp = 88, solid = true) {
                 val value = customCapacityInput.text.toString().toIntOrNull()
                 when {
                     value == null || value <= 0 -> {
@@ -380,12 +380,13 @@ class DsuPage(
         if (bold) setTypeface(typeface, Typeface.BOLD)
     }
 
-    private fun smallAction(text: String, accent: Int, minWidthDp: Int = 0, onClick: () -> Unit): TextView = TextView(activity).apply {
+    private fun smallAction(text: String, accent: Int, minWidthDp: Int = 0, solid: Boolean = false, onClick: () -> Unit): TextView = TextView(activity).apply {
         this.text = text
         textSize = 13f
         gravity = Gravity.CENTER
-        setTextColor(Ui.buttonText(activity))
-        background = Ui.glassButton(activity, accent)
+        setTextColor(if (solid) Color.WHITE else Ui.buttonText(activity))
+        // solid：固定亮蓝渐变实心（夜间主色是暗灰绿，玻璃 accent 在深色卡上几乎看不出来）
+        background = if (solid) Ui.chipSelected(activity) else Ui.glassButton(activity, accent)
         val d = activity.resources.displayMetrics.density
         setPadding(Ui.dp(14, d), Ui.dp(10, d), Ui.dp(14, d), Ui.dp(10, d))
         if (minWidthDp > 0) minimumWidth = Ui.dp(minWidthDp, d)
@@ -397,14 +398,19 @@ class DsuPage(
         for (index in 0 until row.childCount) {
             val chip = row.getChildAt(index) as? TextView ?: continue
             val isSelected = chip.text.toString().removeSuffix(" GB").toIntOrNull() == selected
-            chip.setTextColor(if (isSelected) Ui.buttonText(activity) else Ui.primaryText(activity))
-            chip.background = Ui.strokeRounded(
-                if (isSelected) Ui.buttonPrimary(activity) else Ui.surfaceGlass(activity),
-                if (isSelected) Ui.buttonPrimary(activity) else Ui.border(activity),
-                1f,
-                activity.resources.displayMetrics.density,
-                15f,
-            )
+            chip.setTextColor(if (isSelected) Color.WHITE else Ui.primaryText(activity))
+            chip.background = if (isSelected) {
+                // 固定亮蓝渐变实心：夜间主色是暗灰绿，压在深色卡上看不出选中
+                Ui.chipSelected(activity)
+            } else {
+                Ui.strokeRounded(
+                    Ui.surfaceGlass(activity),
+                    Ui.border(activity),
+                    1f,
+                    activity.resources.displayMetrics.density,
+                    15f,
+                )
+            }
         }
     }
 

@@ -122,6 +122,7 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         String m = getIntent().getStringExtra(EXTRA_MODE);
         if (MODE_FLASH.equals(m)) mode = MODE_FLASH;
         buildUi();
+        ensureNoteChannel();
     }
 
     @Override
@@ -143,6 +144,7 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         if (partDialog != null && partDialog.isShowing()) partDialog.dismiss();
         super.onDestroy();
         io.shutdownNow();
+        cancelNote();
     }
 
     // ================= UI 构建 =================
@@ -757,6 +759,7 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         progressBar.setVisibility(View.VISIBLE);
         progressBar.setProgress(0);
         progressText.setText(t("准备中 …", "Preparing …"));
+        notifyProgress(t("准备中 …", "Preparing …"), null, true);
         expandLog();
 
         final List<String> targets = new ArrayList<>(selectedParts);
@@ -822,6 +825,46 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         finishRun(true, "", "", "");
     }
 
+    // ================= 流体云进度通知（ColorOS 自动把带确定进度的通知提升为胶囊） =================
+
+    private static final String NOTE_CHANNEL = "dna_tools_progress";
+    private static final int NOTE_ID = 4207;
+
+    private void ensureNoteChannel() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            android.app.NotificationChannel channel = new android.app.NotificationChannel(
+                    NOTE_CHANNEL, "DNA 工具箱进度", android.app.NotificationManager.IMPORTANCE_LOW);
+            channel.setDescription("显示 DNA 分解 / 提取任务实时状态");
+            channel.setShowBadge(false);
+            getSystemService(android.app.NotificationManager.class).createNotificationChannel(channel);
+        }
+    }
+
+    private void notifyProgress(String text, Integer pct, boolean ongoing) {
+        try {
+            Intent it = new Intent(this, DnaPartitionActivity.class);
+            it.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            android.app.PendingIntent pi = android.app.PendingIntent.getActivity(this, NOTE_ID, it,
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE);
+            String title = MODE_EXTRACT.equals(mode) ? t("分区提取", "Extract") : t("分区刷写", "Flash");
+            android.app.Notification n = com.mcai.ubuntudsu.core.ProgressNotification.INSTANCE.build(
+                    this, NOTE_CHANNEL, title, text, pct, ongoing, pi, !text.startsWith("✗"));
+            android.app.NotificationManager nm =
+                    (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm != null) nm.notify(NOTE_ID, n);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void cancelNote() {
+        try {
+            android.app.NotificationManager nm =
+                    (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm != null) nm.cancel(NOTE_ID);
+        } catch (Exception ignored) {
+        }
+    }
+
     private void onProgress(int pct, long written) {
         main.post(() -> {
             if (progressBar != null) progressBar.setProgress(pct);
@@ -829,6 +872,9 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
                 progressText.setText(t("进度 " + pct + "%（" + fmtMB(written) + "）",
                         "Progress " + pct + "% (" + fmtMB(written) + ")"));
             }
+            // 离开 APP 也能在通知/流体云看到真实进度
+            notifyProgress(t("进度 " + pct + "%（" + fmtMB(written) + "）",
+                    "Progress " + pct + "% (" + fmtMB(written) + ")"), Integer.valueOf(pct), true);
         });
     }
 
@@ -851,6 +897,10 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
                 statusText.setText(t("失败：" + (msg != null ? msg : "未知错误"), "Failed: " + (msg != null ? msg : "unknown")));
                 log("✗ " + (msg != null ? msg : "unknown"));
             }
+            String note = success
+                    ? t("✓ 批量操作完成", "✓ Batch done")
+                    : ("已取消".equals(msg) ? t("⏹ 已终止", "⏹ Stopped") : t("✗ 失败：" + (msg != null ? msg : "未知错误"), "✗ Failed"));
+            notifyProgress(note, success ? Integer.valueOf(100) : null, false);
         });
     }
 

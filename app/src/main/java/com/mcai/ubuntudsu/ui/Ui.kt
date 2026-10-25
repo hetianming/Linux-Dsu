@@ -546,6 +546,14 @@ object Ui {
     }
 
     /**
+     * 选项 chip 选中态：固定亮蓝渐变实心（夜间也醒目可读）。
+     * 不能用主题主色 buttonPrimary —— 夜间它是暗灰绿 #3D4440，
+     * 压在深色玻璃卡上几乎看不出选中、文字对比度也不够。
+     */
+    fun chipSelected(context: android.content.Context): Drawable =
+        neuSolidButton(Day.PRIMARY_TOP, Day.PRIMARY_BOTTOM, 15f, context)
+
+    /**
      * 浅色拟态按键：日间白玻璃填充 + 蓝灰高光/阴影双环 + 8dp 圆角（不随夜间主题变暗）。
      * 终端快捷栏专用——按键内放黑色文字，保证任何主题下都清晰可读。
      */
