@@ -25,7 +25,6 @@ class LinuxPage(
     private val executor: Executor,
 ) {
     private lateinit var infoText: TextView
-    private lateinit var installHint: TextView
 
     fun build(): View {
         val d = activity.resources.displayMetrics.density
@@ -42,29 +41,39 @@ class LinuxPage(
             setPadding(0, 0, 0, Ui.dp(14, d))
         })
 
+        // 状态预览卡：红点 + 系统版本 · 已安装 / Linux 容器 · 未安装（单行，不再堆技术字段）
         val infoCard = card()
+        val statusRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        statusRow.addView(View(activity).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(if (Ui.isDark(activity)) Color.parseColor("#FF6B6B") else Color.parseColor("#D93838"))
+            }
+            layoutParams = LinearLayout.LayoutParams(Ui.dp(9, d), Ui.dp(9, d))
+        })
         infoText = TextView(activity).apply {
-            textSize = 12f
+            textSize = 14f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(Ui.dp(9, d), 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
-        infoCard.addView(infoText)
+        statusRow.addView(infoText)
+        infoCard.addView(statusRow)
         page.addView(infoCard)
-
-        installHint = TextView(activity).apply {
-            text = "Ubuntu rootfs 尚未安装，点击下方“安装 rootfs 系统”开始。"
-            textSize = 11f
-            setTextColor(if (Ui.isDark(activity)) Color.parseColor("#FFB4A8") else Color.parseColor("#B5473B"))
-            setPadding(Ui.dp(4, d), Ui.dp(6, d), Ui.dp(4, d), 0)
-        }
-        page.addView(installHint)
 
         page.addView(spacer(10))
         // 功能区：2×2 卡片网格（与「多功能」页同一套卡片语言），四入口对称
         val features = listOf(
-            Feature(R.drawable.icon_terminal_runner, "#2D64AA", "容器终端", "Chroot 容器 · Termux 风格") {
+            Feature(R.drawable.icon_terminal_runner, "#2D64AA", "容器终端") {
                 requireRootfs { activity.startActivity(Intent(activity, TerminalActivity::class.java)) }
             },
-            Feature(R.drawable.icon_linux_modern, "#E95420", "桌面环境", "XFCE · KDE · GNOME + VNC") {
+            Feature(R.drawable.icon_linux_modern, "#E95420", "桌面环境") {
                 requireRootfs {
                     activity.startActivity(
                         Intent(activity, TerminalActivity::class.java).apply {
@@ -73,10 +82,10 @@ class LinuxPage(
                     )
                 }
             },
-            Feature(R.drawable.ic_folder_manager, "#6C4AC2", "文件管理", "浏览 · 编辑 rootfs 内文件") {
+            Feature(R.drawable.ic_folder_manager, "#6C4AC2", "文件管理") {
                 requireRootfs { activity.startActivity(Intent(activity, RootfsFilesActivity::class.java)) }
             },
-            Feature(R.drawable.icon_install_rootfs, "#11998E", "安装 rootfs", "本地安装 · 云端下载 · 备份") {
+            Feature(R.drawable.icon_install_rootfs, "#11998E", "安装 rootfs") {
                 activity.startActivity(Intent(activity, RootfsInstallActivity::class.java))
             },
         )
@@ -90,8 +99,8 @@ class LinuxPage(
             }
             rowItems.forEachIndexed { colIndex, f ->
                 row.addView(
-                    Ui.featureCard(activity, f.iconRes, Color.parseColor(f.tint), f.title, f.subtitle, false) { f.action() },
-                    LinearLayout.LayoutParams(0, Ui.dp(84, d), 1f).apply {
+                    Ui.featureCard(activity, f.iconRes, Color.parseColor(f.tint), f.title, null, false) { f.action() },
+                    LinearLayout.LayoutParams(0, Ui.dp(76, d), 1f).apply {
                         if (colIndex > 0) marginStart = Ui.dp(10, d)
                     },
                 )
@@ -139,22 +148,31 @@ class LinuxPage(
 
     fun refreshInfo() {
         val installed = Env.ubuntuInstalled(activity)
-        val path = Env.rootfs(activity).path
-        installHint.visibility = if (installed) View.GONE else View.VISIBLE
-        if (!installed) {
-            infoText.text = "系统版本信息：未安装\n状态：未安装\n安装后可通过终端进入 Linux（Chroot + Root 权限）"
-            return
+        infoText.text = if (installed) {
+            "${prettyVersion() ?: "Linux 容器"} · 已安装"
+        } else {
+            "Linux 容器 · 未安装"
         }
-        val version = rootfsVersion()
-        infoText.text = "系统版本信息：$version\n状态：已安装\n路径：$path"
+    }
+
+    /** 从 os-release 里提取适合展示的系统名（优先 PRETTY_NAME，去掉末尾代号括号） */
+    private fun prettyVersion(): String? {
+        val raw = rootfsVersion()
+        if (raw.isBlank() || raw.contains("未找到")) return null
+        val pretty = Regex("""PRETTY_NAME\s*=\s*"([^"\n]+)"""").find(raw)?.groupValues?.get(1)
+            ?: raw.lineSequence().firstOrNull { it.isNotBlank() && !it.startsWith("#") } ?: return null
+        return pretty
+            .replace(Regex("""\s*\([^)]*\)\s*$"""), "")
+            .trim()
+            .take(36)
+            .ifBlank { null }
     }
 
     private fun rootfsVersion(): String {
         val rootfs = Env.rootfs(activity)
         val candidates = listOf("etc/版本信息", "etc/version", "etc/ubuntu_version", "etc/os-release")
         val file = candidates.asSequence().map { java.io.File(rootfs, it) }.firstOrNull { it.isFile }
-        return runCatching { file?.readText(Charsets.UTF_8)?.trim() }.getOrNull()
-            ?.lineSequence()?.firstOrNull { it.isNotBlank() }?.take(120)
+        return runCatching { file?.readText(Charsets.UTF_8)?.take(2000)?.trim() }.getOrNull()
             ?.ifBlank { "未找到版本信息文件" } ?: "未找到版本信息文件"
     }
 
@@ -217,7 +235,6 @@ sleep 1""".trimIndent()
         val iconRes: Int,
         val tint: String,
         val title: String,
-        val subtitle: String,
         val action: () -> Unit,
     )
 
