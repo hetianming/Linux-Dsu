@@ -341,6 +341,20 @@ class DnaToolsPage(private val activity: Activity) {
             item("🛡", "SELinux 功能") { anchor -> launchScaleUp(anchor, com.mcai.ubuntudsu.core.dna.DnaSelinuxActivity::class.java) },
             item("🔒", "禁用 AVB / dm-verity") { anchor -> launchScaleUp(anchor, com.mcai.ubuntudsu.core.dna.DnaVbmetaActivity::class.java) },
         ))
+
+        sectionTitle(body, "本机分区", Color.parseColor("#C77DFF"))
+        buildTwoColRow(body, listOf(
+            item("📤", "提取本机分区") { anchor ->
+                val i = Intent(activity, com.mcai.ubuntudsu.core.dna.DnaPartitionActivity::class.java)
+                i.putExtra(com.mcai.ubuntudsu.core.dna.DnaPartitionActivity.EXTRA_MODE, "extract")
+                launchScaleUpIntent(anchor, i)
+            },
+            item("📥", "刷写本机分区") { anchor ->
+                val i = Intent(activity, com.mcai.ubuntudsu.core.dna.DnaPartitionActivity::class.java)
+                i.putExtra(com.mcai.ubuntudsu.core.dna.DnaPartitionActivity.EXTRA_MODE, "flash")
+                launchScaleUpIntent(anchor, i)
+            },
+        ))
     }
 
     private fun item(icon: String, label: String, action: (View) -> Unit): Pair<Pair<String, String>, (View) -> Unit> =

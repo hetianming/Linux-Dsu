@@ -122,6 +122,122 @@ object DnaTools {
         return if (parts.size >= 3) parts[1] else null
     }
 
+    // ============ 本机分区枚举 / 块设备解析 / dd 提取刷写 ============
+
+    /**
+     * 列出本机全部分区名（扫描 /dev/block 下各 by-name 目录，去重排序）。
+     * root 不可用或目录缺失时返回空列表。
+     */
+    @JvmStatic
+    fun listPartitions(ctx: Context): List<String> {
+        val r = RootShell.exec(
+            "for d in $(find /dev/block -name by-name -type d 2>/dev/null); do ls -1 \"\$d\" 2>/dev/null; done | sort -u",
+            timeoutMs = 15000)
+        return if (r.success) r.stdout.lineSequence().map { it.trim() }
+            .filter { it.isNotEmpty() }.distinct().sorted().toList()
+        else emptyList()
+    }
+
+    /**
+     * 解析分区名对应的真实块设备路径（readlink -f），失败回退 /dev/block/by-name/<name>。
+     * 不同设备 by-name 目录位置不一（/dev/block/by-name、/dev/block/bootdevice/by-name、
+     * /dev/block/platform/<soc>/by-name），此处自动遍历定位。
+     */
+    @JvmStatic
+    fun partitionPath(ctx: Context, name: String): String {
+        val r = RootShell.exec(
+            "for d in $(find /dev/block -name by-name -type d 2>/dev/null); do p=\"\$d/$name\"; [ -e \"\$p\" ] && { readlink -f \"\$p\" && break; }; done",
+            timeoutMs = 10000)
+        val line = r.stdout.lines().firstOrNull { it.isNotBlank() }
+        return if (line != null) line.trim() else "/dev/block/by-name/$name"
+    }
+
+    /**
+     * 直接以 root 执行 dd 提取/刷写分区（不依赖 DNA 工具链，仅需设备自带 toybox dd）。
+     * 后台启动 dd，并通过 /proc/<pid>/io 的 write_bytes 实时回传进度（百分比 + 已写字节）。
+     * @param src 源（提取时为分区块设备，刷写时为本地 img 路径）
+     * @param dst 目标（提取时为输出 img，刷写时为分区块设备）
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun ddPartition(
+        src: String,
+        dst: String,
+        onProgress: ((Int, Long) -> Unit)? = null,
+        onLog: ((String) -> Unit)? = null,
+        isCancelled: () -> Boolean = { false },
+        timeoutMs: Long = 30 * 60_000L,
+    ): Result {
+        // 计算总字节数用于进度百分比（块设备用 blockdev，普通文件用 stat）
+        val sizeR = RootShell.exec(
+            "blockdev --getsize64 '$src' 2>/dev/null || stat -c %s '$src' 2>/dev/null || echo 0",
+            timeoutMs = 10000)
+        val total = sizeR.stdout.trim().toLongOrNull() ?: 0L
+        val dir = File(dst).parent
+        if (!dir.isNullOrEmpty()) {
+            RootShell.exec("mkdir -p '$dir'", timeoutMs = 10000)
+        }
+        val script = buildString {
+            append("exec 2>&1\n")
+            append("dd if=").append(quote(src)).append(" of=").append(quote(dst))
+            append(" bs=4M conv=fsync &\n")
+            append("__pid=\$!\n")
+            append("while kill -0 \"\$__pid\" 2>/dev/null; do\n")
+            append("  __wb=\$(awk '/^write_bytes:/{print \$2; exit}' /proc/\$__pid/io 2>/dev/null)\n")
+            append("  [ -n \"\$__wb\" ] && echo __DNA_DD_\${__wb}__\n")
+            append("  sleep 1\n")
+            append("done\n")
+            append("wait \"\$__pid\"; __rc=\$?\n")
+            append("echo __DNA_EXIT_\${__rc}__\n")
+        }
+        return try {
+            val process = ProcessBuilder("su").start()
+            process.outputStream.use { it.write(script.toByteArray()); it.flush() }
+            val output = StringBuilder()
+            val exitCode = AtomicInteger(-1)
+            val reader = Thread({
+                runCatching {
+                    BufferedReader(InputStreamReader(process.inputStream)).forEachLine { line ->
+                        val exit = Regex("__DNA_EXIT_(\\d+)__").find(line)
+                        if (exit != null) {
+                            exitCode.set(exit.groupValues[1].toIntOrNull() ?: -1)
+                            return@forEachLine
+                        }
+                        val prog = Regex("__DNA_DD_(\\d+)__").find(line)
+                        if (prog != null) {
+                            val written = prog.groupValues[1].toLongOrNull() ?: 0L
+                            val pct = if (total > 0) (written * 100 / total).toInt().coerceIn(0, 100) else 0
+                            onProgress?.invoke(pct, written)
+                            return@forEachLine
+                        }
+                        synchronized(output) { output.appendLine(line) }
+                        onLog?.invoke(line)
+                    }
+                }
+            }, "dd-io").apply { isDaemon = true; start() }
+            val startedAt = System.currentTimeMillis()
+            while (true) {
+                if (process.waitFor(1, TimeUnit.MILLISECONDS)) break
+                if (isCancelled()) {
+                    process.destroyForcibly()
+                    reader.join(1500)
+                    return Result(false, output.toString(), "已取消", -1)
+                }
+                if (System.currentTimeMillis() - startedAt > timeoutMs) {
+                    process.destroyForcibly()
+                    reader.join(1500)
+                    return Result(false, output.toString(), "执行超时（${timeoutMs / 60000} 分钟）", -1)
+                }
+            }
+            reader.join(2000)
+            val out = synchronized(output) { output.toString() }
+            val code = exitCode.get()
+            Result(code == 0, out, if (code == 0) "完成" else "退出码 $code", code)
+        } catch (e: Exception) {
+            Result(false, "", e.message ?: "执行失败", -1)
+        }
+    }
+
     @JvmStatic
     fun currentProject(ctx: Context): String? {
         val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
