@@ -161,6 +161,7 @@ class SettingsPage(
             item.title,
             null,
             wallpaperSync,
+            false,
             item.onClick,
         )
 

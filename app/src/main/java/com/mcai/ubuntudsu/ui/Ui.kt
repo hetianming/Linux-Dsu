@@ -588,6 +588,7 @@ object Ui {
         title: String,
         subtitle: String? = null,
         whiteText: Boolean = false,
+        dangerText: Boolean = false,
         onClick: (View) -> Unit,
     ): View {
         val d = context.resources.displayMetrics.density
@@ -637,7 +638,13 @@ object Ui {
                 text = title
                 textSize = 14f
                 setTypeface(typeface, Typeface.BOLD)
-                setTextColor(if (whiteText) Color.WHITE else primaryText(context))
+                setTextColor(
+                    when {
+                        whiteText -> Color.WHITE
+                        dangerText -> buttonDanger(context)
+                        else -> primaryText(context)
+                    }
+                )
                 maxLines = 2
                 ellipsize = android.text.TextUtils.TruncateAt.END
                 if (whiteText) setShadowLayer(5f, 0f, 0f, Color.BLACK)

@@ -284,7 +284,8 @@ class DsuPage(
         )
         page.addView(parameterCard)
 
-        // 工具入口：2x2 大图标网格（重启到 DSU / 修复环境 / 撤销已安装 / 清理 userdata）
+        // 工具入口：2×2 卡片网格（与「多功能 / Linux」页同一套卡片语言）
+        // 上行=常规操作，下行=破坏性操作（红色文字 + 红色图标块作为警示）
         page.addView(
             label("DSU 工具", 12f, bold = true).apply { setTextColor(Ui.secondaryText(activity)) },
             LinearLayout.LayoutParams(
@@ -292,9 +293,8 @@ class DsuPage(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply { topMargin = Ui.dp(10, d); bottomMargin = Ui.dp(8, d) },
         )
-        val toolsRow1 = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
-        toolsRow1.addView(
-            Ui.iconTile(activity, "重启到 DSU", "重启进入 GSI 系统", R.drawable.ic_dsu_restart, Ui.buttonWarning(activity)) {
+        val tools = listOf(
+            Tool(R.drawable.ic_dsu_restart, "#E07B39", "重启到 DSU", false) {
                 confirmAction("重启进入 DSU", "设备将立即重启并进入 GSI 系统。") {
                     executor.execute {
                         val service = privilegedService
@@ -308,10 +308,7 @@ class DsuPage(
                     }
                 }
             },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-        )
-        toolsRow1.addView(
-            Ui.iconTile(activity, "修复环境", "清理元数据重新准备", R.drawable.ic_dsu_repair) {
+            Tool(R.drawable.ic_dsu_repair, "#2D64AA", "修复环境", false) {
                 confirmAction(
                     "修复 DSU 环境",
                     "将删除 /metadata/gsi/dsu 和 /metadata/vold/metadata_encryption/dsu。该操作用于清理上一次失败安装留下的状态，不会删除已选择的 GSI 文件。",
@@ -322,24 +319,10 @@ class DsuPage(
                     }
                 }
             },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = Ui.dp(8, d) },
-        )
-        page.addView(toolsRow1)
-        val toolsRow2 = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = Ui.dp(8, d) }
-        }
-        toolsRow2.addView(
-            Ui.iconTile(activity, "撤销已安装", "移除 GSI 回到原系统", R.drawable.ic_dsu_undo, Ui.buttonDanger(activity)) {
+            Tool(R.drawable.ic_dsu_undo, "#D93838", "撤销已安装", true) {
                 confirmAction("撤销 GSI", "删除 /data/gsi/dsu/dsu，移除已安装的 GSI。") { executor.execute { DsuManager.wipe(::log) } }
             },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-        )
-        toolsRow2.addView(
-            Ui.iconTile(activity, "清理 userdata", "清空用户数据分区", R.drawable.ic_dsu_clear_userdata) {
+            Tool(R.drawable.ic_dsu_clear_userdata, "#B5473B", "清理 userdata", true) {
                 confirmAction("清理 userdata", "执行 gsi_tool wipe-data，仅清空 userdata 分区数据。") {
                     executor.execute {
                         val result = DsuManager.wipeData(::log)
@@ -347,12 +330,37 @@ class DsuPage(
                     }
                 }
             },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = Ui.dp(8, d) },
         )
-        page.addView(toolsRow2)
+        tools.chunked(2).forEach { rowItems ->
+            val row = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { bottomMargin = Ui.dp(10, d) }
+            }
+            rowItems.forEachIndexed { colIndex, t ->
+                row.addView(
+                    Ui.featureCard(activity, t.iconRes, Color.parseColor(t.tint), t.title, null, false, t.danger) { t.action() },
+                    LinearLayout.LayoutParams(0, Ui.dp(76, d), 1f).apply {
+                        if (colIndex > 0) marginStart = Ui.dp(10, d)
+                    },
+                )
+            }
+            page.addView(row)
+        }
 
         return page
     }
+
+    /** DSU 工具卡数据：图标 / 品牌色 / 标题 / 是否危险操作（红字警示） / 点击动作 */
+    private data class Tool(
+        val iconRes: Int,
+        val tint: String,
+        val title: String,
+        val danger: Boolean,
+        val action: () -> Unit,
+    )
 
     private fun card(d: Float): LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
