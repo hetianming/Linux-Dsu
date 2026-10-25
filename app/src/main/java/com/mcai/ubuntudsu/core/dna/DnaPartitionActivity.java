@@ -150,12 +150,9 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
     private LinearLayout glassCard() {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
-        c.setPadding(dp(12), dp(10), dp(12), dp(10));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0x33FFFFFF);
-        bg.setCornerRadius(dp(16));
-        bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
-        c.setBackground(bg);
+        c.setPadding(dp(14), dp(12), dp(14), dp(12));
+        // 夜间自动使用高不透明深色玻璃，保证卡内文字对比度
+        c.setBackground(Ui.INSTANCE.dnaGlassCard(this, 16f));
         return c;
     }
 
@@ -220,8 +217,8 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         // ---- 状态卡 ----
         LinearLayout infoCard = glassCard();
         String cur = DnaTools.currentProject(this);
-        infoCard.addView(textView(t("当前工程", "Project") + "：" + (cur != null ? cur : t("未选择", "None")), 12f, pal.subtitle));
-        statusText = textView(t("待执行", "Idle"), 11.5f, pal.subtitle);
+        infoCard.addView(textView(t("当前工程", "Project") + "：" + (cur != null ? cur : t("未选择", "None")), 13f, pal.subtitle));
+        statusText = textView(t("待执行", "Idle"), 12.5f, pal.subtitle);
         statusText.setTypeface(null, 1);
         LinearLayout.LayoutParams statusLp = new LinearLayout.LayoutParams(-1, -2);
         statusLp.topMargin = dp(3);
@@ -231,9 +228,9 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         String slotLabel = (slot != null && !slot.isEmpty())
                 ? slot.toUpperCase()
                 : t("未识别（可能 A-only 设备）", "Not detected (A-only)");
-        infoCard.addView(textView(t("当前活跃槽位: " + slotLabel, "Active slot: " + slotLabel), 10.5f, pal.subtitle));
+        infoCard.addView(textView(t("当前活跃槽位: " + slotLabel, "Active slot: " + slotLabel), 11.5f, pal.subtitle));
 
-        TextView rootText = textView(t("检测 ROOT …", "Detecting ROOT …"), 10.5f, pal.subtitle);
+        TextView rootText = textView(t("检测 ROOT …", "Detecting ROOT …"), 11.5f, pal.subtitle);
         infoCard.addView(rootText);
         io.execute(() -> {
             boolean rootAvail = RootShell.INSTANCE.available(8000);
@@ -247,7 +244,7 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         TextView warn = textView(
                 t("直接操作块设备有误刷变砖风险，请确认分区与镜像匹配，操作前务必备份。",
                         "Writing raw block devices may brick the device. Verify partition/image and back up first."),
-                12f, pal.danger);
+                12.5f, pal.danger);
         warn.setPadding(0, dp(6), 0, 0);
         infoCard.addView(warn);
         LinearLayout.LayoutParams infoLp = new LinearLayout.LayoutParams(-1, -2);
@@ -297,7 +294,7 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         pickLp.topMargin = dp(8);
         partCard.addView(pickPartBtn, pickLp);
 
-        selSummary = textView(t("尚未选择分区", "No partition selected"), 12f, pal.subtitle);
+        selSummary = textView(t("尚未选择分区", "No partition selected"), 12.5f, pal.subtitle);
         selSummary.setPadding(0, dp(6), 0, 0);
         partCard.addView(selSummary);
 
@@ -309,7 +306,7 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         buildIoCard(content);
 
         // ---- 进度 ----
-        progressText = textView("", 11.5f, pal.subtitle);
+        progressText = textView("", 12.5f, pal.subtitle);
         LinearLayout.LayoutParams progTextLp = new LinearLayout.LayoutParams(-1, -2);
         progTextLp.topMargin = dp(8);
         content.addView(progressText, progTextLp);
@@ -373,8 +370,8 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         applyModeBg(extractModeBtn, extract);
         applyModeBg(flashModeBtn, !extract);
         if (extractModeBtn != null && flashModeBtn != null) {
-            extractModeBtn.setTextColor(extract ? 0xFFFFFFFF : (isDark() ? 0x99FFFFFF : 0x991F3352));
-            flashModeBtn.setTextColor(!extract ? 0xFFFFFFFF : (isDark() ? 0x99FFFFFF : 0x991F3352));
+            extractModeBtn.setTextColor(extract ? 0xFFFFFFFF : (isDark() ? 0xF2FFFFFF : 0xB31F3352));
+            flashModeBtn.setTextColor(!extract ? 0xFFFFFFFF : (isDark() ? 0xF2FFFFFF : 0xB31F3352));
         }
         runBtn.setText(extract ? t("开始提取", "Start Extract") : t("开始刷写", "Start Flash"));
         if (extractIoCard != null) extractIoCard.setVisibility(extract ? View.VISIBLE : View.GONE);
@@ -403,17 +400,20 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         extractIoCard.addView(textView(t("提取目标（输出 img）", "Extract target (output img)"), 13f, pal.title));
         ((TextView) extractIoCard.getChildAt(0)).setTypeface(null, 1);
         destEdit = new EditText(this);
-        destEdit.setTextSize(12f);
+        destEdit.setTextSize(12.5f);
         destEdit.setSingleLine(true);
         destEdit.setEllipsize(TextUtils.TruncateAt.MIDDLE);
         destEdit.setPadding(dp(10), dp(8), dp(10), dp(8));
         destEdit.setBackground(rippleBg(isDark()));
+        // 主题默认是 Light（文字近黑），夜间必须显式指定，否则路径几乎看不见
+        destEdit.setTextColor(pal.title);
+        destEdit.setHintTextColor(pal.hint);
         LinearLayout.LayoutParams destLp = new LinearLayout.LayoutParams(-1, -2);
         destLp.topMargin = dp(6);
         extractIoCard.addView(destEdit, destLp);
         TextView destHint = textView(
                 t("每个所选分区将单独保存为 <目录>/<分区名>.img", "Each selected partition → <dir>/<name>.img"),
-                10.5f, pal.subtitle);
+                11.5f, pal.subtitle);
         destHint.setPadding(0, dp(4), 0, 0);
         extractIoCard.addView(destHint);
 
@@ -452,7 +452,7 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         Button browseBtn = new Button(this);
         browseBtn.setText(t("📂 浏览", "Browse"));
         browseBtn.setAllCaps(false);
-        browseBtn.setTextSize(11f);
+        browseBtn.setTextSize(11.5f);
         browseBtn.setTypeface(null, 1);
         browseBtn.setTextColor(pal.accent);
         browseBtn.setGravity(Gravity.CENTER);
@@ -473,7 +473,7 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         TextView flashHint = textView(
                 t("刷写会将镜像内容写入所选分区（如 boot / vendor_boot / system），刷错分区可能无法开机。",
                         "Flash writes the image into the selected partition; wrong target may break boot."),
-                10.5f, pal.subtitle);
+                11.5f, pal.subtitle);
         flashHint.setPadding(0, dp(6), 0, 0);
         flashIoCard.addView(flashHint);
         LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(-1, -2);
@@ -483,7 +483,7 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
 
     private void setupChip(Button b) {
         b.setAllCaps(false);
-        b.setTextSize(11f);
+        b.setTextSize(11.5f);
         b.setTypeface(null, 1);
         b.setTextColor(pal.accent);
         b.setGravity(Gravity.CENTER);
@@ -592,10 +592,12 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
 
         final EditText search = new EditText(this);
         search.setHint(t("搜索分区，如 boot / system / vendor", "Search, e.g. boot / system / vendor"));
-        search.setTextSize(12f);
+        search.setTextSize(12.5f);
         search.setSingleLine(true);
         search.setPadding(dp(10), dp(8), dp(10), dp(8));
         search.setBackground(rippleBg(dark));
+        search.setTextColor(pal.title);
+        search.setHintTextColor(pal.hint);
         LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-1, -2);
         searchLp.bottomMargin = dp(8);
         panel.addView(search, searchLp);

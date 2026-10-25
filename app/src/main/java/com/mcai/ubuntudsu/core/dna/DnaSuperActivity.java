@@ -136,11 +136,7 @@ public final class DnaSuperActivity extends DnaBaseActivity {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         c.setPadding(dp(14), dp(12), dp(14), dp(12));
-        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setColor(0x33FFFFFF);
-        bg.setCornerRadius(dp(18));
-        bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
-        c.setBackground(bg);
+        c.setBackground(com.mcai.ubuntudsu.ui.Ui.INSTANCE.dnaGlassCard(this, 18f));
         return c;
     }
 
@@ -236,7 +232,7 @@ public final class DnaSuperActivity extends DnaBaseActivity {
         titleBox.addView(title, new LinearLayout.LayoutParams(-1, -2));
         TextView sub = new TextView(this);
         sub.setText(t("工程 super.img → 分区镜像 · lpunpack", "project super.img → partitions"));
-        sub.setTextSize(11f);
+        sub.setTextSize(11.5f);
         sub.setTextColor(pal.subtitle);
         titleBox.addView(sub, new LinearLayout.LayoutParams(-1, -2));
         top.addView(titleBox, new LinearLayout.LayoutParams(0, -2, 1f));
@@ -263,7 +259,7 @@ public final class DnaSuperActivity extends DnaBaseActivity {
         infoHead.setGravity(Gravity.CENTER_VERTICAL);
         TextView lbl = new TextView(this);
         lbl.setText(t("SUPER 镜像（当前工程）", "SUPER image (current project)"));
-        lbl.setTextSize(11f);
+        lbl.setTextSize(11.5f);
         lbl.setTypeface(null, 1);
         lbl.setTextColor(pal.subtitle);
         infoHead.addView(lbl, new LinearLayout.LayoutParams(0, -2, 1f));
@@ -290,7 +286,7 @@ public final class DnaSuperActivity extends DnaBaseActivity {
 
         infoPath = new TextView(this);
         infoPath.setText(superPath != null ? superPath : "-");
-        infoPath.setTextSize(10.5f);
+        infoPath.setTextSize(11.5f);
         infoPath.setTextColor(pal.subtitle);
         infoPath.setSingleLine(true);
         infoPath.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);

@@ -320,7 +320,7 @@ public final class DnaActivity extends DnaBaseActivity {
         titleBar.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
         TextView modeChip = new TextView(this);
         modeChip.setText("PDNA");
-        modeChip.setTextSize(11f);
+        modeChip.setTextSize(11.5f);
         modeChip.setTypeface(null, 1);
         modeChip.setTextColor(Ui.INSTANCE.isDark(this) ? 0xFFFFFFFF : 0xFF000000);
         modeChip.setGravity(Gravity.CENTER);
@@ -380,7 +380,7 @@ public final class DnaActivity extends DnaBaseActivity {
         projRow.addView(switchProject, new LinearLayout.LayoutParams(dp(42), dp(42)));
         projectCard.addView(projRow, new LinearLayout.LayoutParams(-1, -2));
         projectMeta = new TextView(this);
-        projectMeta.setTextSize(10.5f);
+        projectMeta.setTextSize(11.5f);
         projectMeta.setTextColor(pal.subtitle);
         projectMeta.setPadding(0, dp(5), 0, 0);
         projectCard.addView(projectMeta, new LinearLayout.LayoutParams(-1, -2));
@@ -421,7 +421,7 @@ public final class DnaActivity extends DnaBaseActivity {
         fileCountView = new TextView(this);
         fileCountView.setTextSize(11.5f);
         fileCountView.setTypeface(null, 1);
-        fileCountView.setTextColor(0xff2f9c8f);
+        fileCountView.setTextColor(pal.success);
         fileCountView.setPadding(0, 0, dp(10), 0);
         pickHead.addView(fileCountView, new LinearLayout.LayoutParams(-2, -2));
         // v3.28.7：多选模式加「全选 / 清空」（分解 / 合成 / 转换等可批量处理全部文件）
@@ -1053,7 +1053,7 @@ public final class DnaActivity extends DnaBaseActivity {
         row.addView(label, labelLp);
         TextView tail = new TextView(this);
         tail.setText(extra);
-        tail.setTextSize(11f);
+        tail.setTextSize(11.5f);
         tail.setTextColor(pal.subtitle);
         row.addView(tail, new LinearLayout.LayoutParams(-2, -2));
         Row holder = new Row(name, row, dot, label, tail);
@@ -1306,7 +1306,7 @@ public final class DnaActivity extends DnaBaseActivity {
             partitionNames.add(p.getName());
         }
         status.setText("✓ " + t("解析完成", "Parsed") + ": " + partitionNames.size() + t(" 个分区，勾选后点「开始分解」", " partitions, check then Extract"));
-        status.setTextColor(0xff1d7a4f);
+        status.setTextColor(pal.success);
         logLine(t("解析完成", "Parsed") + ": " + partitionNames.size() + t(" 个分区（长按分区行可复制完整哈希）", " partitions (long-press row to copy full hash)"));
         refreshPartRows();
     }
@@ -1430,7 +1430,7 @@ public final class DnaActivity extends DnaBaseActivity {
                 if (fFail == 0 && !cancelled) {
                     logLine("✓ " + t("提取完成", "Extraction done") + ": " + fOk + "/" + ordered.size());
                     status.setText("✓ " + t("提取完成", "Done") + " (" + fOk + ")");
-                    status.setTextColor(0xff1d7a4f);
+                    status.setTextColor(pal.success);
                     toast(t("提取完成", "Done"));
                 } else if (cancelled) {
                     logLine("■ " + t("已取消（已完成 ", "Cancelled (done ") + fOk + ")");
@@ -1996,7 +1996,7 @@ public final class DnaActivity extends DnaBaseActivity {
                 if (result.getSuccess()) {
                     logLine("✓ " + result.getMessage());
                     status.setText("✓ " + t("执行完成", "Done"));
-                    status.setTextColor(0xff1d7a4f);
+                    status.setTextColor(pal.success);
                     toast(t("执行完成", "Done"));
                 } else {
                     logLine("✗ " + result.getMessage());

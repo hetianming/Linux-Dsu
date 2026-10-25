@@ -166,11 +166,7 @@ public final class DnaIncrementalActivity extends DnaBaseActivity {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         c.setPadding(dp(14), dp(12), dp(14), dp(12));
-        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setColor(0x33FFFFFF);
-        bg.setCornerRadius(dp(18));
-        bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
-        c.setBackground(bg);
+        c.setBackground(com.mcai.ubuntudsu.ui.Ui.INSTANCE.dnaGlassCard(this, 18f));
         return c;
     }
 
@@ -350,7 +346,7 @@ public final class DnaIncrementalActivity extends DnaBaseActivity {
         flow.setText("① " + t("选增量包", "Delta pkg") + "  →  ② " + t("旧镜像目录", "Old imgs")
                 + "  →  ③ " + t("解析勾选", "Parse") + "  →  ④ " + t("提取", "Extract"));
         flow.setTextSize(12.5f);
-        flow.setTextColor(0xffC08A2D);
+        flow.setTextColor(pal.warning);
         flow.setTypeface(null, 1);
         flow.setGravity(Gravity.CENTER);
         android.graphics.drawable.GradientDrawable flowBg = new android.graphics.drawable.GradientDrawable();
@@ -377,18 +373,18 @@ public final class DnaIncrementalActivity extends DnaBaseActivity {
         projectName = new TextView(this);
         projectName.setTextSize(15f);
         projectName.setTypeface(null, 1);
-        projectName.setTextColor(0xff17334f);
+        projectName.setTextColor(pal.title);
         projectName.setSingleLine(true);
         projectName.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         projRow.addView(projectName, new LinearLayout.LayoutParams(0, -2, 1f));
         TextView arrow = new TextView(this);
         arrow.setText("▼");
-        arrow.setTextSize(11f);
+        arrow.setTextSize(11.5f);
         arrow.setTextColor(pal.subtitle);
         projRow.addView(arrow, new LinearLayout.LayoutParams(-2, -2));
         projCard.addView(projRow, new LinearLayout.LayoutParams(-1, -2));
         projectOut = new TextView(this);
-        projectOut.setTextSize(11f);
+        projectOut.setTextSize(11.5f);
         projectOut.setTextColor(pal.subtitle);
         projectOut.setSingleLine(true);
         projectOut.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
@@ -407,7 +403,7 @@ public final class DnaIncrementalActivity extends DnaBaseActivity {
         srcTitle.setText("📦 " + t("增量包（payload.bin / OTA zip）", "Delta package (payload.bin / OTA zip)"));
         srcTitle.setTextSize(14f);
         srcTitle.setTypeface(null, 1);
-        srcTitle.setTextColor(0xff17334f);
+        srcTitle.setTextColor(pal.title);
         srcHead.addView(srcTitle, new LinearLayout.LayoutParams(0, -2, 1f));
         Button browseBtn = pillButton("📂", 15, pal.accent, dp(38), dp(32));
         browseBtn.setOnClickListener(v -> {
@@ -658,7 +654,7 @@ public final class DnaIncrementalActivity extends DnaBaseActivity {
                     log("✓ " + t("解析完成", "Parsed") + " · " + partitions.size()
                             + t(" 个分区，请在弹窗勾选要提取的 img", " partitions, select img in dialog"));
                     status.setText("✓ " + t("解析完成", "Parsed") + " · " + partitions.size() + t(" 个分区", " partitions"));
-                    status.setTextColor(0xff1d7a4f);
+                    status.setTextColor(pal.success);
                     notifyDone(true, t("解析完成", "Parsed") + " · " + partitions.size() + t(" 个分区", " partitions"));
                     showPartitionDialog();
                 });
@@ -900,7 +896,7 @@ public final class DnaIncrementalActivity extends DnaBaseActivity {
                     log("✓ " + t("增量提取完成，文件位于", "Incremental done, files at") + ": " + outDir);
                     log("ℹ " + t("耗时", "Time") + " " + elapsed + "s · " + ok + t(" 个镜像", " image(s)"));
                     status.setText("✓ " + t("增量提取完成", "Incremental done") + " · " + ok);
-                    status.setTextColor(0xff1d7a4f);
+                    status.setTextColor(pal.success);
                     notifyDone(true, t("增量提取完成", "Incremental done") + " · " + ok + t(" 个镜像", " image(s)"));
                     toast(t("增量提取完成", "Incremental done"));
                 } else if (ok > 0) {

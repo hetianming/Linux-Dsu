@@ -155,10 +155,8 @@ public final class DnaModuleActivity extends DnaBaseActivity {
         LinearLayout projCard = new LinearLayout(this);
         projCard.setOrientation(LinearLayout.VERTICAL);
         projCard.setPadding(dp(14), dp(12), dp(14), dp(12));
-        GradientDrawable projBg = new GradientDrawable();
-        projBg.setColor(0x33FFFFFF);
-        projBg.setCornerRadius(dp(18));
-        projBg.setStroke(Math.max(1, dp(1)), 0x668E6FC7);
+        GradientDrawable projBg = com.mcai.ubuntudsu.ui.Ui.INSTANCE.dnaGlassCard(this, 18f);
+        projBg.setStroke(Math.max(1, dp(1)), com.mcai.ubuntudsu.ui.Ui.INSTANCE.isDark(this) ? 0x998E6FC7 : 0x668E6FC7);
         projCard.setBackground(projBg);
         LinearLayout projRow = new LinearLayout(this);
         projRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -186,7 +184,7 @@ public final class DnaModuleActivity extends DnaBaseActivity {
         switchProject.setTextColor(pal.accent);
         GradientDrawable switchBg = new GradientDrawable();
         switchBg.setShape(GradientDrawable.OVAL);
-        switchBg.setColor(0x59FFFFFF);
+        switchBg.setColor(com.mcai.ubuntudsu.ui.Ui.INSTANCE.isDark(this) ? 0x331A2535 : 0x59FFFFFF);
         switchBg.setStroke(Math.max(1, dp(1)), 0x80FFFFFF);
         switchProject.setBackground(switchBg);
         switchProject.setStateListAnimator(null);
@@ -203,7 +201,7 @@ public final class DnaModuleActivity extends DnaBaseActivity {
         TextView projHint = new TextView(this);
         projHint.setText(t("插件将作用于该工程分解后的文件（$DNA_DRO），执行时自动切换工作目录",
                 "Plugins act on this project's extracted files ($DNA_DRO)"));
-        projHint.setTextSize(10.5f);
+        projHint.setTextSize(11.5f);
         projHint.setTextColor(pal.subtitle);
         projHint.setPadding(0, dp(5), 0, 0);
         projCard.addView(projHint, new LinearLayout.LayoutParams(-1, -2));
@@ -224,7 +222,7 @@ public final class DnaModuleActivity extends DnaBaseActivity {
         TextView footNote = new TextView(this);
         footNote.setText(t("仅识别 .zip2 结尾的插件包 · 插件内的 sh 脚本点击即执行",
                 "Only .zip2 packs · tap a sh script inside to run"));
-        footNote.setTextSize(10.5f);
+        footNote.setTextSize(11.5f);
         footNote.setTextColor(pal.subtitle);
         footNote.setGravity(Gravity.CENTER);
         footNote.setPadding(0, dp(10), 0, dp(6));
@@ -258,7 +256,7 @@ public final class DnaModuleActivity extends DnaBaseActivity {
         Button copyConsole = new Button(this, null, 0);
         copyConsole.setText(t("复制日志", "Copy Log"));
         copyConsole.setAllCaps(false);
-        copyConsole.setTextSize(11f);
+        copyConsole.setTextSize(11.5f);
         copyConsole.setTypeface(null, 1);
         copyConsole.setTextColor(pal.success);
         copyConsole.setMinWidth(0);
@@ -284,7 +282,7 @@ public final class DnaModuleActivity extends DnaBaseActivity {
         Button clearConsole = new Button(this, null, 0);
         clearConsole.setText(t("清除日志", "Clear Log"));
         clearConsole.setAllCaps(false);
-        clearConsole.setTextSize(11f);
+        clearConsole.setTextSize(11.5f);
         clearConsole.setTypeface(null, 1);
         clearConsole.setTextColor(pal.danger);
         clearConsole.setMinWidth(0);
@@ -449,10 +447,8 @@ public final class DnaModuleActivity extends DnaBaseActivity {
             emptyView.setTextColor(pal.subtitle);
             emptyView.setGravity(Gravity.CENTER);
             emptyView.setPadding(dp(10), dp(30), dp(10), dp(30));
-            GradientDrawable emptyBg = new GradientDrawable();
-            emptyBg.setColor(0x26FFFFFF);
-            emptyBg.setCornerRadius(dp(18));
-            emptyBg.setStroke(Math.max(1, dp(1)), 0x59FFFFFF);
+            GradientDrawable emptyBg = com.mcai.ubuntudsu.ui.Ui.INSTANCE.dnaGlassCard(this, 18f);
+            emptyBg.setStroke(Math.max(1, dp(1)), pal.cardStroke);
             emptyView.setBackground(emptyBg);
             moduleList.addView(emptyView, new LinearLayout.LayoutParams(-1, -2));
             return;
@@ -567,10 +563,7 @@ public final class DnaModuleActivity extends DnaBaseActivity {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(12), dp(10), dp(12), dp(10));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0x33FFFFFF);
-        bg.setCornerRadius(dp(18));
-        bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
+        GradientDrawable bg = com.mcai.ubuntudsu.ui.Ui.INSTANCE.dnaGlassCard(this, 18f);
         card.setBackground(bg);
 
         // 头部：图标块 + 名称/路径 + 脚本数
@@ -601,7 +594,7 @@ public final class DnaModuleActivity extends DnaBaseActivity {
         nameBox.addView(name, new LinearLayout.LayoutParams(-1, -2));
         TextView sub = new TextView(this);
         sub.setText("$MODDIR=" + mod.getAbsolutePath());
-        sub.setTextSize(10f);
+        sub.setTextSize(11.5f);
         sub.setTextColor(pal.subtitle);
         sub.setSingleLine(true);
         sub.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
@@ -609,7 +602,7 @@ public final class DnaModuleActivity extends DnaBaseActivity {
         head.addView(nameBox, new LinearLayout.LayoutParams(0, -2, 1f));
         TextView count = new TextView(this);
         count.setText(scripts.size() + " sh");
-        count.setTextSize(11f);
+        count.setTextSize(11.5f);
         count.setTypeface(null, 1);
         count.setTextColor(pal.success);
         count.setGravity(Gravity.CENTER);

@@ -192,22 +192,37 @@ object Ui {
         /** 标题 / 主文字：对齐 APP primaryText 昼 #243244 夜 #EAF0F8 */
         @JvmField val title: Int = if (dark) Color.parseColor("#EAF0F8") else Color.parseColor("#243244")
 
-        /** 副标签 / 次要文字：对齐 APP secondaryText 昼 #5C6A7C 夜 #B8C4D6 */
-        @JvmField val subtitle: Int = if (dark) Color.parseColor("#B8C4D6") else Color.parseColor("#5C6A7C")
+        /** 副标签 / 次要文字：夜间提亮到 #D5DFEF，确保深色卡片上对比度充足 */
+        @JvmField val subtitle: Int = if (dark) Color.parseColor("#D5DFEF") else Color.parseColor("#5C6A7C")
 
-        /** 说明 / 正文：对齐 APP 次要文字 昼 #5C6A7C 夜 #B8C4D6 */
-        @JvmField val body: Int = if (dark) Color.parseColor("#B8C4D6") else Color.parseColor("#5C6A7C")
+        /** 说明 / 正文：夜间提亮到 #D5DFEF */
+        @JvmField val body: Int = if (dark) Color.parseColor("#D5DFEF") else Color.parseColor("#5C6A7C")
+
+        /** 提示 / 占位文字：夜间 #C3CFE1（明显高于旧 #B8C4D6），昼间 #67768A */
+        @JvmField val hint: Int = if (dark) Color.parseColor("#C3CFE1") else Color.parseColor("#67768A")
 
         /** 按钮文字 / 强调：对齐 APP buttonText 昼 #1A2434 夜 #FFFFFF */
         @JvmField val accent: Int = if (dark) Color.WHITE else Color.parseColor("#1A2434")
 
-        /** 成功徽章（绿）对齐 APP buttonSuccess */
-        @JvmField val success: Int = if (dark) Color.parseColor("#5AD4A0") else Color.parseColor("#1f7d72")
-        /** 警告徽章（琥珀）对齐 APP buttonWarning */
-        @JvmField val warning: Int = if (dark) Color.parseColor("#FFC46B") else Color.parseColor("#8a5a00")
+        /** 成功徽章（绿）夜间提亮 #74E3B2，保证深底可读 */
+        @JvmField val success: Int = if (dark) Color.parseColor("#74E3B2") else Color.parseColor("#1f7d72")
+        /** 警告徽章（琥珀）夜间提亮 #FFD28C */
+        @JvmField val warning: Int = if (dark) Color.parseColor("#FFD28C") else Color.parseColor("#8a5a00")
 
-        /** 危险 / 红字 对齐 APP buttonDanger */
-        @JvmField val danger: Int = if (dark) Color.parseColor("#FF8A80") else Color.parseColor("#a33b3b")
+        /** 危险 / 红字 夜间提亮 #FFA79D */
+        @JvmField val danger: Int = if (dark) Color.parseColor("#FFA79D") else Color.parseColor("#a33b3b")
+
+        /**
+         * 玻璃卡片底色：夜间改为高不透明深蓝玻璃（约 94%），
+         * 避免旧的 20% 白玻璃在深色背景上变成浅灰、导致白字不可读。
+         */
+        @JvmField val cardGlass: Int = if (dark) Color.argb(240, 26, 34, 46) else Color.argb(58, 255, 255, 255)
+
+        /** 玻璃卡片描边：夜间 35% 白，昼间 40% 白 */
+        @JvmField val cardStroke: Int = if (dark) Color.argb(89, 255, 255, 255) else Color.argb(102, 255, 255, 255)
+
+        /** 内嵌输入框 / 胶囊底：夜间深色不透明，避免沿用浅色主题默认色导致文字看不清 */
+        @JvmField val inset: Int = if (dark) Color.argb(204, 15, 21, 30) else Color.argb(140, 255, 255, 255)
 
         /** 日志 / 终端面板底 (白底蓝字，昼夜间统一) */
         @JvmField val logBg: Int = if (dark) Color.argb(230, 40, 48, 64) else Color.argb(230, 247, 251, 255)
@@ -229,6 +244,20 @@ object Ui {
 
     /** 取当前上下文的 DNA 色板（按 isDark 分流） */
     fun dnaPalette(context: android.content.Context): DnaPalette = DnaPalette(context)
+
+    /**
+     * DNA 页面统一玻璃卡片底：夜间为高不透明深蓝玻璃，昼间为浅白玻璃。
+     * 所有 Dna*Activity 的 glassCard() 都应调用本方法，避免夜间出现「浅灰卡片 + 白字」的低对比。
+     */
+    fun dnaGlassCard(context: android.content.Context, radiusDp: Float = 18f): android.graphics.drawable.GradientDrawable {
+        val p = dnaPalette(context)
+        val d = context.resources.displayMetrics.density
+        return android.graphics.drawable.GradientDrawable().apply {
+            setColor(p.cardGlass)
+            cornerRadius = radiusDp * d
+            setStroke(maxOf(1, d.toInt()), p.cardStroke)
+        }
+    }
 
 
     // ==================== 拟态核心原语 ====================

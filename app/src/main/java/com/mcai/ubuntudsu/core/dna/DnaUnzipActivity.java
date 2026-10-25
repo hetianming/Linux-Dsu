@@ -107,11 +107,7 @@ public final class DnaUnzipActivity extends DnaBaseActivity {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         c.setPadding(dp(14), dp(12), dp(14), dp(12));
-        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setColor(0x33FFFFFF);
-        bg.setCornerRadius(dp(18));
-        bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
-        c.setBackground(bg);
+        c.setBackground(com.mcai.ubuntudsu.ui.Ui.INSTANCE.dnaGlassCard(this, 18f));
         return c;
     }
 
@@ -304,7 +300,7 @@ public final class DnaUnzipActivity extends DnaBaseActivity {
         chosenName.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         cbText.addView(chosenName, new LinearLayout.LayoutParams(-1, -2));
         chosenPath = new TextView(this);
-        chosenPath.setTextSize(10.5f);
+        chosenPath.setTextSize(11.5f);
         chosenPath.setTextColor(pal.subtitle);
         chosenPath.setSingleLine(true);
         chosenPath.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
@@ -327,7 +323,7 @@ public final class DnaUnzipActivity extends DnaBaseActivity {
         TextView targetHint = new TextView(this);
         targetHint.setText("➜ " + t("解压到 ", "Unzip to ") + DnaTools.WORK_ROOT
                 + t("（自动创建 PDNA_ 新工程）", " (auto-creates a PDNA_ project)"));
-        targetHint.setTextSize(11f);
+        targetHint.setTextSize(11.5f);
         targetHint.setTextColor(pal.success);
         targetHint.setSingleLine(true);
         targetHint.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
@@ -549,7 +545,7 @@ public final class DnaUnzipActivity extends DnaBaseActivity {
             textBox.addView(name, new LinearLayout.LayoutParams(-1, -2));
             TextView path = new TextView(this);
             path.setText(fullPath);
-            path.setTextSize(10f);
+            path.setTextSize(11.5f);
             path.setTextColor(pal.subtitle);
             path.setSingleLine(true);
             path.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);

@@ -55,14 +55,14 @@ class BreathingBalloonDrawable(
         floatArrayOf(0.26f, 0.80f, 0.52f, 0.092f, 0.040f, 5.4f, 2.3f),
     )
 
-    // 球体配色：冷色蓝紫，在青绿底图上对比更明显
+    // 球体配色：夜间用深蓝紫，避免亮球铺满屏幕导致浅色文字发灰
     private val warmCoolStops = if (dark) {
         intArrayOf(
-            0xFF5B8DEF.toInt(),
-            0xFF7C9FE8.toInt(),
-            0xFF6288C8.toInt(),
-            0xFF4A9FD8.toInt(),
-            0xFF8B7FD4.toInt(),
+            0xFF22355C.toInt(),
+            0xFF2B4270.toInt(),
+            0xFF243A5E.toInt(),
+            0xFF1F4566.toInt(),
+            0xFF322E57.toInt(),
         )
     } else {
         intArrayOf(
@@ -76,15 +76,15 @@ class BreathingBalloonDrawable(
 
     private val balloonStarts = intArrayOf(0, 2)
 
-    // 球体透明度提高，在底图上更明显
+    // 球体透明度：夜间明显压低（旧值 205/188 会让夜间背景接近浅蓝，文字对比度不足）
     private val balloonAlphas: IntArray = if (dark) {
-        intArrayOf(205, 188)
+        intArrayOf(120, 104)
     } else {
         intArrayOf(225, 208)
     }
 
     // 夜间在亮色底图上叠加深色蒙版，保持夜间观感
-    private val nightScrim: Int = 0xB31A2230.toInt()
+    private val nightScrim: Int = 0xCC141B26.toInt()
 
     private fun withAlpha(color: Int, alpha: Int): Int =
         Color.argb(alpha.coerceIn(0, 255), Color.red(color), Color.green(color), Color.blue(color))

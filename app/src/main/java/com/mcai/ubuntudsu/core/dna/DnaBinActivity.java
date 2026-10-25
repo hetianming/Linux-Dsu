@@ -179,11 +179,7 @@ public final class DnaBinActivity extends DnaBaseActivity {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         c.setPadding(dp(14), dp(12), dp(14), dp(12));
-        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setColor(0x33FFFFFF);
-        bg.setCornerRadius(dp(18));
-        bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
-        c.setBackground(bg);
+        c.setBackground(com.mcai.ubuntudsu.ui.Ui.INSTANCE.dnaGlassCard(this, 18f));
         return c;
     }
 
@@ -269,14 +265,14 @@ public final class DnaBinActivity extends DnaBaseActivity {
         projRow.addView(projectName, new LinearLayout.LayoutParams(0, -2, 1f));
         TextView arrow = new TextView(this);
         arrow.setText("▼");
-        arrow.setTextSize(11f);
+        arrow.setTextSize(11.5f);
         arrow.setTextColor(pal.subtitle);
         projRow.addView(arrow, new LinearLayout.LayoutParams(-2, -2));
         LinearLayout.LayoutParams prLp = new LinearLayout.LayoutParams(-1, -2);
         prLp.topMargin = dp(3);
         projCard.addView(projRow, prLp);
         projectOut = new TextView(this);
-        projectOut.setTextSize(11f);
+        projectOut.setTextSize(11.5f);
         projectOut.setTextColor(pal.subtitle);
         projectOut.setSingleLine(true);
         projectOut.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
@@ -590,7 +586,7 @@ public final class DnaBinActivity extends DnaBaseActivity {
             textBox.addView(name, new LinearLayout.LayoutParams(-1, -2));
             TextView path = new TextView(this);
             path.setText(fullPath);
-            path.setTextSize(10f);
+            path.setTextSize(11.5f);
             path.setTextColor(pal.subtitle);
             path.setSingleLine(true);
             path.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
@@ -1127,7 +1123,7 @@ public final class DnaBinActivity extends DnaBaseActivity {
                     runBtn.setText("▶  " + t("选择分区并提取", "Select & Extract"));
                     log("■ " + t("已取消", "Cancelled"));
                     status.setText("■ " + t("已取消", "Cancelled"));
-                    status.setTextColor(0xffa33b3b);
+                    status.setTextColor(pal.danger);
                     notifyDone(false, t("已取消", "Cancelled"));
                 });
                 return;

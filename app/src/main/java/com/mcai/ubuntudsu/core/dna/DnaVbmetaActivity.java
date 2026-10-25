@@ -124,11 +124,7 @@ public final class DnaVbmetaActivity extends DnaBaseActivity {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         c.setPadding(dp(12), dp(10), dp(12), dp(10));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0x33FFFFFF);
-        bg.setCornerRadius(dp(16));
-        bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
-        c.setBackground(bg);
+        c.setBackground(Ui.INSTANCE.dnaGlassCard(this, 16f));
         return c;
     }
 
@@ -351,7 +347,7 @@ public final class DnaVbmetaActivity extends DnaBaseActivity {
     private View groupLabel(String text, boolean isDark) {
         TextView tv = new TextView(this);
         tv.setText(text);
-        tv.setTextSize(10.5f);
+        tv.setTextSize(11.5f);
         tv.setTypeface(null, 1);
         tv.setTextColor(isDark ? 0x88FFFFFF : 0x88334455);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
@@ -381,7 +377,7 @@ public final class DnaVbmetaActivity extends DnaBaseActivity {
         Button runBtn = new Button(this);
         runBtn.setText(t("执行", "Run"));
         runBtn.setAllCaps(false);
-        runBtn.setTextSize(11f);
+        runBtn.setTextSize(11.5f);
         runBtn.setTypeface(null, 1);
         runBtn.setGravity(Gravity.CENTER);
         runBtn.setPadding(dp(12), dp(5), dp(12), dp(5));
@@ -608,7 +604,7 @@ public final class DnaVbmetaActivity extends DnaBaseActivity {
         Button browseBtn = new Button(this);
         browseBtn.setText(t("📂 浏览", "Browse"));
         browseBtn.setAllCaps(false);
-        browseBtn.setTextSize(11f);
+        browseBtn.setTextSize(11.5f);
         browseBtn.setTypeface(null, 1);
         browseBtn.setTextColor(pal.accent);
         browseBtn.setGravity(Gravity.CENTER);
