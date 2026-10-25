@@ -34,9 +34,9 @@ class HomePage(
     private lateinit var storageDetail: TextView
     private lateinit var memoryValue: TextView
     private lateinit var memoryDetail: TextView
+    private lateinit var storageBar: MetricBarView
+    private lateinit var memoryBar: MetricBarView
     private var cpuSample: Any? = null
-    // 合并后的整张拼接卡（含实时状态 + 检测信息两个分区）
-    private var unifiedCard: LinearLayout? = null
     // 顶部头图卡片：自定义背景图（Env.background），自动居中裁切适配
     private var heroImage: ImageView? = null
     // 头图视频背景：默认循环播放的 mp4（自带动态效果），选择自定义图片时隐藏
@@ -95,10 +95,9 @@ class HomePage(
         // 上次崩溃信息（若有）
         showCrashIfAny(page)
 
-        // 单张拼接卡：上分区实时状态，下分区检测信息，中间水晶玻璃分隔条
-        val unified = buildUnifiedCard(d)
-        unifiedCard = unified
-        page.addView(unified)
+        // 两张卡分区：上「实时状态」（CPU/GPU + 存储/内存），下「运行环境」（ROOT/GSI/Linux/桌面）
+        page.addView(buildStatusCard(d))
+        page.addView(buildEnvCard(d))
 
         // MainActivity 的首次 onResume 发生在 root.post 懒加载首页之前，
         // 因此 onResume 中的 homePage?.refreshStatus() 会被跳过。页面就绪后主动启动首轮检测。
@@ -176,75 +175,82 @@ class HomePage(
     }
 
     // 拼接一体卡：实时状态分区 + 水晶分隔条 + 检测信息分区
-    private fun buildUnifiedCard(d: Float): LinearLayout {
-        val card = com.mcai.ubuntudsu.ui.glass.TrueGlassPanel(activity, 26f, Ui.isDark(activity)).apply {
-            setPadding(Ui.dp(18, d), Ui.dp(14, d), Ui.dp(18, d), Ui.dp(14, d))
+    // ==================== 状态区：两张卡（实时状态 / 运行环境） ====================
+
+    /** 实时状态卡：CPU/GPU 细线圆环 + 存储/内存横向进度条，刷新收进标题右侧 */
+    private fun buildStatusCard(d: Float): LinearLayout {
+        val card = com.mcai.ubuntudsu.ui.glass.TrueGlassPanel(activity, 24f, Ui.isDark(activity)).apply {
+            setPadding(Ui.dp(16, d), Ui.dp(12, d), Ui.dp(16, d), Ui.dp(14, d))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-            )
+            ).apply { bottomMargin = Ui.dp(10, d) }
         }
 
-        // 实时状态
-        card.addView(TextView(activity).apply {
+        // 标题行：左「实时状态」，右刷新小图标（替代原来的底部整行按钮）
+        val head = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, Ui.dp(8, d))
+        }
+        head.addView(TextView(activity).apply {
             text = "实时状态"
             textSize = 14f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
-            setPadding(0, 0, 0, Ui.dp(3, d))
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
+        head.addView(TextView(activity).apply {
+            text = "\u27F3"
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setTextColor(Ui.secondaryText(activity))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(if (Ui.isDark(activity)) Color.argb(26, 255, 255, 255) else Color.argb(38, 255, 255, 255))
+                setStroke(
+                    maxOf(1, Ui.dp(1, d)),
+                    if (Ui.isDark(activity)) Color.argb(46, 255, 255, 255) else Color.argb(72, 255, 255, 255),
+                )
+            }
+            setOnClickListener { refreshStatus() }
+            Ui.pressAnimation(this)
+        }, LinearLayout.LayoutParams(Ui.dp(30, d), Ui.dp(30, d)))
+        card.addView(head)
+
+        // CPU / GPU：细线圆环（夜间泛光/刻度已在 UsageGauge 中移除）
         val gauges = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
+            setPadding(0, Ui.dp(2, d), 0, Ui.dp(10, d))
         }
         val cpuGauge = UsageGauge(activity, "CPU")
         val gpuGauge = UsageGauge(activity, "GPU")
-        // CPU：圆圈在上、标签在下
-        gauges.addView(LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = Ui.dp(8, d) }
-            addView(cpuGauge, LinearLayout.LayoutParams(Ui.dp(84, d), Ui.dp(84, d)))
-            addView(TextView(activity).apply {
-                text = "CPU"
-                textSize = 13f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-                setTextColor(Ui.secondaryText(activity))
-                gravity = Gravity.CENTER
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = Ui.dp(2, d) }
-            })
-        })
-        // GPU：圆圈在上、标签在下
-        gauges.addView(LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = Ui.dp(8, d) }
-            addView(gpuGauge, LinearLayout.LayoutParams(Ui.dp(84, d), Ui.dp(84, d)))
-            addView(TextView(activity).apply {
-                text = "GPU"
-                textSize = 13f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-                setTextColor(Ui.secondaryText(activity))
-                gravity = Gravity.CENTER
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = Ui.dp(2, d) }
-            })
-        })
+        gauges.addView(gaugeColumn(cpuGauge, "CPU", d, true))
+        gauges.addView(gaugeColumn(gpuGauge, "GPU", d, false))
         card.addView(gauges)
-        val details = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val storageCard = detailMetric("存储", Ui.buttonPrimary(activity))
-        val memoryCard = detailMetric("内存", Ui.buttonSecondary(activity))
-        storageValue = storageCard.first
-        storageDetail = storageCard.second
-        memoryValue = memoryCard.first
-        memoryDetail = memoryCard.second
-        details.addView(storageCard.third, LinearLayout.LayoutParams(0, Ui.dp(62, d), 1f).apply { marginEnd = Ui.dp(4, d) })
-        details.addView(memoryCard.third, LinearLayout.LayoutParams(0, Ui.dp(62, d), 1f).apply { marginStart = Ui.dp(4, d) })
-        card.addView(details)
 
-        // wire metrics polling
+        // 存储 / 内存：横向进度条
+        val storageRow = metricBar("存储", Ui.buttonPrimary(activity))
+        storageValue = storageRow.value
+        storageDetail = storageRow.detail
+        storageBar = storageRow.bar
+        card.addView(
+            storageRow.root,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+        )
+        val memoryRow = metricBar("内存", Ui.buttonWarning(activity))
+        memoryValue = memoryRow.value
+        memoryDetail = memoryRow.detail
+        memoryBar = memoryRow.bar
+        card.addView(
+            memoryRow.root,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = Ui.dp(10, d) },
+        )
+
+        // 指标轮询（每 2 秒）
         val metricsHandler = android.os.Handler(android.os.Looper.getMainLooper())
         val updater = object : Runnable {
             override fun run() {
@@ -256,8 +262,7 @@ class HomePage(
             }
         }
         metricsHandler.post(updater)
-        // GPU 首次值依赖 root 探测（比 CPU 直读慢），页面就绪时另起轻线程立即探一次，
-        // 不占用 metricsExecutor（避免拖累 CPU 首值节奏）
+        // GPU 首次值依赖 root 探测（比 CPU 直读慢），页面就绪时另起轻线程立即探一次
         Thread {
             runCatching { com.mcai.ubuntudsu.core.StatusDetector.warmupGpuProbe() }
             activity.runOnUiThread {
@@ -267,110 +272,170 @@ class HomePage(
         }.start()
         activity.addLifecycleStopHook(Runnable { metricsHandler.removeCallbacks(updater) })
 
-        // 水晶玻璃分隔条
-        card.addView(Ui.crystalDivider(activity, d), LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(2, d),
-        ).apply { topMargin = Ui.dp(10, d); bottomMargin = Ui.dp(8, d) })
-
-        // 下分区：检测信息
-        deviceText = TextView(activity).apply {
-            textSize = 12f
-            setTextColor(Ui.secondaryText(activity))
-        }
-        card.addView(deviceText)
-        // ROOT 权限状态行：与 GSI/Linux 行同款边框胶囊 + 14f 字号，前置状态点
-        val rootRow = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(Ui.dp(10, d), Ui.dp(4, d), Ui.dp(10, d), Ui.dp(4, d))
-            background = Ui.rounded(
-                if (Ui.isDark(activity)) android.graphics.Color.argb(68, 0, 0, 0) else android.graphics.Color.argb(78, 255, 255, 255),
-                8f,
-                d,
-            )
-            layoutParams = Ui.layoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        }
-        rootDot = Ui.statusDot(activity, android.graphics.Color.parseColor("#B0B0B0")).apply {
-            val size = Ui.dp(8, d)
-            layoutParams = LinearLayout.LayoutParams(size, size)
-        }
-        rootLabel = TextView(activity).apply {
-            text = "ROOT：检测中…"
-            textSize = 14f
-            setTextColor(Ui.primaryText(activity))
-            layoutParams = Ui.layoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                marginStart = Ui.dp(6, d)
-            }
-        }
-        rootRow.addView(rootDot)
-        rootRow.addView(rootLabel)
-        card.addView(rootRow)
-        // 与下方状态行保持相同行距
-        (rootRow.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = Ui.dp(6, d)
-        val statusColumn = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, Ui.dp(4, d), 0, 0)
-        }
-        val gsiPill = statusRow("GSI 系统", "检测中...")
-        gsiText = gsiPill.text
-        gsiDot = gsiPill.dot
-        val ubuntuPill = statusRow("Linux", "检测中...")
-        ubuntuText = ubuntuPill.text
-        ubuntuDot = ubuntuPill.dot
-        val desktopPill = statusRow("桌面", "检测中...")
-        desktopText = desktopPill.text
-        desktopDot = desktopPill.dot
-        statusColumn.addView(gsiPill.row)
-        statusColumn.addView(ubuntuPill.row)
-        statusColumn.addView(desktopPill.row)
-        card.addView(statusColumn)
-        card.addView(
-            TextView(activity).apply {
-                text = "刷新状态"
-                textSize = 12f
-                gravity = Gravity.CENTER
-                setTextColor(Ui.buttonText(activity))
-                background = Ui.glassButton(activity, Ui.buttonSecondary(activity))
-                Ui.pressAnimation(this)
-                setOnClickListener { refreshStatus() }
-            },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(32, d)).apply { topMargin = Ui.dp(6, d) },
-        )
         return card
     }
 
-    // 状态胶囊行：边框胶囊 + 前置状态点 + 文字（ROOT / GSI / Linux 三行同款）
-    private class StatusPillRow(val row: View, val dot: View, val text: TextView)
-
-    private fun statusRow(label: String, value: String): StatusPillRow {
-        val d = activity.resources.displayMetrics.density
-        val dot = Ui.statusDot(activity, android.graphics.Color.parseColor("#B0B0B0")).apply {
-            layoutParams = LinearLayout.LayoutParams(Ui.dp(8, d), Ui.dp(8, d))
-        }
-        val text = TextView(activity).apply {
-            text = "$label：$value"
-            textSize = 14f
-            setTextColor(Ui.primaryText(activity))
-            layoutParams = Ui.layoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                marginStart = Ui.dp(6, d)
+    /** 圆环 + 下方标签（CPU / GPU 两列） */
+    private fun gaugeColumn(gauge: UsageGauge, label: String, d: Float, first: Boolean): View =
+        LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                if (first) marginEnd = Ui.dp(8, d) else marginStart = Ui.dp(8, d)
             }
+            addView(gauge, LinearLayout.LayoutParams(Ui.dp(84, d), Ui.dp(84, d)))
+            addView(TextView(activity).apply {
+                text = label
+                textSize = 12.5f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(Ui.secondaryText(activity))
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = Ui.dp(2, d) }
+            })
+        }
+
+    /** 运行环境卡：设备摘要 + ROOT / GSI / Linux / 桌面 四行（圆点 + 左标签 + 右状态值） */
+    private fun buildEnvCard(d: Float): LinearLayout {
+        val card = com.mcai.ubuntudsu.ui.glass.TrueGlassPanel(activity, 24f, Ui.isDark(activity)).apply {
+            setPadding(Ui.dp(16, d), Ui.dp(12, d), Ui.dp(16, d), Ui.dp(8, d))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
+        }
+        card.addView(TextView(activity).apply {
+            text = "运行环境"
+            textSize = 14f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(Ui.primaryText(activity))
+        })
+        deviceText = TextView(activity).apply {
+            textSize = 11.5f
+            setTextColor(Ui.secondaryText(activity))
+            setPadding(0, Ui.dp(2, d), 0, Ui.dp(4, d))
+        }
+        card.addView(deviceText)
+
+        val rootLine = statusLine("ROOT")
+        rootDot = rootLine.dot
+        rootLabel = rootLine.value
+        card.addView(rootLine.row)
+
+        val gsiLine = statusLine("GSI 系统")
+        gsiDot = gsiLine.dot
+        gsiText = gsiLine.value
+        card.addView(gsiLine.row)
+
+        val ubuntuLine = statusLine("Linux")
+        ubuntuDot = ubuntuLine.dot
+        ubuntuText = ubuntuLine.value
+        card.addView(ubuntuLine.row)
+
+        val desktopLine = statusLine("桌面环境")
+        desktopDot = desktopLine.dot
+        desktopText = desktopLine.value
+        card.addView(desktopLine.row)
+
+        return card
+    }
+
+    private class StatusLine(val row: View, val dot: View, val value: TextView)
+
+    private fun statusLine(label: String): StatusLine {
+        val d = activity.resources.displayMetrics.density
+        val dot = Ui.statusDot(activity, Color.parseColor("#B0B0B0")).apply {
+            layoutParams = LinearLayout.LayoutParams(Ui.dp(7, d), Ui.dp(7, d))
+        }
+        val name = TextView(activity).apply {
+            text = label
+            textSize = 12.5f
+            setTextColor(Ui.primaryText(activity))
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = Ui.dp(9, d)
+            }
+        }
+        val value = TextView(activity).apply {
+            text = "检测中…"
+            textSize = 11.5f
+            gravity = Gravity.END
+            setTextColor(Ui.secondaryText(activity))
         }
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(Ui.dp(10, d), Ui.dp(4, d), Ui.dp(10, d), Ui.dp(4, d))
-            background = Ui.rounded(
-                if (Ui.isDark(activity)) android.graphics.Color.argb(68, 0, 0, 0) else android.graphics.Color.argb(78, 255, 255, 255),
-                8f,
-                d,
-            )
-            layoutParams = Ui.layoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = Ui.dp(6, d)
-            }
+            setPadding(0, Ui.dp(8, d), 0, Ui.dp(8, d))
         }
         row.addView(dot)
-        row.addView(text)
-        return StatusPillRow(row, dot, text)
+        row.addView(name)
+        row.addView(value)
+        return StatusLine(row, dot, value)
+    }
+
+    /** 横向进度条行：标题 + 百分比 + 5dp 圆角轨道 + 容量小字 */
+    private class MetricRow(val root: View, val value: TextView, val detail: TextView, val bar: MetricBarView)
+
+    private fun metricBar(title: String, color: Int): MetricRow {
+        val d = activity.resources.displayMetrics.density
+        val root = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        val top = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        top.addView(TextView(activity).apply {
+            text = title
+            textSize = 12f
+            setTextColor(Ui.secondaryText(activity))
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        val value = TextView(activity).apply {
+            text = "--%"
+            textSize = 13f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(Ui.primaryText(activity))
+        }
+        top.addView(value)
+        root.addView(top)
+        val bar = MetricBarView(activity, color)
+        root.addView(
+            bar,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(5, d)).apply {
+                topMargin = Ui.dp(6, d)
+            },
+        )
+        val detail = TextView(activity).apply {
+            text = ""
+            textSize = 9.5f
+            setTextColor(Ui.secondaryText(activity))
+            setPadding(0, Ui.dp(3, d), 0, 0)
+        }
+        root.addView(detail)
+        return MetricRow(root, value, detail, bar)
+    }
+
+    private class MetricBarView(context: android.content.Context, private val fill: Int) : View(context) {
+        var percent: Int = 0
+            set(value) {
+                field = value.coerceIn(0, 100)
+                invalidate()
+            }
+        private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+
+        override fun onDraw(canvas: android.graphics.Canvas) {
+            super.onDraw(canvas)
+            val w = width.toFloat()
+            val h = height.toFloat()
+            if (w <= 0f || h <= 0f) return
+            val r = h / 2f
+            paint.style = android.graphics.Paint.Style.FILL
+            paint.color = if (Ui.isDark(context)) Color.argb(36, 255, 255, 255) else Color.argb(46, 0, 0, 0)
+            canvas.drawRoundRect(0f, 0f, w, h, r, r, paint)
+            if (percent > 0) {
+                paint.color = fill
+                canvas.drawRoundRect(0f, 0f, w * percent / 100f, h, r, r, paint)
+            }
+        }
     }
 
     private fun updateMetrics(onResult: (Int?, Int?) -> Unit) {
@@ -386,8 +451,10 @@ class HomePage(
                     if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
                     storageValue.text = "${metrics.storagePercent}%"
                     storageDetail.text = "${metrics.storageUsed} / ${metrics.storageTotal}"
+                    storageBar.percent = metrics.storagePercent
                     memoryValue.text = "${metrics.memoryPercent}%"
                     memoryDetail.text = "${metrics.memoryUsed} / ${metrics.memoryTotal}"
+                    memoryBar.percent = metrics.memoryPercent
                     batteryIcon?.level = battery.level ?: -1
                     batteryIcon?.charging = battery.charging
                     chargeStateText?.text = battery.statusLabel
@@ -653,116 +720,30 @@ class HomePage(
             val ring = android.graphics.RectF(cx - radius, cy - radius, cx + radius, cy + radius)
 
             if (dark && neon != null) {
-                // ---- 夜间霓虹模式（参考图同款高强度：泛光外晕 + 常亮轨道 + 白热管芯） ----
-                val sweepShader = { android.graphics.SweepGradient(cx, cy, neon, null) }
-                // 1. 光晕：径向渐变从中间色淡出
-                val glowC = neon[2]
-                paint.style = android.graphics.Paint.Style.FILL
-                paint.shader = android.graphics.RadialGradient(
-                    cx, cy, size * 0.48f,
-                    intArrayOf(
-                        Color.argb(120, Color.red(glowC), Color.green(glowC), Color.blue(glowC)),
-                        Color.argb(46, Color.red(glowC), Color.green(glowC), Color.blue(glowC)),
-                        Color.TRANSPARENT,
-                    ),
-                    floatArrayOf(0f, 0.5f, 1f),
-                    android.graphics.Shader.TileMode.CLAMP,
-                )
-                canvas.drawCircle(cx, cy, size * 0.48f, paint)
+                // ---- 夜间简洁模式：细轨道 + 渐变进度弧 + 中心数字（去泛光/刻度，降低视觉噪音） ----
                 paint.shader = null
-
-                // 2. 刻度点：扫描渐变按角度取色，模糊晕 + 亮芯两程
+                paint.maskFilter = null
                 paint.style = android.graphics.Paint.Style.STROKE
-                paint.strokeCap = android.graphics.Paint.Cap.BUTT
-                val tickOuter = size * 0.47f
-                val tickInner = size * 0.435f
-                canvas.save()
-                canvas.rotate(-90f, cx, cy)
-                paint.shader = sweepShader()
-                paint.maskFilter = android.graphics.BlurMaskFilter(size * 0.022f, android.graphics.BlurMaskFilter.Blur.NORMAL)
-                paint.strokeWidth = size * 0.030f
-                paint.alpha = 210
-                for (i in 0 until 60) {
-                    val angle = Math.toRadians((i * 6).toDouble())
-                    val cos = Math.cos(angle).toFloat()
-                    val sin = Math.sin(angle).toFloat()
-                    canvas.drawLine(
-                        cx + cos * tickOuter, cy + sin * tickOuter,
-                        cx + cos * tickInner, cy + sin * tickInner,
-                        paint,
-                    )
-                }
-                paint.maskFilter = null
-                paint.strokeWidth = size * 0.013f
-                paint.alpha = 255
-                for (i in 0 until 60) {
-                    val angle = Math.toRadians((i * 6).toDouble())
-                    val cos = Math.cos(angle).toFloat()
-                    val sin = Math.sin(angle).toFloat()
-                    canvas.drawLine(
-                        cx + cos * tickOuter, cy + sin * tickOuter,
-                        cx + cos * tickInner, cy + sin * tickInner,
-                        paint,
-                    )
-                }
-                paint.shader = null
-                canvas.restore()
-
-                // 3. 轨道：整圈常亮霓虹管（晕 + 管体）
                 paint.strokeCap = android.graphics.Paint.Cap.ROUND
-                paint.shader = sweepShader()
-                paint.strokeWidth = stroke * 1.5f
-                paint.alpha = 80
-                paint.maskFilter = android.graphics.BlurMaskFilter(stroke * 0.55f, android.graphics.BlurMaskFilter.Blur.NORMAL)
-                canvas.drawArc(ring, -90f, 360f, false, paint)
-                paint.maskFilter = null
-                paint.strokeWidth = stroke * 0.95f
-                paint.alpha = 165
-                canvas.drawArc(ring, -90f, 360f, false, paint)
-                paint.alpha = 255
-                paint.shader = null
-
-                // 4. 进度弧：强泛光外晕 → 聚焦内晕 → 饱和亮芯 → 白热管芯
+                // 轨道
+                paint.color = Color.argb(46, 255, 255, 255)
+                paint.strokeWidth = size * 0.055f
+                canvas.drawArc(ring, 0f, 360f, false, paint)
+                // 进度弧
                 if (percent > 0) {
-                    canvas.save()
-                    canvas.rotate(-90f, cx, cy)
-                    paint.shader = sweepShader()
-                    paint.strokeCap = android.graphics.Paint.Cap.ROUND
-                    paint.strokeWidth = stroke * 2.4f
-                    paint.maskFilter = android.graphics.BlurMaskFilter(stroke * 1.1f, android.graphics.BlurMaskFilter.Blur.NORMAL)
-                    paint.alpha = 175
-                    canvas.drawArc(ring, 0f, 3.6f * percent, false, paint)
-                    paint.strokeWidth = stroke * 1.5f
-                    paint.maskFilter = android.graphics.BlurMaskFilter(stroke * 0.45f, android.graphics.BlurMaskFilter.Blur.NORMAL)
-                    paint.alpha = 225
-                    canvas.drawArc(ring, 0f, 3.6f * percent, false, paint)
-                    paint.maskFilter = null
-                    paint.strokeWidth = stroke * 0.9f
-                    paint.alpha = 255
-                    canvas.drawArc(ring, 0f, 3.6f * percent, false, paint)
-                    // 白热管芯（沿弧更亮的近白线）
+                    paint.shader = android.graphics.SweepGradient(cx, cy, neon, null)
+                    canvas.drawArc(ring, -90f, 3.6f * percent, false, paint)
                     paint.shader = null
-                    paint.color = if (name == "CPU") Color.argb(225, 255, 244, 214) else Color.argb(225, 224, 255, 238)
-                    paint.strokeWidth = stroke * 0.30f
-                    canvas.drawArc(ring, 0f, 3.6f * percent, false, paint)
-                    canvas.restore()
                 }
-
-                // 5. 数字：辉光模糊 + 亮芯双程
-                val numC = if (name == "CPU") Color.rgb(255, 225, 95) else Color.rgb(120, 255, 165)
+                // 中心数字
                 paint.style = android.graphics.Paint.Style.FILL
                 paint.textAlign = android.graphics.Paint.Align.CENTER
                 paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
-                paint.textSize = size * 0.28f
-                paint.color = numC
+                paint.textSize = size * 0.26f
+                paint.color = if (name == "CPU") Color.rgb(255, 205, 120) else Color.rgb(120, 232, 170)
                 val text = if (value != null) "$percent%" else "--"
-                val valueBaseline = cy - (paint.ascent() + paint.descent()) / 2f
-                paint.maskFilter = android.graphics.BlurMaskFilter(size * 0.028f, android.graphics.BlurMaskFilter.Blur.NORMAL)
-                paint.alpha = 200
-                canvas.drawText(text, cx, valueBaseline, paint)
-                paint.maskFilter = null
-                paint.alpha = 255
-                canvas.drawText(text, cx, valueBaseline, paint)
+                val baseline = cy - (paint.ascent() + paint.descent()) / 2f
+                canvas.drawText(text, cx, baseline, paint)
                 return
             }
 
@@ -827,10 +808,11 @@ class HomePage(
     fun refreshStatus() {
         val ctx = activity
         statusGeneration.incrementAndGet()
-        gsiText.text = "GSI 系统：检测中..."
-        ubuntuText.text = "Linux：检测中..."
-        desktopText.text = "桌面：检测中..."
-        rootLabel.text = "ROOT：检测中…"
+        val grayText = Ui.secondaryText(activity)
+        gsiText.text = "检测中…"; gsiText.setTextColor(grayText)
+        ubuntuText.text = "检测中…"; ubuntuText.setTextColor(grayText)
+        desktopText.text = "检测中…"; desktopText.setTextColor(grayText)
+        rootLabel.text = "检测中…"; rootLabel.setTextColor(grayText)
         fun grayDot(view: View) {
             view.background = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.OVAL
@@ -873,11 +855,27 @@ class HomePage(
                                 shape = android.graphics.drawable.GradientDrawable.OVAL
                                 setColor(android.graphics.Color.parseColor(colorHex))
                             }
+                            val okColor = android.graphics.Color.parseColor("#5CE1A5")
+                            val idleColor = Ui.secondaryText(activity)
+                            val hasDesktop = !desktopLabel.startsWith("未安装")
                             deviceText.text = device
-                            gsiText.text = "GSI 系统：$gsiLabel"
-                            ubuntuText.text = if (linuxInstalled) "Linux：已安装" else "Linux：未安装"
-                            desktopText.text = "桌面：$desktopLabel"
-                            rootLabel.text = if (rootOk) "ROOT：已授权" else "ROOT：未授权"
+                            gsiText.text = gsiLabel
+                            gsiText.setTextColor(
+                                when (gsiState) {
+                                    com.mcai.ubuntudsu.core.GsiState.RUNNING,
+                                    com.mcai.ubuntudsu.core.GsiState.INSTALLED,
+                                    com.mcai.ubuntudsu.core.GsiState.ENABLED,
+                                    -> okColor
+                                    com.mcai.ubuntudsu.core.GsiState.DISABLED -> android.graphics.Color.parseColor("#FBBF24")
+                                    else -> idleColor
+                                },
+                            )
+                            ubuntuText.text = if (linuxInstalled) "已安装" else "未安装"
+                            ubuntuText.setTextColor(if (linuxInstalled) okColor else idleColor)
+                            desktopText.text = desktopLabel
+                            desktopText.setTextColor(if (hasDesktop) okColor else idleColor)
+                            rootLabel.text = if (rootOk) "已授权" else "未授权"
+                            rootLabel.setTextColor(if (rootOk) okColor else idleColor)
                             rootDot.background = dotColor(if (rootOk) "#5CE1A5" else "#FF756F")
                             // GSI 点：运行/安装/启用=绿，停用=琥珀，未安装/未知=灰
                             gsiDot.background = dotColor(
@@ -891,7 +889,6 @@ class HomePage(
                                 },
                             )
                             ubuntuDot.background = dotColor(if (linuxInstalled) "#5CE1A5" else "#B0B0B0")
-                            val hasDesktop = !desktopLabel.startsWith("未安装")
                             desktopDot.background = dotColor(if (hasDesktop) "#5CE1A5" else "#B0B0B0")
                         }
                         renderedGeneration = generation

@@ -94,7 +94,7 @@ class RomPage(
         }
         titleRow.addView(TextView(activity).apply {
             text = "ROM固件"
-            textSize = 18f
+            textSize = 22f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
             gravity = Gravity.CENTER
@@ -106,7 +106,7 @@ class RomPage(
         })
         titleRow.addView(TextView(activity).apply {
             text = "下载管理"
-            textSize = 12f
+            textSize = 12.5f
             setTextColor(Ui.buttonText(activity))
             gravity = Gravity.CENTER
             background = Ui.glassButton(activity, Ui.buttonSuccess(activity))
@@ -128,9 +128,9 @@ class RomPage(
         val currentCard = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(Ui.dp(14, d), Ui.dp(12, d), Ui.dp(14, d), Ui.dp(12, d))
-            background = Ui.glassSurface(activity, 16f)
+            background = Ui.glassSurface(activity, 18f)
             // 圆角 outline 投影：裸 elevation 对 LayerDrawable 背景会渲染成方形影子
-            Ui.applyNeuShadow(this, 2f, 16f)
+            Ui.applyNeuShadow(this, 3f, 18f)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -138,12 +138,12 @@ class RomPage(
         }
         currentCard.addView(TextView(activity).apply {
             text = "当前设备"
-            textSize = 11f
+            textSize = 11.5f
             setTextColor(Ui.secondaryText(activity))
         })
         currentDeviceText = TextView(activity).apply {
             text = "${RomApi.getCurrentDeviceModel()}（${RomApi.getCurrentDeviceCodename()}）"
-            textSize = 14f
+            textSize = 14.5f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Ui.buttonSuccess(activity))
             setPadding(0, Ui.dp(4, d), 0, 0)
@@ -156,7 +156,7 @@ class RomPage(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(Ui.dp(12, d), Ui.dp(8, d), Ui.dp(12, d), Ui.dp(8, d))
-            background = Ui.glassSurface(activity, 12f)
+            background = Ui.glassSurface(activity, 14f)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -219,7 +219,7 @@ class RomPage(
         }
         deviceSelectBtn = TextView(activity).apply {
             text = "选择设备"
-            textSize = 11f
+            textSize = 12f
             setTextColor(Ui.buttonText(activity))
             setPadding(Ui.dp(10, d), Ui.dp(5, d), Ui.dp(10, d), Ui.dp(5, d))
             background = Ui.glassButton(activity, Ui.buttonSecondary(activity))
@@ -233,7 +233,7 @@ class RomPage(
         deviceRow.addView(deviceSelectBtn)
         deviceLabel = TextView(activity).apply {
             text = ""
-            textSize = 11f
+            textSize = 11.5f
             setTextColor(Ui.secondaryText(activity))
             setPadding(Ui.dp(8, d), 0, 0, 0)
         }
@@ -243,7 +243,7 @@ class RomPage(
         // 状态文字
         statusText = TextView(activity).apply {
             text = "加载中..."
-            textSize = 11f
+            textSize = 11.5f
             setTextColor(Ui.secondaryText(activity))
             setPadding(0, 0, 0, Ui.dp(6, d))
         }
@@ -310,7 +310,7 @@ class RomPage(
         val active = index == 0
         val tv = TextView(activity).apply {
             text = label
-            textSize = 12f
+            textSize = 12.5f
             gravity = Gravity.CENTER
             setTextColor(tabTextColor(active))
             setPadding(Ui.dp(14, d), Ui.dp(7, d), Ui.dp(14, d), Ui.dp(7, d))
@@ -330,7 +330,7 @@ class RomPage(
     private fun tabBackground(active: Boolean, d: Float): android.graphics.drawable.GradientDrawable {
         val fill = if (active) Ui.buttonSuccess(activity) else Ui.surface(activity)
         val stroke = if (active) Ui.buttonSuccess(activity) else Ui.border(activity)
-        return Ui.strokeRounded(fill, stroke, 1f, d, 12f)
+        return Ui.strokeRounded(fill, stroke, 1f, d, 14f)
     }
 
     /** 选中态文字：白；未选中：主文字色（保证实色填充上可读） */
@@ -343,7 +343,7 @@ class RomPage(
         val active = brand == activeBrand
         val tv = TextView(activity).apply {
             text = brand
-            textSize = 11f
+            textSize = 12f
             gravity = Gravity.CENTER
             setTextColor(tabTextColor(active))
             setPadding(Ui.dp(10, d), Ui.dp(5, d), Ui.dp(10, d), Ui.dp(5, d))
@@ -585,7 +585,7 @@ class RomPage(
         val item = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(Ui.dp(12, d), Ui.dp(7, d), Ui.dp(12, d), Ui.dp(7, d))
-            background = Ui.glassSurface(activity, 12f)
+            background = Ui.glassSurface(activity, 14f)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -1067,7 +1067,7 @@ class RomPage(
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(Ui.dp(6, d), Ui.dp(10, d), Ui.dp(6, d), Ui.dp(10, d))
-            background = Ui.glassSurface(activity, 12f)
+            background = Ui.glassSurface(activity, 14f)
             // 圆角 outline 投影：裸 elevation 对 LayerDrawable 背景会渲染成方形影子
             Ui.applyNeuShadow(this, 1.5f, 12f)
             isClickable = true
@@ -1198,7 +1198,7 @@ class RomPage(
         val item = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(Ui.dp(12, d), Ui.dp(10, d), Ui.dp(12, d), Ui.dp(10, d))
-            background = Ui.glassSurface(activity, 12f)
+            background = Ui.glassSurface(activity, 14f)
         }
 
         val row1 = LinearLayout(activity).apply {
