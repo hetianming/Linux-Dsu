@@ -18,8 +18,6 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.text.TextWatcher;
-import android.widget.ArrayAdapter;
-import android.widget.ListView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -79,11 +77,11 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
     private EditText destEdit;                 // extract 目标目录
     private TextView sourceText;              // flash 源文件
     private Button runBtn;
-    private ListView partList;                 // 分区列表（独立滚动）
-    private ArrayAdapter<String> partAdapter;
     private final List<String> allParts = new ArrayList<>();
     private final List<String> filteredParts = new ArrayList<>();
-    private EditText searchEdit;
+    private TextView selSummary;               // 页面已选分区摘要
+    private Button pickPartBtn;                // 「选择分区」按钮（打开弹框）
+    private android.app.Dialog partDialog;
 
     private Button extractModeBtn;
     private Button flashModeBtn;
@@ -142,6 +140,7 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
     @Override
     protected void onDestroy() {
         if (logDialog != null && logDialog.isShowing()) logDialog.dismiss();
+        if (partDialog != null && partDialog.isShowing()) partDialog.dismiss();
         super.onDestroy();
         io.shutdownNow();
     }
@@ -273,80 +272,34 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         modeRow.addView(flashModeBtn, flashLp);
         content.addView(modeRow);
 
-        // ---- 分区列表 ----
+        // ---- 分区选择（弹框，参考分解 bin 的弹窗勾选） ----
         LinearLayout partCard = glassCard();
         partCard.addView(textView(t("本机分区", "Device Partitions"), 13f, pal.title));
         ((TextView) partCard.getChildAt(0)).setTypeface(null, 1);
 
-        // 搜索框
-        searchEdit = new EditText(this);
-        searchEdit.setHint(t("搜索分区，如 boot / system / vendor", "Search, e.g. boot / system / vendor"));
-        searchEdit.setTextSize(12f);
-        searchEdit.setSingleLine(true);
-        searchEdit.setPadding(dp(10), dp(8), dp(10), dp(8));
-        searchEdit.setBackground(rippleBg(isDark()));
-        LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-1, -2);
-        searchLp.topMargin = dp(6);
-        partCard.addView(searchEdit, searchLp);
-        searchEdit.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
-            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { applyFilter(s.toString()); }
-            @Override public void afterTextChanged(android.text.Editable s) {}
-        });
+        pickPartBtn = new Button(this);
+        pickPartBtn.setText(t("🗂 选择分区（已选 0）", "🗂 Pick (0)"));
+        pickPartBtn.setAllCaps(false);
+        pickPartBtn.setTextSize(13f);
+        pickPartBtn.setTypeface(null, 1);
+        pickPartBtn.setTextColor(0xFFFFFFFF);
+        pickPartBtn.setGravity(Gravity.CENTER);
+        pickPartBtn.setPadding(dp(12), 0, dp(12), 0);
+        GradientDrawable pickBg = new GradientDrawable();
+        pickBg.setOrientation(GradientDrawable.Orientation.TL_BR);
+        pickBg.setColors(new int[]{0xFF35A8C4, 0xFF2E86AB});
+        pickBg.setCornerRadius(dp(14));
+        pickBg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
+        pickPartBtn.setBackground(pickBg);
+        pickPartBtn.setStateListAnimator(null);
+        pickPartBtn.setOnClickListener(v -> { Haptics.INSTANCE.perform(v); showPartitionDialog(); });
+        LinearLayout.LayoutParams pickLp = new LinearLayout.LayoutParams(-1, dp(44));
+        pickLp.topMargin = dp(8);
+        partCard.addView(pickPartBtn, pickLp);
 
-        // 全选 / 取消 按钮行
-        LinearLayout selRow = new LinearLayout(this);
-        selRow.setOrientation(LinearLayout.HORIZONTAL);
-        selRow.setPadding(0, dp(6), 0, 0);
-        Button allBtn = new Button(this);
-        allBtn.setText(t("全选", "Select All"));
-        setupChip(allBtn);
-        allBtn.setOnClickListener(v -> { Haptics.INSTANCE.perform(v); selectAllFiltered(); });
-        Button clearBtn = new Button(this);
-        clearBtn.setText(t("取消", "Clear"));
-        setupChip(clearBtn);
-        clearBtn.setOnClickListener(v -> { Haptics.INSTANCE.perform(v); clearSelection(); });
-        selRow.addView(allBtn, new LinearLayout.LayoutParams(0, -2, 1f));
-        LinearLayout.LayoutParams clearLp = new LinearLayout.LayoutParams(0, -2, 1f);
-        clearLp.leftMargin = dp(8);
-        selRow.addView(clearBtn, clearLp);
-        partCard.addView(selRow);
-
-        // 列表（固定高度，独立滚动，避免外层 ScrollView 吞掉触摸事件）
-        partAdapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, filteredParts) {
-            @Override
-            public View getView(int position, View convertView, ViewGroup parent) {
-                TextView tv = (TextView) super.getView(position, convertView, parent);
-                String part = filteredParts.get(position);
-                boolean sel = selectedParts.contains(part);
-                tv.setText(part);
-                tv.setTextSize(12.5f);
-                tv.setTypeface(null, 1);
-                tv.setPadding(dp(10), dp(9), dp(10), dp(9));
-                tv.setBackground(sel ? selPartBg(isDark()) : rippleBg(isDark()));
-                tv.setTextColor(sel ? 0xFFFFFFFF : (isDark() ? 0xFFFFFFFF : 0xFF1F3352));
-                return tv;
-            }
-        };
-        partList = new ListView(this);
-        partList.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE);
-        partList.setDivider(null);
-        partList.setDividerHeight(0);
-        partList.setScrollbarFadingEnabled(true);
-        partList.setAdapter(partAdapter);
-        partList.setOnItemClickListener((parent, view, position, id) -> {
-            Haptics.INSTANCE.perform(view);
-            String part = filteredParts.get(position);
-            if (selectedParts.contains(part)) selectedParts.remove(part);
-            else selectedParts.add(part);
-            partAdapter.notifyDataSetChanged();
-            updateSelStatus();
-            refreshRunState();
-            if (MODE_EXTRACT.equals(mode)) recomputeDest();
-        });
-        LinearLayout.LayoutParams listLp = new LinearLayout.LayoutParams(-1, dp(300));
-        listLp.topMargin = dp(6);
-        partCard.addView(partList, listLp);
+        selSummary = textView(t("尚未选择分区", "No partition selected"), 12f, pal.subtitle);
+        selSummary.setPadding(0, dp(6), 0, 0);
+        partCard.addView(selSummary);
 
         LinearLayout.LayoutParams partCardLp = new LinearLayout.LayoutParams(-1, -2);
         partCardLp.topMargin = dp(8);
@@ -414,6 +367,8 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
 
     private void setMode(String m) {
         mode = m;
+        selectedParts.clear();
+        updateSelSummary();
         boolean extract = MODE_EXTRACT.equals(m);
         applyModeBg(extractModeBtn, extract);
         applyModeBg(flashModeBtn, !extract);
@@ -558,7 +513,7 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         destEdit.setText(destDir);
     }
 
-    // ================= 分区列表 =================
+    // ================= 分区列表（弹框选择，参考分解 bin） =================
 
     private void loadPartitions() {
         statusText.setText(t("正在枚举本机分区 …", "Enumerating partitions …"));
@@ -572,55 +527,216 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         allParts.clear();
         if (parts == null || parts.isEmpty()) {
             statusText.setText(t("未枚举到分区（需 ROOT 或设备不支持 by-name）", "No partitions found (need ROOT)"));
-            filteredParts.clear();
-            if (partAdapter != null) partAdapter.notifyDataSetChanged();
+            updateSelSummary();
             return;
         }
         allParts.addAll(parts);
-        applyFilter(searchEdit != null ? searchEdit.getText().toString() : "");
+        statusText.setText(t("共 " + allParts.size() + " 个分区，点「选择分区」挑选", allParts.size() + " partitions, tap Pick"));
+        updateSelSummary();
     }
 
-    // 按搜索关键字过滤（区分大小写不敏感，contains）
-    private void applyFilter(String q) {
-        filteredParts.clear();
-        String query = (q == null ? "" : q.trim().toLowerCase(Locale.ROOT));
-        for (String p : allParts) {
-            if (query.isEmpty() || p.toLowerCase(Locale.ROOT).contains(query)) filteredParts.add(p);
+    /** 刷新页面已选分区摘要 + 执行按钮可用性 */
+    private void updateSelSummary() {
+        if (pickPartBtn != null)
+            pickPartBtn.setText(t("🗂 选择分区（已选 " + selectedParts.size() + "）", "🗂 Pick (" + selectedParts.size() + ")"));
+        if (selSummary != null) {
+            if (selectedParts.isEmpty()) {
+                selSummary.setText(t("尚未选择分区", "No partition selected"));
+                selSummary.setTextColor(pal.subtitle);
+            } else {
+                StringBuilder sb = new StringBuilder();
+                int i = 0;
+                for (String p : selectedParts) {
+                    if (i++ > 0) sb.append(", ");
+                    sb.append(p);
+                    if (i >= 12) { sb.append(" …"); break; }
+                }
+                selSummary.setText(t("已选：" + sb, "Selected: " + sb));
+                selSummary.setTextColor(pal.success);
+            }
         }
-        if (partAdapter != null) partAdapter.notifyDataSetChanged();
-        updateSelStatus();
-    }
-
-    // 全选：选中当前过滤后的全部分区
-    private void selectAllFiltered() {
-        selectedParts.addAll(filteredParts);
-        if (partAdapter != null) partAdapter.notifyDataSetChanged();
-        updateSelStatus();
         refreshRunState();
-        if (MODE_EXTRACT.equals(mode)) recomputeDest();
-    }
-
-    // 取消：清空全部选择
-    private void clearSelection() {
-        selectedParts.clear();
-        if (partAdapter != null) partAdapter.notifyDataSetChanged();
-        updateSelStatus();
-        refreshRunState();
-        if (MODE_EXTRACT.equals(mode)) recomputeDest();
-    }
-
-    private void updateSelStatus() {
-        if (statusText == null) return;
-        int shown = filteredParts.size();
-        int total = allParts.size();
-        int sel = selectedParts.size();
-        statusText.setText(t("共 " + total + " 个分区，显示 " + shown + "，已选 " + sel,
-                total + " partitions, showing " + shown + ", selected " + sel));
     }
 
     private void refreshRunState() {
         boolean ok = !selectedParts.isEmpty() && (MODE_EXTRACT.equals(mode) || sourceFile != null);
         runBtn.setEnabled(ok);
+    }
+
+    /** 分区选择弹框：搜索 + 可滚动列表。提取模式提供全选/取消（多选）；刷写模式为单选，不提供全选/取消，避免误刷多分区。 */
+    private void showPartitionDialog() {
+        if (isFinishing() || isDestroyed()) return;
+        if (allParts.isEmpty()) {
+            toast(t("尚未枚举到分区，请稍候或检查 ROOT", "No partitions yet, wait or check ROOT"));
+            return;
+        }
+        final boolean flash = MODE_FLASH.equals(mode);
+        final android.app.Dialog dialog = new android.app.Dialog(this);
+        dialog.setCancelable(true);
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(18), dp(16), dp(18), dp(14));
+        GradientDrawable bg = new GradientDrawable();
+        boolean dark = isDark();
+        bg.setColor(dark ? 0xF22A3546 : 0xF2e9f0f7);
+        bg.setCornerRadius(dp(24));
+        bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
+        panel.setBackground(bg);
+
+        TextView title = textView(
+                t("选择本机分区", "Select device partition") + (flash ? t("（单选）", " (single)") : t("（可多选）", " (multi)")),
+                16f, pal.title);
+        title.setTypeface(null, 1);
+        title.setPadding(dp(2), 0, 0, dp(10));
+        panel.addView(title, new LinearLayout.LayoutParams(-1, -2));
+
+        final EditText search = new EditText(this);
+        search.setHint(t("搜索分区，如 boot / system / vendor", "Search, e.g. boot / system / vendor"));
+        search.setTextSize(12f);
+        search.setSingleLine(true);
+        search.setPadding(dp(10), dp(8), dp(10), dp(8));
+        search.setBackground(rippleBg(dark));
+        LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-1, -2);
+        searchLp.bottomMargin = dp(8);
+        panel.addView(search, searchLp);
+
+        final TextView count = textView("", 12f, pal.success);
+        count.setTypeface(null, 1);
+        count.setPadding(0, 0, 0, dp(6));
+        panel.addView(count, new LinearLayout.LayoutParams(-1, -2));
+
+        final LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(list, new ScrollView.LayoutParams(-1, -2));
+        panel.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        final Runnable[] render = new Runnable[1];
+        render[0] = () -> {
+            filteredParts.clear();
+            String q = search.getText().toString().trim().toLowerCase(Locale.ROOT);
+            for (String p : allParts)
+                if (q.isEmpty() || p.toLowerCase(Locale.ROOT).contains(q)) filteredParts.add(p);
+            list.removeAllViews();
+            for (final String part : filteredParts) {
+                final boolean on = selectedParts.contains(part);
+                LinearLayout row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(dp(11), dp(10), dp(10), dp(10));
+                GradientDrawable rb = new GradientDrawable();
+                if (dark) {
+                    rb.setColor(on ? 0x4D2f9c8f : 0x332A3546);
+                    rb.setCornerRadius(dp(14));
+                    rb.setStroke(Math.max(1, dp(1)), on ? pal.accent : 0x26FFFFFF);
+                } else {
+                    rb.setColor(on ? 0x3335A8C4 : 0x22FFFFFF);
+                    rb.setCornerRadius(dp(14));
+                    rb.setStroke(Math.max(1, dp(1)), on ? pal.accent : 0x33FFFFFF);
+                }
+                row.setBackground(rb);
+                View dot = new View(this);
+                GradientDrawable db = new GradientDrawable();
+                db.setShape(GradientDrawable.OVAL);
+                if (on) { db.setColor(pal.accent); db.setStroke(Math.max(1, dp(1)), 0xB3FFFFFF); }
+                else { db.setColor(0x00000000); db.setStroke(Math.max(1, dp(1)), dark ? 0x665a728f : 0x668fa1b8); }
+                dot.setBackground(db);
+                row.addView(dot, new LinearLayout.LayoutParams(dp(18), dp(18)));
+                TextView name = textView(part, 13.5f, on ? pal.success : pal.title);
+                name.setTypeface(null, on ? 1 : 0);
+                name.setSingleLine(true);
+                name.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+                name.setPadding(dp(10), 0, dp(6), 0);
+                row.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
+                row.setOnClickListener(v -> {
+                    Haptics.INSTANCE.perform(v);
+                    if (flash) {
+                        if (selectedParts.contains(part)) selectedParts.remove(part);
+                        else { selectedParts.clear(); selectedParts.add(part); }
+                    } else {
+                        if (selectedParts.contains(part)) selectedParts.remove(part);
+                        else selectedParts.add(part);
+                    }
+                    render[0].run();
+                    updateSelSummary();
+                });
+                LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(-1, -2);
+                rLp.bottomMargin = dp(6);
+                list.addView(row, rLp);
+            }
+            count.setText(t("已选 " + selectedParts.size() + " / 显示 " + filteredParts.size() + " / 共 " + allParts.size(),
+                    "Selected " + selectedParts.size() + " / shown " + filteredParts.size() + " / total " + allParts.size()));
+        };
+        search.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { render[0].run(); }
+            @Override public void afterTextChanged(android.text.Editable s) {}
+        });
+        render[0].run();
+
+        LinearLayout btnRow = new LinearLayout(this);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setGravity(Gravity.CENTER_VERTICAL);
+        btnRow.setPadding(0, dp(12), 0, 0);
+        if (!flash) {
+            Button allBtn = new Button(this);
+            allBtn.setText(t("全选", "Select All"));
+            setupChip(allBtn);
+            allBtn.setOnClickListener(v -> {
+                Haptics.INSTANCE.perform(v);
+                selectedParts.addAll(filteredParts);
+                render[0].run();
+                updateSelSummary();
+            });
+            Button clearBtn = new Button(this);
+            clearBtn.setText(t("取消", "Clear"));
+            setupChip(clearBtn);
+            clearBtn.setOnClickListener(v -> {
+                Haptics.INSTANCE.perform(v);
+                selectedParts.clear();
+                render[0].run();
+                updateSelSummary();
+            });
+            btnRow.addView(allBtn, new LinearLayout.LayoutParams(0, -2, 1f));
+            LinearLayout.LayoutParams clLp = new LinearLayout.LayoutParams(0, -2, 1f);
+            clLp.leftMargin = dp(8);
+            btnRow.addView(clearBtn, clLp);
+        }
+        Button doneBtn = gradientButton(t("完成", "Done"), new int[]{0xFF2f9c8f, 0xFF1d6b46}, dp(16));
+        doneBtn.setOnClickListener(v -> { Haptics.INSTANCE.perform(v); dialog.dismiss(); });
+        LinearLayout.LayoutParams doneLp = new LinearLayout.LayoutParams(0, dp(42), flash ? 1f : 1.2f);
+        if (!flash) doneLp.leftMargin = dp(8);
+        btnRow.addView(doneBtn, doneLp);
+        panel.addView(btnRow, new LinearLayout.LayoutParams(-1, -2));
+
+        dialog.setContentView(panel, new LinearLayout.LayoutParams(-1, dp(500)));
+        dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0x00000000));
+        try {
+            dialog.show();
+            dialog.getWindow().setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.94f), dp(500));
+        } catch (Exception ignored) {}
+        partDialog = dialog;
+    }
+
+    private Button gradientButton(String label, int[] colors, int radius) {
+        Button b = new Button(this);
+        b.setText(label);
+        b.setTextSize(13f);
+        b.setAllCaps(false);
+        b.setTypeface(null, 1);
+        b.setTextColor(0xFFFFFFFF);
+        b.setMinWidth(0);
+        b.setMinHeight(0);
+        b.setGravity(Gravity.CENTER);
+        b.setPadding(0, 0, 0, 0);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setOrientation(GradientDrawable.Orientation.TL_BR);
+        bg.setColors(colors);
+        bg.setCornerRadius(radius);
+        bg.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
+        b.setBackground(bg);
+        b.setStateListAnimator(null);
+        return b;
     }
 
     // ================= 执行逻辑 =================
