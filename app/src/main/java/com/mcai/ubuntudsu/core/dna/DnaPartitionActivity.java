@@ -17,6 +17,9 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.text.TextWatcher;
+import android.widget.ArrayAdapter;
+import android.widget.ListView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -30,7 +33,9 @@ import com.mcai.ubuntudsu.ui.Ui;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -59,7 +64,7 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
     private final AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
     private String mode = MODE_EXTRACT;
-    private String selectedPart = null;
+    private final LinkedHashSet<String> selectedParts = new LinkedHashSet<>();
     private String sourceFile = null;          // flash 模式选中的本地 img
 
     // 提取模式的目标根目录（工程 Partitions / Download）
@@ -71,11 +76,14 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
     private TextView statusText;
     private TextView progressText;
     private ProgressBar progressBar;
-    private EditText destEdit;                 // extract 目标路径
+    private EditText destEdit;                 // extract 目标目录
     private TextView sourceText;              // flash 源文件
     private Button runBtn;
-    private LinearLayout partListContainer;
-    private final List<Object[]> partRows = new ArrayList<>();
+    private ListView partList;                 // 分区列表（独立滚动）
+    private ArrayAdapter<String> partAdapter;
+    private final List<String> allParts = new ArrayList<>();
+    private final List<String> filteredParts = new ArrayList<>();
+    private EditText searchEdit;
 
     private Button extractModeBtn;
     private Button flashModeBtn;
@@ -127,7 +135,7 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         sourceFile = path;
         sourceText.setText(path);
         sourceText.setTextColor(pal.success);
-        runBtn.setEnabled(selectedPart != null);
+        refreshRunState();
         statusText.setText(t("已选源镜像 " + new File(path).getName(), "Source " + new File(path).getName()));
     }
 
@@ -269,13 +277,77 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         LinearLayout partCard = glassCard();
         partCard.addView(textView(t("本机分区", "Device Partitions"), 13f, pal.title));
         ((TextView) partCard.getChildAt(0)).setTypeface(null, 1);
-        partListContainer = new LinearLayout(this);
-        partListContainer.setOrientation(LinearLayout.VERTICAL);
-        partListContainer.setPadding(0, dp(6), 0, 0);
-        ScrollView partScroll = new ScrollView(this);
-        partScroll.addView(partListContainer, new ScrollView.LayoutParams(-1, -2));
-        partScroll.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(260)));
-        partCard.addView(partScroll);
+
+        // 搜索框
+        searchEdit = new EditText(this);
+        searchEdit.setHint(t("搜索分区，如 boot / system / vendor", "Search, e.g. boot / system / vendor"));
+        searchEdit.setTextSize(12f);
+        searchEdit.setSingleLine(true);
+        searchEdit.setPadding(dp(10), dp(8), dp(10), dp(8));
+        searchEdit.setBackground(rippleBg(isDark()));
+        LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-1, -2);
+        searchLp.topMargin = dp(6);
+        partCard.addView(searchEdit, searchLp);
+        searchEdit.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { applyFilter(s.toString()); }
+            @Override public void afterTextChanged(android.text.Editable s) {}
+        });
+
+        // 全选 / 取消 按钮行
+        LinearLayout selRow = new LinearLayout(this);
+        selRow.setOrientation(LinearLayout.HORIZONTAL);
+        selRow.setPadding(0, dp(6), 0, 0);
+        Button allBtn = new Button(this);
+        allBtn.setText(t("全选", "Select All"));
+        setupChip(allBtn);
+        allBtn.setOnClickListener(v -> { Haptics.INSTANCE.perform(v); selectAllFiltered(); });
+        Button clearBtn = new Button(this);
+        clearBtn.setText(t("取消", "Clear"));
+        setupChip(clearBtn);
+        clearBtn.setOnClickListener(v -> { Haptics.INSTANCE.perform(v); clearSelection(); });
+        selRow.addView(allBtn, new LinearLayout.LayoutParams(0, -2, 1f));
+        LinearLayout.LayoutParams clearLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        clearLp.leftMargin = dp(8);
+        selRow.addView(clearBtn, clearLp);
+        partCard.addView(selRow);
+
+        // 列表（固定高度，独立滚动，避免外层 ScrollView 吞掉触摸事件）
+        partAdapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, filteredParts) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                TextView tv = (TextView) super.getView(position, convertView, parent);
+                String part = filteredParts.get(position);
+                boolean sel = selectedParts.contains(part);
+                tv.setText(part);
+                tv.setTextSize(12.5f);
+                tv.setTypeface(null, 1);
+                tv.setPadding(dp(10), dp(9), dp(10), dp(9));
+                tv.setBackground(sel ? selPartBg(isDark()) : rippleBg(isDark()));
+                tv.setTextColor(sel ? 0xFFFFFFFF : (isDark() ? 0xFFFFFFFF : 0xFF1F3352));
+                return tv;
+            }
+        };
+        partList = new ListView(this);
+        partList.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE);
+        partList.setDivider(null);
+        partList.setDividerHeight(0);
+        partList.setScrollbarFadingEnabled(true);
+        partList.setAdapter(partAdapter);
+        partList.setOnItemClickListener((parent, view, position, id) -> {
+            Haptics.INSTANCE.perform(view);
+            String part = filteredParts.get(position);
+            if (selectedParts.contains(part)) selectedParts.remove(part);
+            else selectedParts.add(part);
+            partAdapter.notifyDataSetChanged();
+            updateSelStatus();
+            refreshRunState();
+            if (MODE_EXTRACT.equals(mode)) recomputeDest();
+        });
+        LinearLayout.LayoutParams listLp = new LinearLayout.LayoutParams(-1, dp(300));
+        listLp.topMargin = dp(6);
+        partCard.addView(partList, listLp);
+
         LinearLayout.LayoutParams partCardLp = new LinearLayout.LayoutParams(-1, -2);
         partCardLp.topMargin = dp(8);
         content.addView(partCard, partCardLp);
@@ -384,6 +456,11 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         LinearLayout.LayoutParams destLp = new LinearLayout.LayoutParams(-1, -2);
         destLp.topMargin = dp(6);
         extractIoCard.addView(destEdit, destLp);
+        TextView destHint = textView(
+                t("每个所选分区将单独保存为 <目录>/<分区名>.img", "Each selected partition → <dir>/<name>.img"),
+                10.5f, pal.subtitle);
+        destHint.setPadding(0, dp(4), 0, 0);
+        extractIoCard.addView(destHint);
 
         LinearLayout dirRow = new LinearLayout(this);
         dirRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -478,8 +555,7 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
 
     private void recomputeDest() {
         if (destEdit == null) return;
-        String name = (selectedPart != null) ? selectedPart : "partition";
-        destEdit.setText(destDir + "/" + name + ".img");
+        destEdit.setText(destDir);
     }
 
     // ================= 分区列表 =================
@@ -493,73 +569,71 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
     }
 
     private void fillPartList(List<String> parts) {
-        partListContainer.removeAllViews();
-        partRows.clear();
+        allParts.clear();
         if (parts == null || parts.isEmpty()) {
             statusText.setText(t("未枚举到分区（需 ROOT 或设备不支持 by-name）", "No partitions found (need ROOT)"));
+            filteredParts.clear();
+            if (partAdapter != null) partAdapter.notifyDataSetChanged();
             return;
         }
-        statusText.setText(t("共 " + parts.size() + " 个分区，点击选择", parts.size() + " partitions, tap to select"));
-        boolean dark = isDark();
-        for (String part : parts) {
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(dp(4), dp(7), dp(4), dp(7));
-            row.setBackground(rippleBg(dark));
-            row.setClickable(true);
-            TextView name = new TextView(this);
-            name.setText(part);
-            name.setTextSize(12.5f);
-            name.setTypeface(null, 1);
-            name.setTextColor(dark ? 0xFFFFFFFF : 0xFF1F3352);
-            row.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
-            row.setOnClickListener(v -> {
-                Haptics.INSTANCE.perform(v);
-                selectedPart = part;
-                if (MODE_EXTRACT.equals(mode)) recomputeDest();
-                String dev = DnaTools.partitionPath(this, part);
-                statusText.setText(t("已选分区 " + part + "（" + dev + "）", "Selected " + part + " (" + dev + ")"));
-                refreshAllPartRows();
-                refreshRunState();
-            });
-            partRows.add(new Object[]{part, row, name});
-            partListContainer.addView(row);
-            LinearLayout.LayoutParams rl = (LinearLayout.LayoutParams) row.getLayoutParams();
-            rl.bottomMargin = dp(2);
-            row.setLayoutParams(rl);
-        }
+        allParts.addAll(parts);
+        applyFilter(searchEdit != null ? searchEdit.getText().toString() : "");
     }
 
-    private void refreshAllPartRows() {
-        for (Object[] r : partRows) {
-            String part = (String) r[0];
-            LinearLayout row = (LinearLayout) r[1];
-            TextView name = (TextView) r[2];
-            boolean sel = part.equals(selectedPart);
-            row.setBackground(sel ? selPartBg(isDark()) : rippleBg(isDark()));
-            name.setTextColor(sel ? 0xFFFFFFFF : (isDark() ? 0xFFFFFFFF : 0xFF1F3352));
+    // 按搜索关键字过滤（区分大小写不敏感，contains）
+    private void applyFilter(String q) {
+        filteredParts.clear();
+        String query = (q == null ? "" : q.trim().toLowerCase(Locale.ROOT));
+        for (String p : allParts) {
+            if (query.isEmpty() || p.toLowerCase(Locale.ROOT).contains(query)) filteredParts.add(p);
         }
+        if (partAdapter != null) partAdapter.notifyDataSetChanged();
+        updateSelStatus();
+    }
+
+    // 全选：选中当前过滤后的全部分区
+    private void selectAllFiltered() {
+        selectedParts.addAll(filteredParts);
+        if (partAdapter != null) partAdapter.notifyDataSetChanged();
+        updateSelStatus();
+        refreshRunState();
+        if (MODE_EXTRACT.equals(mode)) recomputeDest();
+    }
+
+    // 取消：清空全部选择
+    private void clearSelection() {
+        selectedParts.clear();
+        if (partAdapter != null) partAdapter.notifyDataSetChanged();
+        updateSelStatus();
+        refreshRunState();
+        if (MODE_EXTRACT.equals(mode)) recomputeDest();
+    }
+
+    private void updateSelStatus() {
+        if (statusText == null) return;
+        int shown = filteredParts.size();
+        int total = allParts.size();
+        int sel = selectedParts.size();
+        statusText.setText(t("共 " + total + " 个分区，显示 " + shown + "，已选 " + sel,
+                total + " partitions, showing " + shown + ", selected " + sel));
     }
 
     private void refreshRunState() {
-        boolean ok = selectedPart != null && (MODE_EXTRACT.equals(mode) || sourceFile != null);
+        boolean ok = !selectedParts.isEmpty() && (MODE_EXTRACT.equals(mode) || sourceFile != null);
         runBtn.setEnabled(ok);
     }
 
     // ================= 执行逻辑 =================
 
     private void startRun() {
-        if (selectedPart == null) {
-            toast(t("请先选择本机分区", "Pick a device partition"));
+        if (selectedParts.isEmpty()) {
+            toast(t("请先选择至少一个本机分区", "Select at least one partition"));
             return;
         }
         if (!RootShell.INSTANCE.available(8000)) {
             toast(t("未获得 ROOT 授权", "ROOT not granted"));
             return;
         }
-        final String part = selectedPart;
-        final String dev = DnaTools.partitionPath(this, part);
         cancelFlag.set(false);
         runBtn.setEnabled(false);
         progressBar.setVisibility(View.VISIBLE);
@@ -567,22 +641,16 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
         progressText.setText(t("准备中 …", "Preparing …"));
         expandLog();
 
+        final List<String> targets = new ArrayList<>(selectedParts);
         if (MODE_EXTRACT.equals(mode)) {
-            final String dst = destEdit.getText().toString().trim();
-            if (dst.isEmpty()) {
-                toast(t("请输入提取目标路径", "Enter output path"));
+            final String baseDir = destDir;
+            if (baseDir == null || baseDir.trim().isEmpty()) {
+                toast(t("请设置提取目标目录", "Set output directory"));
                 runBtn.setEnabled(true);
                 return;
             }
-            log(t("提取 " + part + " → " + dst, "Extract " + part + " → " + dst));
-            io.execute(() -> {
-                com.mcai.ubuntudsu.core.DnaTools.Result r = DnaTools.ddPartition(dev, dst,
-                        (pct, written) -> { onProgress(pct, written); return kotlin.Unit.INSTANCE; },
-                        line -> { log(line); return kotlin.Unit.INSTANCE; },
-                        cancelFlag::get,
-                        30 * 60_000L);
-                finishRun(r.getSuccess(), r.getMessage(), dev, dst);
-            });
+            log(t("批量提取 " + targets.size() + " 个分区 → " + baseDir, "Batch extract " + targets.size() + " → " + baseDir));
+            io.execute(() -> runBatchExtract(targets, baseDir));
         } else {
             if (sourceFile == null) {
                 toast(t("请先选择要刷写的 img", "Pick an img to flash"));
@@ -590,16 +658,50 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
                 return;
             }
             final String src = sourceFile;
-            log(t("刷写 " + src + " → " + part, "Flash " + src + " → " + part));
-            io.execute(() -> {
-                com.mcai.ubuntudsu.core.DnaTools.Result r = DnaTools.ddPartition(src, dev,
-                        (pct, written) -> { onProgress(pct, written); return kotlin.Unit.INSTANCE; },
-                        line -> { log(line); return kotlin.Unit.INSTANCE; },
-                        cancelFlag::get,
-                        30 * 60_000L);
-                finishRun(r.getSuccess(), r.getMessage(), src, dev);
-            });
+            log(t("批量刷写 " + src + " → " + targets.size() + " 个分区", "Batch flash " + src + " → " + targets.size()));
+            io.execute(() -> runBatchFlash(targets, src));
         }
+    }
+
+    private void runBatchExtract(List<String> parts, String baseDir) {
+        int total = parts.size();
+        int[] cur = {0};
+        for (String part : parts) {
+            if (cancelFlag.get()) { finishRun(false, "已取消", "", ""); return; }
+            cur[0]++;
+            final int idx = cur[0];
+            final String dev = DnaTools.partitionPath(this, part);
+            final String dst = baseDir + "/" + part + ".img";
+            final int baseline = (idx - 1) * 100;
+            log(t("[" + idx + "/" + total + "] 提取 " + part + " → " + dst, "[" + idx + "/" + total + "] extract " + part + " → " + dst));
+            com.mcai.ubuntudsu.core.DnaTools.Result r = DnaTools.ddPartition(dev, dst,
+                    (pct, written) -> { onProgress((baseline + pct) / total, written); return kotlin.Unit.INSTANCE; },
+                    line -> { log(line); return kotlin.Unit.INSTANCE; },
+                    cancelFlag::get,
+                    30 * 60_000L);
+            if (!r.getSuccess()) { finishRun(false, r.getMessage(), dev, dst); return; }
+        }
+        finishRun(true, "", "", "");
+    }
+
+    private void runBatchFlash(List<String> parts, String src) {
+        int total = parts.size();
+        int[] cur = {0};
+        for (String part : parts) {
+            if (cancelFlag.get()) { finishRun(false, "已取消", "", ""); return; }
+            cur[0]++;
+            final int idx = cur[0];
+            final String dev = DnaTools.partitionPath(this, part);
+            final int baseline = (idx - 1) * 100;
+            log(t("[" + idx + "/" + total + "] 刷写 " + src + " → " + part, "[" + idx + "/" + total + "] flash " + src + " → " + part));
+            com.mcai.ubuntudsu.core.DnaTools.Result r = DnaTools.ddPartition(src, dev,
+                    (pct, written) -> { onProgress((baseline + pct) / total, written); return kotlin.Unit.INSTANCE; },
+                    line -> { log(line); return kotlin.Unit.INSTANCE; },
+                    cancelFlag::get,
+                    30 * 60_000L);
+            if (!r.getSuccess()) { finishRun(false, r.getMessage(), src, dev); return; }
+        }
+        finishRun(true, "", "", "");
     }
 
     private void onProgress(int pct, long written) {
@@ -622,7 +724,7 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
             runBtn.setEnabled(true);
             progressBar.setVisibility(View.GONE);
             if (success) {
-                statusText.setText(t("✓ 完成：" + src + " ↔ " + dst, "✓ Done: " + src + " ↔ " + dst));
+                statusText.setText(t("✓ 批量操作完成", "✓ Batch done"));
                 log(t("✓ 操作完成", "✓ Done"));
             } else if ("已取消".equals(msg)) {
                 statusText.setText(t("已终止", "Stopped"));
