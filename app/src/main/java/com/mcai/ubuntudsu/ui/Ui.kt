@@ -175,6 +175,13 @@ object Ui {
     fun buttonDanger(context: android.content.Context): Int = if (isDark(context)) Color.parseColor("#F87171") else Color.parseColor("#C62828")
     fun buttonText(context: android.content.Context): Int = if (isDark(context)) Color.WHITE else Color.parseColor("#1A2434")
 
+    /**
+     * 弹框「确定」按钮文字色：夜间亮青蓝 / 日间深蓝。
+     * 不能直接用 buttonPrimary —— 夜间它是深蓝，压在深色弹框底上几乎不可见。
+     */
+    fun dialogAction(context: android.content.Context): Int =
+        if (isDark(context)) Color.parseColor("#7CC7FF") else Color.parseColor("#1F5FA8")
+
     // ==================== DNA 工具界面专属色板（夜间模式适配） ====================
 
     /**

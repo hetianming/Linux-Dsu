@@ -37,6 +37,33 @@ class MainActivity : AppCompatActivity() {
     private var homePage: HomePage? = null
     private var linuxPage: LinuxPage? = null
     private var dsuPage: DsuPage? = null
+    // 顶部灵动岛：DSU 安装进度（贴在状态栏/摄像头区域下方，切 Tab 也保留）
+    private var dsuIsland: com.mcai.ubuntudsu.ui.DynamicIsland? = null
+    private var islandShown = false
+    private val dsuIslandListener = com.mcai.ubuntudsu.core.DsuInstallState.Listener { state ->
+        runOnUiThread {
+            val island = dsuIsland ?: return@runOnUiThread
+            when (state.phase) {
+                com.mcai.ubuntudsu.core.DsuInstallState.Phase.RUNNING -> {
+                    if (!islandShown) {
+                        island.show(state.fileName, "DSU 安装", "安装 GSI")
+                        islandShown = true
+                    }
+                    island.updateProgress(state.percent, state.message)
+                }
+                com.mcai.ubuntudsu.core.DsuInstallState.Phase.SUCCESS -> if (islandShown) {
+                    island.setStatus("安装完成")
+                    island.updateProgress(100, "")
+                    rootLayout.postDelayed({ island.dismiss(); islandShown = false }, 3000)
+                }
+                com.mcai.ubuntudsu.core.DsuInstallState.Phase.FAILED -> if (islandShown) {
+                    island.setStatus("安装失败")
+                    rootLayout.postDelayed({ island.dismiss(); islandShown = false }, 4000)
+                }
+                else -> Unit
+            }
+        }
+    }
     private var settingsPage: SettingsPage? = null
     private val pageCache = mutableMapOf<Int, View>()
     private var navBar: LinearLayout? = null
@@ -109,6 +136,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        com.mcai.ubuntudsu.core.DsuInstallState.removeListener(dsuIslandListener)
+        dsuPage?.release()
         dsuPage?.unbindRootService()
         lifecycleStopHooks.forEach { it.run() }
         super.onDestroy()
@@ -313,6 +342,24 @@ class MainActivity : AppCompatActivity() {
         }
         navContainer.layoutParams = navLayoutParams
         root.addView(navContainer, navLayoutParams)
+
+        // 顶部灵动岛：DSU 安装进度胶囊（覆盖在页面顶部，仅在安装时出现）
+        val island = com.mcai.ubuntudsu.ui.DynamicIsland(this) {
+            startService(
+                android.content.Intent(this, com.mcai.ubuntudsu.service.DsuInstallService::class.java)
+                    .setAction(com.mcai.ubuntudsu.service.DsuInstallService.ACTION_CANCEL),
+            )
+        }
+        dsuIsland = island
+        root.addView(
+            island.build(),
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP,
+            ),
+        )
+        com.mcai.ubuntudsu.core.DsuInstallState.addListener(dsuIslandListener)
 
         setContentView(root)
         Ui.enableEdgeToEdge(this, root)

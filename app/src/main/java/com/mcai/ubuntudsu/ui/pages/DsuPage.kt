@@ -24,7 +24,9 @@ import androidx.appcompat.app.AppCompatActivity
 import com.mcai.ubuntudsu.IPrivilegedService
 import com.mcai.ubuntudsu.PrivilegedRootService
 import com.mcai.ubuntudsu.R
+import com.mcai.ubuntudsu.core.DsuInstallState
 import com.mcai.ubuntudsu.core.DsuManager
+import com.mcai.ubuntudsu.service.DsuInstallService
 import com.mcai.ubuntudsu.ui.Ui
 import com.topjohnwu.superuser.ipc.RootService
 import java.util.concurrent.Executor
@@ -36,7 +38,7 @@ class DsuPage(
     private val activity: AppCompatActivity,
     private val executor: Executor,
     private val pickZipLauncher: ActivityResultLauncher<android.content.Intent>,
-) {
+) : DsuInstallState.Listener {
     private var selectedUserdataGB = DsuManager.userdataOptions.first()
     private var clearUserdata = false
     private var selectedZip: Uri? = null
@@ -354,6 +356,7 @@ class DsuPage(
             page.addView(row)
         }
 
+        DsuInstallState.addListener(this)
         return page
     }
 
@@ -428,7 +431,7 @@ class DsuPage(
         dialog.setOnShowListener {
             dialog.window?.setBackgroundDrawable(Ui.rounded(Ui.dsuCard(activity), 24f, activity.resources.displayMetrics.density))
             dialog.findViewById<TextView>(android.R.id.message)?.setTextColor(Ui.secondaryText(activity))
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Ui.buttonPrimary(activity))
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Ui.dialogAction(activity))
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Ui.secondaryText(activity))
         }
         dialog.show()
@@ -439,132 +442,74 @@ class DsuPage(
         installProgressBar.progress = percent
         installProgressLabel.text = text
         installPercentText.text = "$percent %"
-    }    private fun startInstall() {        val zipUri = selectedZip ?: run {
+    }
+
+    // ==================== 安装（前台服务执行，离开页面不中断） ====================
+
+    private var lastPhase: DsuInstallState.Phase = DsuInstallState.Phase.IDLE
+
+    private fun startInstall() {
+        val zipUri = selectedZip ?: run {
             Toast.makeText(activity, "请先选择 GSI zip 安装包", Toast.LENGTH_SHORT).show()
             return
         }
-        val service = privilegedService ?: run {
+        val path = zipUri.path
+        if (path.isNullOrBlank() || !java.io.File(path).isFile) {
+            Toast.makeText(activity, "无法读取所选 GSI 文件，请重新选择", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (privilegedService == null) {
             Toast.makeText(activity, "ROOT DSU 安装器尚未连接，请先授予 ROOT 后重试", Toast.LENGTH_SHORT).show()
             return
         }
-        confirmAction("开始 DSU 安装", "将通过 ROOT DSU 安装器直接创建分区并写入 GSI 镜像。") {
-            executor.execute {
-                if (clearUserdata) {
-                    log("正在清理旧缓存：/metadata/gsi/dsu/dsu/lp_metadata")
-                    val clearResult = DsuManager.clearInstallCache(::log)
-                    check(clearResult.success) { "清理旧缓存失败：${clearResult.stderr}" }
-                }
-                runCatching {
-                    val path = zipUri.path ?: error("无法读取 GSI ZIP")
-                    // 先试普通流（可直读秒开）；失败或无权限降级 root 流（su cat，零拷贝）
-                    val input = runCatching {
-                        java.io.File(path).takeIf { it.canRead() }?.inputStream()
-                    }.getOrNull()
-                        ?: com.mcai.ubuntudsu.core.RootShell.openStream(path)
-                    log("正在从所选位置直接读取 GSI ZIP")
-                    input.use { installWithRootService(it, service) }
-                }.onFailure {
-                    log("读取 GSI ZIP 失败：${it.message}")
-                    activity.runOnUiThread { installProgressLabel.text = "安装状态：读取失败" }
-                }
+        confirmAction(
+            "开始 DSU 安装",
+            "将通过 ROOT DSU 安装器直接创建分区并写入 GSI 镜像。\n\n安装会转入前台服务，离开应用或锁屏后仍会继续。",
+        ) {
+            val intent = Intent(activity, DsuInstallService::class.java).apply {
+                putExtra(DsuInstallService.EXTRA_ZIP, path)
+                putExtra(DsuInstallService.EXTRA_USERDATA_GB, selectedUserdataGB)
+                putExtra(DsuInstallService.EXTRA_CLEAR_CACHE, clearUserdata)
             }
+            androidx.core.content.ContextCompat.startForegroundService(activity, intent)
+            installProgressCard.visibility = View.VISIBLE
+            setInstallProgress(0, "安装状态：准备中")
         }
     }
 
-    private fun installWithRootService(input: java.io.InputStream, service: IPrivilegedService) {
+    /** 订阅安装服务状态：页面可见时同步刷新进度卡，页面销毁不影响安装 */
+    override fun onState(state: DsuInstallState.Snapshot) {
         activity.runOnUiThread {
-            installProgressCard.visibility = View.VISIBLE
-            setInstallProgress(0, "安装状态：解析镜像")
-        }
-        var started = false
-        var completed = false
-        try {
-            ZipInputStream(java.io.BufferedInputStream(input, 1024 * 1024)).use { zip ->
-                if (!service.isAvailable()) error("系统 dynamic_system 服务不可用")
-                if (!service.startInstallation("dsu")) error("dynamic_system 拒绝开始安装")
-                started = true
-                val partitions = HashSet<String>()
-                var imageCount = 0
-                var entry = zip.nextEntry
-                while (entry != null) {
-                    if (entry.isDirectory || !entry.name.substringAfterLast('/').endsWith(".img", true)) {
-                        zip.closeEntry()
-                        entry = zip.nextEntry
-                        continue
+            if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+            if (!::installProgressCard.isInitialized) return@runOnUiThread
+            when (state.phase) {
+                DsuInstallState.Phase.RUNNING -> {
+                    installProgressCard.visibility = View.VISIBLE
+                    setInstallProgress(state.percent, "安装状态：" + state.message)
+                }
+                DsuInstallState.Phase.SUCCESS -> {
+                    installProgressCard.visibility = View.GONE
+                    setInstallProgress(100, "安装状态：完成")
+                    if (lastPhase != DsuInstallState.Phase.SUCCESS) {
+                        Toast.makeText(activity, "GSI 已安装，请在需要时点击“重启到 DSU”", Toast.LENGTH_LONG).show()
                     }
-                    val name = entry.name.substringAfterLast('/').removeSuffix(".img").lowercase()
-                    if (!name.matches(Regex("[a-z0-9_-]+")) || !partitions.add(name)) error("无效或重复分区：$name")
-                    val size = entry.size
-                    if (size <= 0) error("镜像为空：$name")
-                    val partitionSize = if (name == "userdata") maxOf(size, selectedUserdataGB.toLong() * 1024 * 1024 * 1024) else size
-                    val result = service.createPartition(name, partitionSize, name != "userdata")
-                    if (result != 0) error("创建分区失败：$name ($result)")
-                    streamImage(zip, size, name, service, imageCount)
-                    if (!service.closePartition()) error("关闭分区失败：$name")
-                    imageCount++
-                    zip.closeEntry()
-                    entry = zip.nextEntry
                 }
-                if (imageCount == 0) error("ZIP 中没有可用的 img 镜像")
-                if (!partitions.contains("userdata")) {
-                    if (service.createPartition("userdata", selectedUserdataGB.toLong() * 1024 * 1024 * 1024, false) != 0) error("创建 userdata 失败")
-                    if (!service.closePartition()) error("关闭 userdata 失败")
+                DsuInstallState.Phase.FAILED -> {
+                    installProgressCard.visibility = View.VISIBLE
+                    installProgressLabel.text = "安装状态：失败"
+                    if (lastPhase != DsuInstallState.Phase.FAILED) {
+                        Toast.makeText(activity, "安装失败：" + state.message, Toast.LENGTH_LONG).show()
+                    }
                 }
-                if (!service.finishInstallation()) error("完成 DSU 安装失败")
-                if (!service.setEnable(false, false)) error("停用 DSU 自动启动失败")
-                completed = true
+                else -> Unit
             }
-            activity.runOnUiThread {
-            setInstallProgress(100, "安装状态：完成")
-            installProgressCard.visibility = View.GONE
-            Toast.makeText(activity, "GSI 已安装，请在需要时点击“重启到 DSU”", Toast.LENGTH_LONG).show()
-        }
-        } catch (e: Exception) {
-            if (started && !completed) runCatching { service.abort() }
-            log("ROOT DSU 安装失败：${e.message}")
-            activity.runOnUiThread {
-            installProgressCard.visibility = View.VISIBLE
-            installProgressLabel.text = "安装状态：失败"
-            Toast.makeText(activity, "安装失败：${e.message}", Toast.LENGTH_LONG).show()
-        }
+            lastPhase = state.phase
         }
     }
 
-    private fun streamImage(input: java.io.InputStream, size: Long, name: String, service: IPrivilegedService, index: Int) {
-        val bufferSize = 4 * 1024 * 1024
-        SharedMemory.create("ubuntudsu-$name", bufferSize).use { memory ->
-            sharedMemoryFd(memory).use { fd ->
-                if (!service.setAshmem(fd, bufferSize.toLong())) error("共享内存初始化失败：$name")
-                val mapped = memory.mapReadWrite()
-                try {
-                    val buffer = ByteArray(bufferSize)
-                    var written = 0L
-                    var lastUiUpdate = 0L
-                    while (true) {
-                        val count = input.read(buffer)
-                        if (count < 0) break
-                        // 一次读满 4MB 或末尾块，整块写入 ashmem 再提交，Binder IPC 次数减至 1/4
-                        mapped.position(0)
-                        mapped.put(buffer, 0, count)
-                        if (!service.submitFromAshmem(count.toLong())) error("写入失败：$name")
-                        written += count
-                        if (written - lastUiUpdate >= 256L * 1024 * 1024 || written >= size) {
-                            lastUiUpdate = written
-                            val imageProgress = if (size > 0) (written * 80L / size).toInt() else 0
-                            val progress = (10 + imageProgress).coerceIn(10, 90)
-                            val gbDone = written / 1073741824.0
-                            val totalGb = if (size > 0) " / " + (size / 1073741824.0).let { String.format("%.1f", it) } + "GB" else ""
-                            activity.runOnUiThread { setInstallProgress(progress, "安装状态：写入 $name  " + String.format("%.1f", gbDone) + "GB" + totalGb) }
-                        }
-                    }
-                } finally { SharedMemory.unmap(mapped) }
-            }
-        }
-    }
-
-    private fun sharedMemoryFd(memory: SharedMemory): ParcelFileDescriptor {
-        return runCatching { SharedMemory::class.java.getMethod("getFdDup").invoke(memory) as ParcelFileDescriptor }
-            .getOrElse { ParcelFileDescriptor.fromFd(SharedMemory::class.java.getDeclaredMethod("getFd").apply { isAccessible = true }.invoke(memory) as Int) }
+    /** 页面销毁时解绑监听（安装服务继续运行） */
+    fun release() {
+        DsuInstallState.removeListener(this)
     }
 
     private fun log(line: String) {
