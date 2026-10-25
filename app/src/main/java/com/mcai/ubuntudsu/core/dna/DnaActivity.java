@@ -2331,22 +2331,21 @@ public final class DnaActivity extends DnaBaseActivity {
 
     private void notify(String text, boolean ongoing, boolean indeterminate) {
         try {
-            android.app.Notification.Builder builder = new android.app.Notification.Builder(this, NOTE_CHANNEL)
-                    .setSmallIcon(android.R.drawable.stat_sys_download)
-                    .setContentTitle(modeTitle())
-                    .setContentText(text)
-                    .setOngoing(ongoing)
-                    .setOnlyAlertOnce(true)
-                    .setProgress(100, 0, indeterminate);
+            // 关键：进行中也传真实百分比（从日志行解析），否则系统只能显示"进行中"、无法上流体云进度
+            Integer pct = ongoing
+                    ? com.mcai.ubuntudsu.core.ProgressNotification.INSTANCE.percentFrom(text)
+                    : Integer.valueOf(100);
             Intent intent = new Intent(this, DnaActivity.class);
             intent.putExtra(EXTRA_MODE, mode);
             intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            builder.setContentIntent(android.app.PendingIntent.getActivity(
+            android.app.PendingIntent pi = android.app.PendingIntent.getActivity(
                     this, NOTE_ID, intent,
-                    android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE));
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE);
+            android.app.Notification n = com.mcai.ubuntudsu.core.ProgressNotification.INSTANCE.build(
+                    this, NOTE_CHANNEL, modeTitle(), text, pct, ongoing, pi, !text.startsWith("✗"));
             android.app.NotificationManager nm =
                     (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-            if (nm != null) nm.notify(NOTE_ID, builder.build());
+            if (nm != null) nm.notify(NOTE_ID, n);
         } catch (Exception ignored) {
         }
     }

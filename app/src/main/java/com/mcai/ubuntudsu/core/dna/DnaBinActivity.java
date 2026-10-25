@@ -143,22 +143,21 @@ public final class DnaBinActivity extends DnaBaseActivity {
 
     private void notify(String text, boolean ongoing, boolean indeterminate, int progress, int max) {
         try {
-            android.app.Notification.Builder b = new android.app.Notification.Builder(this, NOTE_CHANNEL)
-                    .setSmallIcon(android.R.drawable.stat_sys_download)
-                    .setContentTitle(t("分解 BIN", "Unpack BIN"))
-                    .setContentText(text)
-                    .setOngoing(ongoing)
-                    .setOnlyAlertOnce(true)
-                    .setAutoCancel(!ongoing)
-                    .setProgress(max, progress, indeterminate);
+            // 有确定进度就传真实百分比，系统（ColorOS 流体云 / 灵动胶囊）才能显示进度
+            Integer pct = !ongoing
+                    ? Integer.valueOf(100)
+                    : (indeterminate || max <= 0 ? null : Integer.valueOf(Math.min(100, progress * 100 / max)));
             Intent it = new Intent(this, DnaBinActivity.class);
             it.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            b.setContentIntent(android.app.PendingIntent.getActivity(this, NOTE_ID, it,
-                    android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE));
+            android.app.PendingIntent pi = android.app.PendingIntent.getActivity(this, NOTE_ID, it,
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE);
+            android.app.Notification n = com.mcai.ubuntudsu.core.ProgressNotification.INSTANCE.build(
+                    this, NOTE_CHANNEL, t("分解 BIN", "Unpack BIN"), text, pct, ongoing, pi, !text.startsWith("✗"));
             android.app.NotificationManager nm =
                     (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-            if (nm != null) nm.notify(NOTE_ID, b.build());
-        } catch (Exception ignored) {}
+            if (nm != null) nm.notify(NOTE_ID, n);
+        } catch (Exception ignored) {
+        }
     }
 
     private void notifyDone(boolean success, String message) {

@@ -276,12 +276,18 @@ class DsuInstallService : Service() {
                 if (done) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_sys_download,
             )
             .setContentIntent(content)
+            .setCategory(Notification.CATEGORY_PROGRESS)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setShowWhen(false)
             .setOngoing(!done)
             .setOnlyAlertOnce(true)
         if (done) {
             builder.setAutoCancel(true)
         } else {
             builder.setProgress(100, percent, false)
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         }
         return builder.build()
     }

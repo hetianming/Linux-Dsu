@@ -520,7 +520,11 @@ class DownloadService : Service() {
                 },
             )
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setOngoing(true)
+            .setCategory(Notification.CATEGORY_PROGRESS)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setShowWhen(false)
+            .setOnlyAlertOnce(true)
+            .setOngoing(!task.done)
             // 每任务独立小窗口：下载中 → [暂停][取消]；已暂停 → [继续][取消]
             .addAction(
                 if (paused) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause,
@@ -541,6 +545,10 @@ class DownloadService : Service() {
             builder.setSmallIcon(android.R.drawable.stat_sys_download_done)
         } else {
             builder.setProgress(100, 0, false)
+        }
+        if (task.done) builder.setAutoCancel(true)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         }
 
         return builder.build()
