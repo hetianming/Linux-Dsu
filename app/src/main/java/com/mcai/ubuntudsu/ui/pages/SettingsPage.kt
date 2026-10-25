@@ -12,7 +12,6 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import com.mcai.ubuntudsu.ProcessManagerActivity
 import com.mcai.ubuntudsu.R
-import android.view.MotionEvent
 import com.mcai.ubuntudsu.ui.Ui
 
 // 「多功能」页：功能卡布局（每行 2 张卡片，逐行往下排），聚合扩展功能入口
@@ -93,7 +92,7 @@ class SettingsPage(
             })
         }
 
-        // 功能图标网格（每行 4 个），顺序可持久化
+        // 功能入口（卡片式，每行 2 张）；沿用历史保存的排列顺序
         val gridPrefs = activity.getPreferences(Activity.MODE_PRIVATE)
         val savedOrder = gridPrefs.getString("icon_order", null)
         val keyToItem = mapOf(
@@ -113,8 +112,7 @@ class SettingsPage(
             valid + defaultKeys.filter { it !in valid }
         } else defaultKeys
 
-        // 卡片式布局：每行 2 张功能卡，逐行往下排，支持长按拖动交换位置
-        val iconViews = mutableListOf<Pair<View, String>>()
+        // 卡片式布局：每行 2 张功能卡，逐行往下排（已移除长按拖动重排）
         val rowContainer = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
         }
@@ -133,7 +131,6 @@ class SettingsPage(
             rowItems.forEachIndexed { colIndex, key ->
                 val item = keyToItem[key]!!
                 val cardView = buildGridCard(item, d, wallpaperSync)
-                iconViews.add(cardView to key)
                 row.addView(
                     cardView,
                     LinearLayout.LayoutParams(0, Ui.dp(84, d), 1f).apply {
@@ -145,137 +142,7 @@ class SettingsPage(
         }
         page.addView(rowContainer)
 
-        setupDragReorder(iconViews, rowContainer, gridPrefs, keyToItem, orderedKeys)
-
         return frame
-    }
-
-    /** 长按拖动重排图标：跟手移动，松手时与最近的图标交换位置并重建网格 */
-    private fun setupDragReorder(
-        iconViews: MutableList<Pair<View, String>>,
-        rowContainer: LinearLayout,
-        prefs: android.content.SharedPreferences,
-        keyToItem: Map<String, GridItem>,
-        initialKeys: List<String>,
-    ) {
-        val d = activity.resources.displayMetrics.density
-
-        for ((v, key) in iconViews) {
-            v.setOnLongClickListener {
-                // 视觉反馈
-                v.elevation = Ui.dp(24, d).toFloat()
-                v.scaleX = 1.2f
-                v.scaleY = 1.2f
-                v.alpha = 0.9f
-
-                var startRawX = 0f
-                var startRawY = 0f
-                var grabbed = false
-
-                v.isLongClickable = false
-                v.setOnTouchListener { view, event ->
-                    if (!grabbed && event.action == MotionEvent.ACTION_MOVE) {
-                        grabbed = true
-                        startRawX = event.rawX
-                        startRawY = event.rawY
-                    }
-                    when (event.action) {
-                        MotionEvent.ACTION_MOVE -> {
-                            if (grabbed) {
-                                v.translationX = event.rawX - startRawX
-                                v.translationY = event.rawY - startRawY
-                            }
-                            true
-                        }
-                        MotionEvent.ACTION_UP -> {
-                            // 找到松手位置最近的其他图标
-                            var targetKey: String? = null
-                            var minDist = Float.MAX_VALUE
-                            for ((otherV, otherKey) in iconViews) {
-                                if (otherKey == key) continue
-                                val oLoc = IntArray(2)
-                                otherV.getLocationOnScreen(oLoc)
-                                val ocx = oLoc[0] + otherV.width / 2f
-                                val ocy = oLoc[1] + otherV.height / 2f
-                                val vLoc = IntArray(2)
-                                view.getLocationOnScreen(vLoc)
-                                val vcx = vLoc[0] + view.width / 2f
-                                val vcy = vLoc[1] + view.height / 2f
-                                val dist = kotlin.math.abs(ocx - vcx) + kotlin.math.abs(ocy - vcy)
-                                if (dist < minDist) {
-                                    minDist = dist
-                                    targetKey = otherKey
-                                }
-                            }
-                            val swapped = targetKey != null && minDist < view.width * 2.5f
-                            if (swapped) {
-                                val i = iconViews.indexOfFirst { it.second == key }
-                                val j = iconViews.indexOfFirst { it.second == targetKey!! }
-                                val tmp = iconViews[i]
-                                iconViews[i] = iconViews[j]
-                                iconViews[j] = tmp
-                                val newOrder = iconViews.map { it.second }.joinToString(",")
-                                prefs.edit().putString("icon_order", newOrder).apply()
-                            }
-                            // 回弹动画
-                            v.elevation = 0f
-                            v.animate().translationX(0f).translationY(0f)
-                                .scaleX(1f).scaleY(1f).alpha(1f)
-                                .setDuration(200)
-                                .withEndAction {
-                                    if (swapped) {
-                                        rebuildGrid(rowContainer, iconViews, keyToItem, prefs, initialKeys)
-                                    }
-                                }
-                                .start()
-                            v.isLongClickable = true
-                            v.setOnTouchListener(null)
-                            true
-                        }
-                        else -> false
-                    }
-                }
-                true
-            }
-        }
-    }
-
-    /** 根据 iconViews 当前顺序重建网格布局 */
-    private fun rebuildGrid(
-        rowContainer: LinearLayout,
-        iconViews: List<Pair<View, String>>,
-        keyToItem: Map<String, GridItem>,
-        prefs: android.content.SharedPreferences,
-        initialKeys: List<String>,
-    ) {
-        val d = activity.resources.displayMetrics.density
-        rowContainer.removeAllViews()
-
-        // 按 iconViews 顺序重建行（每行 2 张卡片）
-        val keys = iconViews.map { it.second }
-        for ((rowIndex, rowItems) in keys.chunked(2).withIndex()) {
-            val row = LinearLayout(activity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                ).apply {
-                    if (rowIndex > 0) topMargin = Ui.dp(12, d)
-                }
-            }
-            rowItems.forEachIndexed { colIndex, key ->
-                val item = keyToItem[key] ?: return@forEachIndexed
-                val cardView = buildGridCard(item, d, false)
-                row.addView(
-                    cardView,
-                    LinearLayout.LayoutParams(0, Ui.dp(84, d), 1f).apply {
-                        if (colIndex > 0) leftMargin = Ui.dp(12, d)
-                    },
-                )
-            }
-            rowContainer.addView(row)
-        }
     }
 
     private data class GridItem(
