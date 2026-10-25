@@ -58,51 +58,13 @@ class LinuxPage(
         }
         page.addView(installHint)
 
-        page.addView(spacer(6))
-        // 安装/卸载二合一卡片：一张拟态玻璃卡内两行入口，水晶玻璃渲染条分格
-        val manageCard = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            background = Ui.glassSurface(activity, 18f)
-            Ui.applyNeuShadow(this, 3f, 18f)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { bottomMargin = Ui.dp(8, d) }
-        }
-        manageCard.addView(
-            actionRow(R.drawable.icon_install_rootfs, "安装 rootfs 系统", "本地安装 · 云端下载 · 备份") {
-                activity.startActivity(Intent(activity, RootfsInstallActivity::class.java))
+        page.addView(spacer(10))
+        // 功能区：2×2 卡片网格（与「多功能」页同一套卡片语言），四入口对称
+        val features = listOf(
+            Feature(R.drawable.icon_terminal_runner, "#2D64AA", "容器终端", "Chroot 容器 · Termux 风格") {
+                requireRootfs { activity.startActivity(Intent(activity, TerminalActivity::class.java)) }
             },
-        )
-        manageCard.addView(
-            Ui.crystalDivider(activity, d),
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(2, d)),
-        )
-        manageCard.addView(
-            actionRow(R.drawable.icon_trash_rootfs, "卸载 rootfs 系统", "删除已安装的 Ubuntu 系统") { confirmUninstall() },
-        )
-        page.addView(manageCard)
-
-        page.addView(
-            sectionLabel("运行环境", d),
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = Ui.dp(10, d); bottomMargin = Ui.dp(8, d) },
-        )
-        // 大图标入口：一排两个往下排（容器终端 / 桌面环境），第三项文件管理独占一排
-        // 大图标直接悬浮在卡片/页面上（已去图标底色），仅靠大字号 emoji 图标 + 标题 + 描述
-        val tileRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
-        tileRow.addView(
-            Ui.iconTile(activity, "容器终端", "Chroot 容器 · Termux 风格", R.drawable.icon_terminal_runner, Color.parseColor("#E95420")) {
-                requireRootfs {
-                    activity.startActivity(Intent(activity, TerminalActivity::class.java))
-                }
-            },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-        )
-        tileRow.addView(
-            Ui.iconTile(activity, "桌面环境", "XFCE · KDE · GNOME + VNC", R.drawable.icon_linux_modern, Color.parseColor("#2D64AA")) {
+            Feature(R.drawable.icon_linux_modern, "#E95420", "桌面环境", "XFCE · KDE · GNOME + VNC") {
                 requireRootfs {
                     activity.startActivity(
                         Intent(activity, TerminalActivity::class.java).apply {
@@ -111,20 +73,55 @@ class LinuxPage(
                     )
                 }
             },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = Ui.dp(8, d) },
-        )
-        page.addView(tileRow)
-        page.addView(
-            Ui.iconTile(activity, "文件管理", "浏览 · 编辑 rootfs 内文件", R.drawable.ic_folder_manager, Color.parseColor("#6C4AC2")) {
-                requireRootfs {
-                    activity.startActivity(Intent(activity, RootfsFilesActivity::class.java))
-                }
+            Feature(R.drawable.ic_folder_manager, "#6C4AC2", "文件管理", "浏览 · 编辑 rootfs 内文件") {
+                requireRootfs { activity.startActivity(Intent(activity, RootfsFilesActivity::class.java)) }
             },
-            LinearLayout.LayoutParams(
+            Feature(R.drawable.icon_install_rootfs, "#11998E", "安装 rootfs", "本地安装 · 云端下载 · 备份") {
+                activity.startActivity(Intent(activity, RootfsInstallActivity::class.java))
+            },
+        )
+        features.chunked(2).forEach { rowItems ->
+            val row = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { bottomMargin = Ui.dp(10, d) }
+            }
+            rowItems.forEachIndexed { colIndex, f ->
+                row.addView(
+                    Ui.featureCard(activity, f.iconRes, Color.parseColor(f.tint), f.title, f.subtitle, false) { f.action() },
+                    LinearLayout.LayoutParams(0, Ui.dp(84, d), 1f).apply {
+                        if (colIndex > 0) marginStart = Ui.dp(10, d)
+                    },
+                )
+            }
+            page.addView(row)
+        }
+
+        // 危险操作下沉：低调红色描边按钮（点击后仍有二次确认弹窗）
+        page.addView(TextView(activity).apply {
+            text = "卸载 rootfs 系统"
+            textSize = 13f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(if (Ui.isDark(activity)) Color.parseColor("#FFA79D") else Color.parseColor("#B5473B"))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.TRANSPARENT)
+                cornerRadius = Ui.dp(14, d).toFloat()
+                setStroke(
+                    maxOf(1, Ui.dp(1, d)),
+                    if (Ui.isDark(activity)) Color.parseColor("#66FFA79D") else Color.parseColor("#66B5473B"),
+                )
+            }
+            setPadding(0, Ui.dp(11, d), 0, Ui.dp(11, d))
+            layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = Ui.dp(8, d) },
-        )
+            ).apply { topMargin = Ui.dp(2, d) }
+            setOnClickListener { confirmUninstall() }
+            Ui.pressAnimation(this)
+        })
 
         refreshInfo()
         return page
@@ -215,6 +212,15 @@ sleep 1""".trimIndent()
             .show()
     }
 
+    /** 功能卡数据：图标 / 品牌色 / 标题 / 副标题 / 点击动作 */
+    private data class Feature(
+        val iconRes: Int,
+        val tint: String,
+        val title: String,
+        val subtitle: String,
+        val action: () -> Unit,
+    )
+
     private fun card(): LinearLayout = LinearLayout(activity).apply {
         val d = activity.resources.displayMetrics.density
         orientation = LinearLayout.VERTICAL
@@ -233,51 +239,4 @@ sleep 1""".trimIndent()
         return View(activity).also { it.layoutParams = Ui.layoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(height, d)) }
     }
 
-    // 分区小标题：运行环境 / 系统管理等网格区头部
-    private fun sectionLabel(text: String, d: Float): TextView = TextView(activity).apply {
-        this.text = text
-        textSize = 12f
-        setTypeface(typeface, android.graphics.Typeface.BOLD)
-        setTextColor(Ui.secondaryText(activity))
-    }
-
-    // 二合一卡片内的入口行：无独立背景，靠外层玻璃卡 + 水晶分隔条分格
-    private fun actionRow(iconRes: Int, heading: String, detail: String, onClick: () -> Unit): View {
-        val d = activity.resources.displayMetrics.density
-        return LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(Ui.dp(12, d), Ui.dp(9, d), Ui.dp(10, d), Ui.dp(9, d))
-            setOnClickListener { onClick() }
-            Ui.pressAnimation(this)
-            addView(ImageView(activity).apply {
-                setImageResource(iconRes)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                layoutParams = LinearLayout.LayoutParams(Ui.dp(36, d), Ui.dp(36, d))
-            })
-            addView(LinearLayout(activity).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                    marginStart = Ui.dp(10, d)
-                }
-                addView(TextView(activity).apply {
-                    text = heading
-                    textSize = 14f
-                    setTypeface(typeface, android.graphics.Typeface.BOLD)
-                    setTextColor(Ui.primaryText(activity))
-                })
-                addView(TextView(activity).apply {
-                    text = detail
-                    textSize = 11f
-                    setTextColor(Ui.secondaryText(activity))
-                    setPadding(0, Ui.dp(1, d), 0, 0)
-                })
-            })
-            addView(TextView(activity).apply {
-                text = "›"
-                textSize = 22f
-                setTextColor(Ui.secondaryText(activity))
-            })
-        }
-    }
 }

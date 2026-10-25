@@ -152,66 +152,17 @@ class SettingsPage(
         val onClick: (View) -> Unit,
     )
 
-    /**
-     * 功能卡（卡片式入口）：左侧品牌色圆角块 + 彩色图标，右侧功能标题。
-     * 宽度为行内等分（每行 2 张，约等于原先两个图标格合并的宽度），高度由行参数固定。
-     */
-    private fun buildGridCard(item: GridItem, d: Float, wallpaperSync: Boolean = false): View {
-        val tint = android.graphics.Color.parseColor(item.tintColor)
-        val tr = android.graphics.Color.red(tint)
-        val tg = android.graphics.Color.green(tint)
-        val tb = android.graphics.Color.blue(tint)
-
-        val card = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            isClickable = true
-            isFocusable = true
-            setPadding(Ui.dp(12, d), Ui.dp(10, d), Ui.dp(12, d), Ui.dp(10, d))
-            background = android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(android.graphics.Color.argb(60, tr, tg, tb)),
-                Ui.glassSurface(activity, 18f),
-                null,
-            )
-            setOnClickListener { item.onClick(this) }
-        }
-        Ui.pressAnimation(card)
-
-        // 左侧：品牌色圆角块 + 图标
-        val iconBox = android.widget.FrameLayout(activity).apply {
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(android.graphics.Color.argb(34, tr, tg, tb))
-                cornerRadius = Ui.dp(14, d).toFloat()
-                setStroke(maxOf(1, Ui.dp(1, d)), android.graphics.Color.argb(110, tr, tg, tb))
-            }
-            layoutParams = LinearLayout.LayoutParams(Ui.dp(48, d), Ui.dp(48, d))
-        }
-        iconBox.addView(ImageView(activity).apply {
-            setImageResource(item.iconRes)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            layoutParams = android.widget.FrameLayout.LayoutParams(Ui.dp(28, d), Ui.dp(28, d)).apply {
-                gravity = Gravity.CENTER
-            }
-        })
-        card.addView(iconBox)
-
-        // 右侧：功能标题
-        card.addView(TextView(activity).apply {
-            text = item.title
-            textSize = 14f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(if (wallpaperSync) android.graphics.Color.WHITE else Ui.primaryText(activity))
-            setPadding(Ui.dp(12, d), 0, 0, 0)
-            maxLines = 2
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            // 壁纸模式：无偏移强阴影，形成均匀黑色描边，白壁纸也清晰可见
-            if (wallpaperSync) {
-                setShadowLayer(5f, 0f, 0f, android.graphics.Color.BLACK)
-            }
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-
-        return card
-    }
+    /** 功能卡（卡片式入口）：复用全局 Ui.featureCard，与 Linux 页保持同一视觉语言 */
+    private fun buildGridCard(item: GridItem, d: Float, wallpaperSync: Boolean = false): View =
+        Ui.featureCard(
+            activity,
+            item.iconRes,
+            android.graphics.Color.parseColor(item.tintColor),
+            item.title,
+            null,
+            wallpaperSync,
+            item.onClick,
+        )
 
     /** 打开全屏设置页（个性主题 + 关于信息） */
     private fun openSettings(iconView: View) {

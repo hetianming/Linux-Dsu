@@ -575,6 +575,90 @@ object Ui {
         neuCard(context, radiusDp)
 
     /**
+     * 通用功能卡（2 列网格入口）：左侧品牌色圆角块 + 图标，右侧标题 + 可选副标题。
+     * 「多功能」页与「Linux」页共用，保证全 APP 卡片语言一致；宽度由外层行内等分，高度建议 84dp。
+     *
+     * @param tint 品牌色（用于色块底/描边/涟漪）
+     * @param whiteText true 时标题用白字 + 黑色描边阴影（壁纸背景场景）
+     */
+    fun featureCard(
+        context: android.content.Context,
+        iconRes: Int,
+        tint: Int,
+        title: String,
+        subtitle: String? = null,
+        whiteText: Boolean = false,
+        onClick: (View) -> Unit,
+    ): View {
+        val d = context.resources.displayMetrics.density
+        val tr = Color.red(tint)
+        val tg = Color.green(tint)
+        val tb = Color.blue(tint)
+
+        val card = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isClickable = true
+            isFocusable = true
+            setPadding(dp(12, d), dp(10, d), dp(12, d), dp(10, d))
+            background = RippleDrawable(
+                ColorStateList.valueOf(Color.argb(60, tr, tg, tb)),
+                glassSurface(context, 18f),
+                null,
+            )
+            setOnClickListener { onClick(this) }
+        }
+        pressAnimation(card)
+
+        // 左侧：品牌色圆角块 + 图标
+        val iconBox = android.widget.FrameLayout(context).apply {
+            background = GradientDrawable().apply {
+                setColor(Color.argb(if (isDark(context)) 64 else 34, tr, tg, tb))
+                cornerRadius = dp(14, d).toFloat()
+                setStroke(maxOf(1, dp(1, d)), Color.argb(if (isDark(context)) 140 else 110, tr, tg, tb))
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(48, d), dp(48, d))
+        }
+        iconBox.addView(ImageView(context).apply {
+            setImageResource(iconRes)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            layoutParams = android.widget.FrameLayout.LayoutParams(dp(28, d), dp(28, d)).apply {
+                gravity = Gravity.CENTER
+            }
+        })
+        card.addView(iconBox)
+
+        // 右侧：标题 + 副标题
+        card.addView(LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12, d), 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            addView(TextView(context).apply {
+                text = title
+                textSize = 14f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(if (whiteText) Color.WHITE else primaryText(context))
+                maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                if (whiteText) setShadowLayer(5f, 0f, 0f, Color.BLACK)
+            })
+            if (!subtitle.isNullOrEmpty()) {
+                addView(TextView(context).apply {
+                    text = subtitle
+                    textSize = 11.5f
+                    setTextColor(if (whiteText) Color.argb(220, 255, 255, 255) else secondaryText(context))
+                    setPadding(0, dp(2, d), 0, 0)
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    if (whiteText) setShadowLayer(4f, 0f, 0f, Color.BLACK)
+                })
+            }
+        })
+
+        return card
+    }
+
+    /**
      * 彩色渐变玻璃功能卡背景（移植参考项目 gsiGlassCard）：
      *  三层玻璃——品牌三色对角渐变底 + 白色菲涅尔描边层 + 顶部镜面高光带，
      *  外裹白色半透明涟漪，配 8dp 投影形成"彩色玻璃浮起"质感。
