@@ -15,7 +15,7 @@ import com.mcai.ubuntudsu.R
 import android.view.MotionEvent
 import com.mcai.ubuntudsu.ui.Ui
 
-// 「多功能」页：桌面图标式网格布局，聚合扩展功能入口
+// 「多功能」页：功能卡布局（每行 2 张卡片，逐行往下排），聚合扩展功能入口
 class SettingsPage(
     private val activity: Activity,
     private val onThemeChanged: () -> Unit,
@@ -113,13 +113,13 @@ class SettingsPage(
             valid + defaultKeys.filter { it !in valid }
         } else defaultKeys
 
-        // 网格布局：每行 4 个，支持长按拖动交换位置
+        // 卡片式布局：每行 2 张功能卡，逐行往下排，支持长按拖动交换位置
         val iconViews = mutableListOf<Pair<View, String>>()
         val rowContainer = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
         }
 
-        for ((rowIndex, rowItems) in orderedKeys.chunked(4).withIndex()) {
+        for ((rowIndex, rowItems) in orderedKeys.chunked(2).withIndex()) {
             val row = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
@@ -127,14 +127,19 @@ class SettingsPage(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                 ).apply {
-                    if (rowIndex > 0) topMargin = Ui.dp(16, d)
+                    if (rowIndex > 0) topMargin = Ui.dp(12, d)
                 }
             }
-            for (key in rowItems) {
+            rowItems.forEachIndexed { colIndex, key ->
                 val item = keyToItem[key]!!
-                val iconView = buildGridIcon(item, d, wallpaperSync)
-                iconViews.add(iconView to key)
-                row.addView(iconView)
+                val cardView = buildGridCard(item, d, wallpaperSync)
+                iconViews.add(cardView to key)
+                row.addView(
+                    cardView,
+                    LinearLayout.LayoutParams(0, Ui.dp(84, d), 1f).apply {
+                        if (colIndex > 0) leftMargin = Ui.dp(12, d)
+                    },
+                )
             }
             rowContainer.addView(row)
         }
@@ -246,9 +251,9 @@ class SettingsPage(
         val d = activity.resources.displayMetrics.density
         rowContainer.removeAllViews()
 
-        // 按 iconViews 顺序重建行
+        // 按 iconViews 顺序重建行（每行 2 张卡片）
         val keys = iconViews.map { it.second }
-        for ((rowIndex, rowItems) in keys.chunked(4).withIndex()) {
+        for ((rowIndex, rowItems) in keys.chunked(2).withIndex()) {
             val row = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
@@ -256,13 +261,18 @@ class SettingsPage(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                 ).apply {
-                    if (rowIndex > 0) topMargin = Ui.dp(16, d)
+                    if (rowIndex > 0) topMargin = Ui.dp(12, d)
                 }
             }
-            for (key in rowItems) {
-                val item = keyToItem[key] ?: continue
-                val iconView = buildGridIcon(item, d, false)
-                row.addView(iconView)
+            rowItems.forEachIndexed { colIndex, key ->
+                val item = keyToItem[key] ?: return@forEachIndexed
+                val cardView = buildGridCard(item, d, false)
+                row.addView(
+                    cardView,
+                    LinearLayout.LayoutParams(0, Ui.dp(84, d), 1f).apply {
+                        if (colIndex > 0) leftMargin = Ui.dp(12, d)
+                    },
+                )
             }
             rowContainer.addView(row)
         }
@@ -275,42 +285,65 @@ class SettingsPage(
         val onClick: (View) -> Unit,
     )
 
-    private fun buildGridIcon(item: GridItem, d: Float, wallpaperSync: Boolean = false): View {
-        val container = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
+    /**
+     * 功能卡（卡片式入口）：左侧品牌色圆角块 + 彩色图标，右侧功能标题。
+     * 宽度为行内等分（每行 2 张，约等于原先两个图标格合并的宽度），高度由行参数固定。
+     */
+    private fun buildGridCard(item: GridItem, d: Float, wallpaperSync: Boolean = false): View {
+        val tint = android.graphics.Color.parseColor(item.tintColor)
+        val tr = android.graphics.Color.red(tint)
+        val tg = android.graphics.Color.green(tint)
+        val tb = android.graphics.Color.blue(tint)
+
+        val card = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             isClickable = true
             isFocusable = true
+            setPadding(Ui.dp(12, d), Ui.dp(10, d), Ui.dp(12, d), Ui.dp(10, d))
+            background = android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(android.graphics.Color.argb(60, tr, tg, tb)),
+                Ui.glassSurface(activity, 18f),
+                null,
+            )
             setOnClickListener { item.onClick(this) }
-            // 固定宽度，配合行 gravity=CENTER 实现居中排列
-            layoutParams = LinearLayout.LayoutParams(Ui.dp(76, d), ViewGroup.LayoutParams.WRAP_CONTENT)
         }
-        Ui.pressAnimation(container)
+        Ui.pressAnimation(card)
 
-        // 图标
-        val iconView = ImageView(activity).apply {
+        // 左侧：品牌色圆角块 + 图标
+        val iconBox = android.widget.FrameLayout(activity).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(android.graphics.Color.argb(34, tr, tg, tb))
+                cornerRadius = Ui.dp(14, d).toFloat()
+                setStroke(maxOf(1, Ui.dp(1, d)), android.graphics.Color.argb(110, tr, tg, tb))
+            }
+            layoutParams = LinearLayout.LayoutParams(Ui.dp(48, d), Ui.dp(48, d))
+        }
+        iconBox.addView(ImageView(activity).apply {
             setImageResource(item.iconRes)
             scaleType = ImageView.ScaleType.FIT_CENTER
-            layoutParams = LinearLayout.LayoutParams(Ui.dp(56, d), Ui.dp(56, d))
-        }
-        container.addView(iconView)
+            layoutParams = android.widget.FrameLayout.LayoutParams(Ui.dp(28, d), Ui.dp(28, d)).apply {
+                gravity = Gravity.CENTER
+            }
+        })
+        card.addView(iconBox)
 
-        // 文字标签
-        container.addView(TextView(activity).apply {
+        // 右侧：功能标题
+        card.addView(TextView(activity).apply {
             text = item.title
-            textSize = 12f
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
             setTextColor(if (wallpaperSync) android.graphics.Color.WHITE else Ui.primaryText(activity))
-            gravity = Gravity.CENTER
-            setPadding(0, Ui.dp(8, d), 0, 0)
-            maxLines = 1
+            setPadding(Ui.dp(12, d), 0, 0, 0)
+            maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
             // 壁纸模式：无偏移强阴影，形成均匀黑色描边，白壁纸也清晰可见
             if (wallpaperSync) {
                 setShadowLayer(5f, 0f, 0f, android.graphics.Color.BLACK)
             }
-        })
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
-        return container
+        return card
     }
 
     /** 打开全屏设置页（个性主题 + 关于信息） */
