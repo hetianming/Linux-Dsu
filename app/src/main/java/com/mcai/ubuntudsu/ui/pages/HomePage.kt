@@ -77,7 +77,7 @@ class HomePage(
         val titleRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 0, 0, Ui.dp(14, d))
+            setPadding(0, 0, 0, Ui.dp(10, d))
         }
         titleRow.addView(TextView(activity).apply {
             text = "首页"
@@ -180,18 +180,18 @@ class HomePage(
     /** 实时状态卡：CPU/GPU 细线圆环 + 存储/内存横向进度条，刷新收进标题右侧 */
     private fun buildStatusCard(d: Float): LinearLayout {
         val card = com.mcai.ubuntudsu.ui.glass.TrueGlassPanel(activity, 24f, Ui.isDark(activity)).apply {
-            setPadding(Ui.dp(16, d), Ui.dp(12, d), Ui.dp(16, d), Ui.dp(14, d))
+            setPadding(Ui.dp(14, d), Ui.dp(10, d), Ui.dp(14, d), Ui.dp(12, d))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { bottomMargin = Ui.dp(10, d) }
+            ).apply { bottomMargin = Ui.dp(8, d) }
         }
 
         // 标题行：左「实时状态」，右刷新小图标（替代原来的底部整行按钮）
         val head = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 0, 0, Ui.dp(8, d))
+            setPadding(0, 0, 0, Ui.dp(6, d))
         }
         head.addView(TextView(activity).apply {
             text = "实时状态"
@@ -222,7 +222,7 @@ class HomePage(
         val gauges = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, Ui.dp(2, d), 0, Ui.dp(10, d))
+            setPadding(0, 0, 0, Ui.dp(6, d))
         }
         val cpuGauge = UsageGauge(activity, "CPU")
         val gpuGauge = UsageGauge(activity, "GPU")
@@ -247,7 +247,7 @@ class HomePage(
             memoryRow.root,
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = Ui.dp(10, d) },
+            ).apply { topMargin = Ui.dp(8, d) },
         )
 
         // 指标轮询（每 2 秒）
@@ -283,7 +283,7 @@ class HomePage(
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
                 if (first) marginEnd = Ui.dp(8, d) else marginStart = Ui.dp(8, d)
             }
-            addView(gauge, LinearLayout.LayoutParams(Ui.dp(84, d), Ui.dp(84, d)))
+            addView(gauge, LinearLayout.LayoutParams(Ui.dp(62, d), Ui.dp(62, d)))
             addView(TextView(activity).apply {
                 text = label
                 textSize = 12.5f
@@ -292,14 +292,14 @@ class HomePage(
                 gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                ).apply { topMargin = Ui.dp(2, d) }
+                ).apply { topMargin = Ui.dp(1, d) }
             })
         }
 
     /** 运行环境卡：设备摘要 + ROOT / GSI / Linux / 桌面 四行（圆点 + 左标签 + 右状态值） */
     private fun buildEnvCard(d: Float): LinearLayout {
         val card = com.mcai.ubuntudsu.ui.glass.TrueGlassPanel(activity, 24f, Ui.isDark(activity)).apply {
-            setPadding(Ui.dp(16, d), Ui.dp(12, d), Ui.dp(16, d), Ui.dp(8, d))
+            setPadding(Ui.dp(14, d), Ui.dp(10, d), Ui.dp(14, d), Ui.dp(6, d))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -365,7 +365,7 @@ class HomePage(
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, Ui.dp(8, d), 0, Ui.dp(8, d))
+            setPadding(0, Ui.dp(7, d), 0, Ui.dp(7, d))
         }
         row.addView(dot)
         row.addView(name)
@@ -401,14 +401,14 @@ class HomePage(
         root.addView(
             bar,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(5, d)).apply {
-                topMargin = Ui.dp(6, d)
+                topMargin = Ui.dp(5, d)
             },
         )
         val detail = TextView(activity).apply {
             text = ""
             textSize = 9.5f
             setTextColor(Ui.secondaryText(activity))
-            setPadding(0, Ui.dp(3, d), 0, 0)
+            setPadding(0, Ui.dp(2, d), 0, 0)
         }
         root.addView(detail)
         return MetricRow(root, value, detail, bar)
