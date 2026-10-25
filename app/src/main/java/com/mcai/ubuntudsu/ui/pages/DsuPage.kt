@@ -163,9 +163,9 @@ class DsuPage(
         progressCard.addView(installProgressBar)
         page.addView(progressCard)
 
-        // 安装参数 + 镜像管理合并卡
-        val parameterCard = card(d)
-        parameterCard.addView(label("userdata 容量", 13f, bold = true))
+        // 卡片一：userdata 容量
+        val userdataCard = card(d)
+        userdataCard.addView(label("userdata 容量", 13f, bold = true))
         val sizeRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, Ui.dp(4, d), 0, 0)
@@ -193,9 +193,9 @@ class DsuPage(
             }
             sizeRow.addView(chip)
         }
-        parameterCard.addView(sizeRow)
+        userdataCard.addView(sizeRow)
         // 剩余空间提示（参考 DSU-Sideloader 的 40% 安全限制说明）
-        parameterCard.addView(label(
+        userdataCard.addView(label(
             "设备剩余空间：${availableGB()} GB · 建议上限：${maxAllowedGB()} GB（剩余空间的 40%）",
             11f,
         ).apply {
@@ -241,9 +241,13 @@ class DsuPage(
                 marginStart = Ui.dp(8, d)
             },
         )
-        parameterCard.addView(customRow)
+        userdataCard.addView(customRow)
 
-        parameterCard.addView(label("GSI 安装包（zip）", 13f, bold = true).apply { setPadding(0, Ui.dp(8, d), 0, Ui.dp(3, d)) })
+        page.addView(userdataCard)
+
+        // 卡片二：GSI 安装包（zip）
+        val gsiCard = card(d)
+        gsiCard.addView(label("GSI 安装包（zip）", 13f, bold = true))
         val fileRow = LinearLayout(activity)
         fileNameText = label(selectedZipName ?: "未选择文件", 12f).apply {
             setTextColor(if (selectedZipName != null) Ui.primaryText(activity) else Ui.secondaryText(activity))
@@ -268,9 +272,9 @@ class DsuPage(
                 marginStart = Ui.dp(8, d)
             },
         )
-        parameterCard.addView(fileRow)
+        gsiCard.addView(fileRow)
 
-        parameterCard.addView(CheckBox(activity).apply {
+        gsiCard.addView(CheckBox(activity).apply {
             text = "安装前先清理旧缓存(安装失败必选)"
             textSize = 12f
             setTextColor(Ui.primaryText(activity))
@@ -278,11 +282,11 @@ class DsuPage(
             setPadding(Ui.dp(2, d), Ui.dp(4, d), 0, Ui.dp(2, d))
             setOnCheckedChangeListener { _, checked -> clearUserdata = checked }
         })
-        parameterCard.addView(
+        gsiCard.addView(
             smallAction("开始安装", Ui.buttonSuccess(activity)) { startInstall() },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = Ui.dp(6, d) },
         )
-        page.addView(parameterCard)
+        page.addView(gsiCard)
 
         // 工具入口：2×2 卡片网格（与「多功能 / Linux」页同一套卡片语言）
         // 上行=常规操作，下行=破坏性操作（红色文字 + 红色图标块作为警示）

@@ -358,7 +358,8 @@ class HomePage(
         }
         val value = TextView(activity).apply {
             text = "检测中…"
-            textSize = 11.5f
+            textSize = 12f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
             gravity = Gravity.END
             setTextColor(Ui.secondaryText(activity))
         }
@@ -690,7 +691,7 @@ class HomePage(
             }
         }
 
-        /** 夜间霓虹多色渐变（沿弧顺时针一圈）：CPU 亮黄→橙→红，GPU 鲜绿，避开呼吸气球的粉/蓝/紫色系；日间返回 null 走普通样式。 */
+        /** 夜间霓虹多色渐变（沿弧顺时针一圈）：日间返回 null 走普通样式。 */
         private fun neonColors(): IntArray? {
             if (!Ui.isDark(context)) return null
             return if (name == "CPU") intArrayOf(
@@ -706,6 +707,14 @@ class HomePage(
             )
         }
 
+        /**
+         * 夜间进度弧主色：高饱和实色。
+         * 之前用 SweepGradient，低占用时弧只覆盖渐变最浅的起始段（亮黄/浅绿），
+         * 看起来发白；改为不随百分比变化的饱和实色，任何占用率都清晰。
+         */
+        private fun arcColor(): Int =
+            if (name == "CPU") Color.rgb(255, 157, 38) else Color.rgb(46, 217, 126)
+
         override fun onDraw(canvas: android.graphics.Canvas) {
             super.onDraw(canvas)
             val cx = width / 2f
@@ -720,27 +729,28 @@ class HomePage(
             val ring = android.graphics.RectF(cx - radius, cy - radius, cx + radius, cy + radius)
 
             if (dark && neon != null) {
-                // ---- 夜间简洁模式：细轨道 + 渐变进度弧 + 中心数字（去泛光/刻度，降低视觉噪音） ----
+                // ---- 夜间简洁模式：细轨道 + 高饱和进度弧 + 中心数字（去泛光/刻度） ----
+                val arc = arcColor()
                 paint.shader = null
                 paint.maskFilter = null
                 paint.style = android.graphics.Paint.Style.STROKE
                 paint.strokeCap = android.graphics.Paint.Cap.ROUND
                 // 轨道
-                paint.color = Color.argb(46, 255, 255, 255)
+                paint.color = Color.argb(40, 255, 255, 255)
                 paint.strokeWidth = size * 0.055f
                 canvas.drawArc(ring, 0f, 360f, false, paint)
-                // 进度弧
+                // 进度弧：饱和实色 + 加粗，低占用率也醒目
                 if (percent > 0) {
-                    paint.shader = android.graphics.SweepGradient(cx, cy, neon, null)
+                    paint.color = arc
+                    paint.strokeWidth = size * 0.085f
                     canvas.drawArc(ring, -90f, 3.6f * percent, false, paint)
-                    paint.shader = null
                 }
                 // 中心数字
                 paint.style = android.graphics.Paint.Style.FILL
                 paint.textAlign = android.graphics.Paint.Align.CENTER
                 paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
                 paint.textSize = size * 0.26f
-                paint.color = if (name == "CPU") Color.rgb(255, 205, 120) else Color.rgb(120, 232, 170)
+                paint.color = arc
                 val text = if (value != null) "$percent%" else "--"
                 val baseline = cy - (paint.ascent() + paint.descent()) / 2f
                 canvas.drawText(text, cx, baseline, paint)
@@ -855,7 +865,7 @@ class HomePage(
                                 shape = android.graphics.drawable.GradientDrawable.OVAL
                                 setColor(android.graphics.Color.parseColor(colorHex))
                             }
-                            val okColor = android.graphics.Color.parseColor("#5CE1A5")
+                            val okColor = android.graphics.Color.parseColor("#3DDC84")
                             val idleColor = Ui.secondaryText(activity)
                             val hasDesktop = !desktopLabel.startsWith("未安装")
                             deviceText.text = device
@@ -876,20 +886,20 @@ class HomePage(
                             desktopText.setTextColor(if (hasDesktop) okColor else idleColor)
                             rootLabel.text = if (rootOk) "已授权" else "未授权"
                             rootLabel.setTextColor(if (rootOk) okColor else idleColor)
-                            rootDot.background = dotColor(if (rootOk) "#5CE1A5" else "#FF756F")
+                            rootDot.background = dotColor(if (rootOk) "#3DDC84" else "#FF756F")
                             // GSI 点：运行/安装/启用=绿，停用=琥珀，未安装/未知=灰
                             gsiDot.background = dotColor(
                                 when (gsiState) {
                                     com.mcai.ubuntudsu.core.GsiState.RUNNING,
                                     com.mcai.ubuntudsu.core.GsiState.INSTALLED,
                                     com.mcai.ubuntudsu.core.GsiState.ENABLED,
-                                    -> "#5CE1A5"
+                                    -> "#3DDC84"
                                     com.mcai.ubuntudsu.core.GsiState.DISABLED -> "#FBBF24"
                                     else -> "#B0B0B0"
                                 },
                             )
-                            ubuntuDot.background = dotColor(if (linuxInstalled) "#5CE1A5" else "#B0B0B0")
-                            desktopDot.background = dotColor(if (hasDesktop) "#5CE1A5" else "#B0B0B0")
+                            ubuntuDot.background = dotColor(if (linuxInstalled) "#3DDC84" else "#B0B0B0")
+                            desktopDot.background = dotColor(if (hasDesktop) "#3DDC84" else "#B0B0B0")
                         }
                         renderedGeneration = generation
                     }
