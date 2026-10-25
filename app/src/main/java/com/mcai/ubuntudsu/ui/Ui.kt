@@ -182,6 +182,21 @@ object Ui {
     fun dialogAction(context: android.content.Context): Int =
         if (isDark(context)) Color.parseColor("#7CC7FF") else Color.parseColor("#1F5FA8")
 
+    /**
+     * 统一弹框外观：背景跟随主题（深/浅），确定按钮高对比强调色，正文次要色。
+     * 用于所有 AlertDialog，避免夜间出现「深底 + 深色按钮」「白底 + 白字」。
+     */
+    fun styleDialog(context: android.content.Context, dialog: androidx.appcompat.app.AlertDialog) {
+        val d = context.resources.displayMetrics.density
+        runCatching {
+            dialog.window?.setBackgroundDrawable(rounded(dsuCard(context), 24f, d))
+            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)?.setTextColor(dialogAction(context))
+            dialog.getButton(android.content.DialogInterface.BUTTON_NEUTRAL)?.setTextColor(dialogAction(context))
+            dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE)?.setTextColor(secondaryText(context))
+            dialog.findViewById<TextView>(android.R.id.message)?.setTextColor(secondaryText(context))
+        }
+    }
+
     // ==================== DNA 工具界面专属色板（夜间模式适配） ====================
 
     /**

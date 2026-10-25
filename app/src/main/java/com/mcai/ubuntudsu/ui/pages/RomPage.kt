@@ -475,7 +475,7 @@ class RomPage(
         }
         val labels = devices.toTypedArray()
         val checked = selectedDevice?.let { sel -> labels.indexOfFirst { it == sel }.takeIf { it >= 0 } } ?: -1
-        AlertDialog.Builder(activity)
+        val dialog = AlertDialog.Builder(activity)
             .setTitle("选择设备 - ${activeBrand}")
             .setSingleChoiceItems(labels, checked) { dialog, which ->
                 Haptics.perform(activity.window.decorView)
@@ -491,6 +491,7 @@ class RomPage(
             }
             .setNegativeButton("取消", null)
             .show()
+        Ui.styleDialog(activity, dialog)
     }
 
     private fun updateDeviceLabel() {

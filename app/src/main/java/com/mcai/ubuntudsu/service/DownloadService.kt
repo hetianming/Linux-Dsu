@@ -435,6 +435,14 @@ class DownloadService : Service() {
         // 暂停已受理（未终态）时丢弃在途的「下载中」进度广播：
         // 进程真正被杀前回调仍在触发，这些广播会把界面/通知翻回下载中，造成"暂停没生效要点两次"的错觉
         if (state == 1 && !task.done && task.paused.get()) return
+        // 同步给顶部灵动岛：只在真正下载中时激活
+        com.mcai.ubuntudsu.core.DownloadIslandState.publish(
+            active = state == 1,
+            fileName = task.fileName,
+            percent = progress,
+            speed = if (state == 1) task.speed else "",
+            status = status,
+        )
         val intent = Intent(BROADCAST_UPDATE).apply {
             putExtra(EXTRA_STATE, state)
             putExtra(EXTRA_PROGRESS, progress)

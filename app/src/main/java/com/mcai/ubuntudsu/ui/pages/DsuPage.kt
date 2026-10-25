@@ -57,7 +57,6 @@ class DsuPage(
     private lateinit var fileNameText: TextView
     private lateinit var installProgressCard: LinearLayout
     private lateinit var installProgressLabel: TextView
-    private lateinit var installProgressBar: ProgressBar
     private lateinit var installPercentText: TextView
     private lateinit var customCapacityInput: EditText
 
@@ -155,14 +154,7 @@ class DsuPage(
         }
         statusRow.addView(installProgressLabel)
         statusRow.addView(installPercentText)
-        installProgressBar = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 100
-            progress = 0
-            progressDrawable = Ui.pillProgressDrawable(activity)
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(8, d)).apply { topMargin = Ui.dp(3, d) }
-        }
         progressCard.addView(statusRow)
-        progressCard.addView(installProgressBar)
         page.addView(progressCard)
 
         // 卡片一：userdata 容量
@@ -439,7 +431,6 @@ class DsuPage(
 
     // 统一更新安装进度条与下方百分比
     private fun setInstallProgress(percent: Int, text: String) {
-        installProgressBar.progress = percent
         installProgressLabel.text = text
         installPercentText.text = "$percent %"
     }

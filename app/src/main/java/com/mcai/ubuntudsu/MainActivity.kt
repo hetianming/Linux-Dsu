@@ -37,32 +37,76 @@ class MainActivity : AppCompatActivity() {
     private var homePage: HomePage? = null
     private var linuxPage: LinuxPage? = null
     private var dsuPage: DsuPage? = null
-    // 顶部灵动岛：DSU 安装进度（贴在状态栏/摄像头区域下方，切 Tab 也保留）
+    // 顶部灵动岛：挂在 decorView 上（覆盖状态栏/摄像头区域），同时显示 GSI 安装与固件下载
     private var dsuIsland: com.mcai.ubuntudsu.ui.DynamicIsland? = null
     private var islandShown = false
-    private val dsuIslandListener = com.mcai.ubuntudsu.core.DsuInstallState.Listener { state ->
+    private var islandPhase: com.mcai.ubuntudsu.core.DsuInstallState.Phase =
+        com.mcai.ubuntudsu.core.DsuInstallState.Phase.IDLE
+
+    private val dsuIslandListener = com.mcai.ubuntudsu.core.DsuInstallState.Listener { refreshIsland() }
+    private val downloadIslandListener = com.mcai.ubuntudsu.core.DownloadIslandState.Listener { refreshIsland() }
+
+    /** 统一决定灵动岛显示谁：GSI 安装优先，其次固件下载 */
+    private fun refreshIsland() {
         runOnUiThread {
             val island = dsuIsland ?: return@runOnUiThread
-            when (state.phase) {
-                com.mcai.ubuntudsu.core.DsuInstallState.Phase.RUNNING -> {
+            val install = com.mcai.ubuntudsu.core.DsuInstallState.snapshot
+            val download = com.mcai.ubuntudsu.core.DownloadIslandState.snapshot
+            val phaseChanged = islandPhase != install.phase
+            islandPhase = install.phase
+
+            when {
+                install.phase == com.mcai.ubuntudsu.core.DsuInstallState.Phase.RUNNING -> {
                     if (!islandShown) {
-                        island.show(state.fileName, "DSU 安装", "安装 GSI")
+                        island.show(
+                            com.mcai.ubuntudsu.ui.DynamicIsland.Kind.INSTALL,
+                            "GSI 安装",
+                            install.fileName,
+                            "取消安装",
+                        )
                         islandShown = true
                     }
-                    island.updateProgress(state.percent, state.message)
+                    island.update(install.percent, install.message)
                 }
-                com.mcai.ubuntudsu.core.DsuInstallState.Phase.SUCCESS -> if (islandShown) {
-                    island.setStatus("安装完成")
-                    island.updateProgress(100, "")
-                    rootLayout.postDelayed({ island.dismiss(); islandShown = false }, 3000)
+                install.phase == com.mcai.ubuntudsu.core.DsuInstallState.Phase.SUCCESS && phaseChanged -> {
+                    if (islandShown) {
+                        island.setStatus("安装完成")
+                        island.update(100, "")
+                        rootLayout.postDelayed({ if (!isDownloading()) collapseIsland() }, 2600)
+                    }
                 }
-                com.mcai.ubuntudsu.core.DsuInstallState.Phase.FAILED -> if (islandShown) {
-                    island.setStatus("安装失败")
-                    rootLayout.postDelayed({ island.dismiss(); islandShown = false }, 4000)
+                install.phase == com.mcai.ubuntudsu.core.DsuInstallState.Phase.FAILED && phaseChanged -> {
+                    if (islandShown) {
+                        island.setStatus("安装失败")
+                        rootLayout.postDelayed({ if (!isDownloading()) collapseIsland() }, 3600)
+                    }
                 }
-                else -> Unit
+                download.active -> {
+                    if (!islandShown) {
+                        island.show(
+                            com.mcai.ubuntudsu.ui.DynamicIsland.Kind.DOWNLOAD,
+                            "下载中",
+                            download.fileName,
+                            "下载管理",
+                        )
+                        islandShown = true
+                    }
+                    val status = listOf(download.speed, download.status)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" · ")
+                    island.update(download.percent, status)
+                }
+                else -> if (islandShown) collapseIsland()
             }
         }
+    }
+
+    private fun isDownloading(): Boolean =
+        com.mcai.ubuntudsu.core.DownloadIslandState.snapshot.active
+
+    private fun collapseIsland() {
+        dsuIsland?.dismiss()
+        islandShown = false
     }
     private var settingsPage: SettingsPage? = null
     private val pageCache = mutableMapOf<Int, View>()
@@ -137,6 +181,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         com.mcai.ubuntudsu.core.DsuInstallState.removeListener(dsuIslandListener)
+        com.mcai.ubuntudsu.core.DownloadIslandState.removeListener(downloadIslandListener)
         dsuPage?.release()
         dsuPage?.unbindRootService()
         lifecycleStopHooks.forEach { it.run() }
@@ -343,25 +388,33 @@ class MainActivity : AppCompatActivity() {
         navContainer.layoutParams = navLayoutParams
         root.addView(navContainer, navLayoutParams)
 
-        // 顶部灵动岛：DSU 安装进度胶囊（覆盖在页面顶部，仅在安装时出现）
-        val island = com.mcai.ubuntudsu.ui.DynamicIsland(this) {
-            startService(
-                android.content.Intent(this, com.mcai.ubuntudsu.service.DsuInstallService::class.java)
-                    .setAction(com.mcai.ubuntudsu.service.DsuInstallService.ACTION_CANCEL),
-            )
+        // 顶部灵动岛：安装 → 取消安装；下载 → 打开下载管理
+        val island = com.mcai.ubuntudsu.ui.DynamicIsland(this) { kind ->
+            if (kind == com.mcai.ubuntudsu.ui.DynamicIsland.Kind.INSTALL) {
+                startService(
+                    android.content.Intent(this, com.mcai.ubuntudsu.service.DsuInstallService::class.java)
+                        .setAction(com.mcai.ubuntudsu.service.DsuInstallService.ACTION_CANCEL),
+                )
+            } else {
+                startActivity(android.content.Intent(this, com.mcai.ubuntudsu.DownloadsActivity::class.java))
+                collapseIsland()
+            }
         }
         dsuIsland = island
-        root.addView(
+
+        setContentView(root)
+        // 关键：挂到 decorView 才能覆盖状态栏/摄像头区域（root 自身有状态栏 padding）
+        val decor = window.decorView as? ViewGroup
+        decor?.addView(
             island.build(),
             FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP,
-            ),
+            ).apply { topMargin = islandTopMargin() },
         )
         com.mcai.ubuntudsu.core.DsuInstallState.addListener(dsuIslandListener)
-
-        setContentView(root)
+        com.mcai.ubuntudsu.core.DownloadIslandState.addListener(downloadIslandListener)
         Ui.enableEdgeToEdge(this, root)
         // 预构建四个页面并水平排布（酷安式跟手横滑），pageHost 通过 translationX 整体横向平移
         root.post {
@@ -385,6 +438,15 @@ class MainActivity : AppCompatActivity() {
             insets
         }
         ViewCompat.requestApplyInsets(root)
+    }
+
+    /** 灵动岛顶部偏移：胶囊垂直居中于状态栏（挖孔/摄像头所在行） */
+    private fun islandTopMargin(): Int {
+        val d = resources.displayMetrics.density
+        val resId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        val statusBar = if (resId > 0) resources.getDimensionPixelSize(resId) else Ui.dp(26, d)
+        val pillHeight = Ui.dp(36, d)
+        return ((statusBar - pillHeight) / 2).coerceAtLeast(0)
     }
 
     fun switchToTab(tab: Int) {

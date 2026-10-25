@@ -183,7 +183,7 @@ class LinuxPage(
         }
         val running = TerminalSessionStore.takeRunning()
         if (running != null) {
-            AlertDialog.Builder(activity)
+            val runningDialog = AlertDialog.Builder(activity)
                 .setTitle("终端正在运行")
                 .setMessage("请先结束终端进程并卸载挂载点，再删除 rootfs。")
                 .setPositiveButton("关闭终端") { _, _ ->
@@ -192,9 +192,10 @@ class LinuxPage(
                 }
                 .setNegativeButton("取消", null)
                 .show()
+            Ui.styleDialog(activity, runningDialog)
             return
         }
-        AlertDialog.Builder(activity)
+        val uninstallDialog = AlertDialog.Builder(activity)
             .setTitle("卸载 Linux")
             .setMessage("将删除 rootfs 目录及全部数据，此操作不可恢复。确定继续？")
             .setPositiveButton("卸载") { _, _ ->
@@ -228,6 +229,7 @@ sleep 1""".trimIndent()
             }
             .setNegativeButton("取消", null)
             .show()
+        Ui.styleDialog(activity, uninstallDialog)
     }
 
     /** 功能卡数据：图标 / 品牌色 / 标题 / 副标题 / 点击动作 */
