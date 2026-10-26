@@ -25,6 +25,7 @@ import android.widget.Toast;
 import com.mcai.ubuntudsu.R;
 import com.mcai.ubuntudsu.RootfsFilesActivity;
 import com.mcai.ubuntudsu.core.DnaTools;
+import com.mcai.ubuntudsu.core.FluidCloud;
 import com.mcai.ubuntudsu.core.RootShell;
 import com.mcai.ubuntudsu.ui.Haptics;
 import com.mcai.ubuntudsu.ui.Ui;
@@ -842,25 +843,24 @@ public final class DnaPartitionActivity extends DnaBaseActivity {
 
     private void notifyProgress(String text, Integer pct, boolean ongoing) {
         try {
-            Intent it = new Intent(this, DnaPartitionActivity.class);
-            it.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            android.app.PendingIntent pi = android.app.PendingIntent.getActivity(this, NOTE_ID, it,
-                    android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE);
             String title = MODE_EXTRACT.equals(mode) ? t("分区提取", "Extract") : t("分区刷写", "Flash");
-            android.app.Notification n = com.mcai.ubuntudsu.core.ProgressNotification.INSTANCE.build(
-                    this, NOTE_CHANNEL, title, text, pct, ongoing, pi, !text.startsWith("✗"));
+            // 流体云 / 系统级灵动岛：用媒体会话通知交给系统接管上岛
+            FluidCloud.INSTANCE.init(this);
+            FluidCloud.INSTANCE.request(
+                    FluidCloud.Kind.DNA, title, "", text,
+                    pct == null ? 0 : pct.intValue(), null);
             android.app.NotificationManager nm =
                     (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-            if (nm != null) nm.notify(NOTE_ID, n);
+            android.app.Notification n = FluidCloud.INSTANCE.notification();
+            if (nm != null && n != null) nm.notify(FluidCloud.NOTE_ID, n);
         } catch (Exception ignored) {
         }
     }
 
     private void cancelNote() {
         try {
-            android.app.NotificationManager nm =
-                    (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-            if (nm != null) nm.cancel(NOTE_ID);
+            // 流体云胶囊随任务结束收起
+            FluidCloud.INSTANCE.clear();
         } catch (Exception ignored) {
         }
     }

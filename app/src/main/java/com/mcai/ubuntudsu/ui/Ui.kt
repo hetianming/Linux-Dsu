@@ -1172,4 +1172,20 @@ object Ui {
         interpolator = android.view.animation.LinearInterpolator()
         addUpdateListener { bar.progress = it.animatedValue as Int }
     }
+
+    /**
+     * 当前机型系统是否自带「流体云 / 灵动岛」能力（会自动接管媒体会话通知上岛）。
+     * 命中则返回 true —— 此时交给系统渲染，自家绘制的胶囊（DynamicIsland）隐藏，避免双胶囊。
+     * 未命中的机型（Pixel / 类原生等）由自家胶囊兜底。
+     */
+    fun fluidCloudSupported(): Boolean {
+        val b = (Build.BRAND ?: "").lowercase()
+        val m = (Build.MANUFACTURER ?: "").lowercase()
+        return listOf(
+            "oppo", "oneplus", "realme",   // ColorOS / RealmeUI 流体云
+            "xiaomi", "redmi", "poco",     // 小米 / 澎湃 灵动胶囊
+            "huawei", "honor",             // 华为 / 荣耀 灵动胶囊
+            "samsung", "vivo", "meizu",    // 三星 Now Bar / vivo 原子通知 / 魅族
+        ).any { b.contains(it) || m.contains(it) }
+    }
 }

@@ -16,6 +16,7 @@ import com.mcai.ubuntudsu.MainActivity
 import com.mcai.ubuntudsu.PrivilegedRootService
 import com.mcai.ubuntudsu.core.DsuInstallState
 import com.mcai.ubuntudsu.core.DsuManager
+import com.mcai.ubuntudsu.core.FluidCloud
 import com.mcai.ubuntudsu.core.RootShell
 import com.topjohnwu.superuser.ipc.RootService
 import java.io.BufferedInputStream
@@ -63,7 +64,7 @@ class DsuInstallService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        ensureChannel()
+        FluidCloud.init(this)
 
         if (intent?.action == ACTION_CANCEL) {
             cancelled.set(true)
@@ -83,7 +84,14 @@ class DsuInstallService : Service() {
         fileName = File(zipPath).name
         cancelled.set(false)
 
-        startForeground(NOTE_ID, buildNotification(0, "准备安装…", done = false))
+        // 流体云 / 系统级灵动岛：媒体会话通知交给 ColorOS 等系统接管上岛
+        val cancelIntent = PendingIntent.getService(
+            this, 0,
+            Intent(this, DsuInstallService::class.java).setAction(ACTION_CANCEL),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        FluidCloud.request(FluidCloud.Kind.INSTALL, "GSI 安装", fileName, "准备安装…", 0, cancelIntent)
+        startForeground(FluidCloud.NOTE_ID, FluidCloud.notification()!!)
         DsuInstallState.publish(DsuInstallState.Phase.RUNNING, 0, "准备安装…", fileName)
 
         RootService.bind(Intent(this, PrivilegedRootService::class.java), connection)
@@ -225,9 +233,10 @@ class DsuInstallService : Service() {
 
     private fun progress(percent: Int, message: String) {
         DsuInstallState.publish(DsuInstallState.Phase.RUNNING, percent, message, fileName)
+        FluidCloud.update(FluidCloud.Kind.INSTALL, percent, message)
         runCatching {
             getSystemService(NotificationManager::class.java)
-                .notify(NOTE_ID, buildNotification(percent, message, done = false))
+                .notify(FluidCloud.NOTE_ID, FluidCloud.notification()!!)
         }
     }
 
@@ -235,60 +244,12 @@ class DsuInstallService : Service() {
     private fun finish(percent: Int, text: String, success: Boolean) {
         busy.set(false)
         runCatching { RootService.unbind(connection) }
+        FluidCloud.finish(FluidCloud.Kind.INSTALL, success, text)
         runCatching {
             getSystemService(NotificationManager::class.java)
-                .notify(NOTE_ID, buildNotification(percent, text, done = true, success = success))
+                .notify(FluidCloud.NOTE_ID, FluidCloud.notification()!!)
             stopForeground(STOP_FOREGROUND_DETACH)
         }
         stopSelf()
-    }
-
-    // ==================== 通知 ====================
-
-    private fun ensureChannel() {
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "DSU 安装", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "GSI 安装进度（离开应用后仍在后台继续）"
-                setShowBadge(false)
-            },
-        )
-    }
-
-    private fun buildNotification(
-        percent: Int,
-        text: String,
-        done: Boolean,
-        success: Boolean = true,
-    ): Notification {
-        val content = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        val builder = Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle(if (done) (if (success) "DSU 安装完成" else "DSU 安装结束") else "DSU 安装进行中")
-            .setContentText(if (done) text else "$text · $fileName  $percent%")
-            .setSmallIcon(
-                if (done) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_sys_download,
-            )
-            .setContentIntent(content)
-            .setCategory(Notification.CATEGORY_PROGRESS)
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setShowWhen(false)
-            .setOngoing(!done)
-            .setOnlyAlertOnce(true)
-        if (done) {
-            builder.setAutoCancel(true)
-        } else {
-            builder.setProgress(100, percent, false)
-        }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
-        }
-        return builder.build()
     }
 }

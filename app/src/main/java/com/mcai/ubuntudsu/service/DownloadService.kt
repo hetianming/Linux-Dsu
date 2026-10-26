@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.IBinder
 import com.mcai.ubuntudsu.core.Aria2c
 import com.mcai.ubuntudsu.core.DownloadNode
+import com.mcai.ubuntudsu.core.FluidCloud
 import com.mcai.ubuntudsu.core.JavaDownloader
 import com.mcai.ubuntudsu.core.RomApi
 import java.io.File
@@ -99,6 +100,7 @@ class DownloadService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        FluidCloud.init(this)
         actionReceiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(context: android.content.Context?, intent: Intent?) {
                 when (intent?.action) {
@@ -406,6 +408,7 @@ class DownloadService : Service() {
     private fun promoteForeground() {
         val active = tasks.values.filter { it.notifActive && !it.done }
         if (active.isEmpty()) {
+            FluidCloud.clear()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
@@ -414,6 +417,18 @@ class DownloadService : Service() {
         val nm = getSystemService(NotificationManager::class.java)
         active.drop(1).forEach { nm.notify(it.notifId, buildNotif(it)) }
     }
+
+    /** 流体云胶囊的「取消」动作：取消当前焦点下载任务 */
+    private fun fluidCancelIntent(task: TaskCtx): PendingIntent =
+        PendingIntent.getBroadcast(
+            this,
+            task.notifId,
+            Intent(ACTION_CANCEL).apply {
+                setPackage(packageName)
+                putExtra(EXTRA_TASK_ID, task.id)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
 
     /** 新任务启动时，为其余在途任务补发通知（各自独立小窗口） */
     private fun postOtherNotifs(exclude: TaskCtx) {
@@ -443,6 +458,20 @@ class DownloadService : Service() {
             speed = if (state == 1) task.speed else "",
             status = status,
         )
+        // 流体云 / 系统级灵动岛：下载中驱动系统媒体通知上岛（焦点取第一个活跃任务）
+        if (state == 1) {
+            val focus = tasks.values.firstOrNull { it.notifActive && !it.done }
+            if (focus != null) {
+                FluidCloud.request(
+                    FluidCloud.Kind.DOWNLOAD, "下载中", focus.fileName,
+                    if (focus.speed.isNotBlank()) "$progress% · ${focus.speed}" else "$progress%",
+                    progress, fluidCancelIntent(focus),
+                )
+            }
+        } else if (state == 2 || state == 3 || state == 4) {
+            // 完成 / 取消 / 失败：无活跃任务时收起流体云胶囊
+            if (tasks.values.none { it.notifActive && !it.done }) FluidCloud.clear()
+        }
         val intent = Intent(BROADCAST_UPDATE).apply {
             putExtra(EXTRA_STATE, state)
             putExtra(EXTRA_PROGRESS, progress)

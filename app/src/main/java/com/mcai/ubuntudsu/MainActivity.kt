@@ -50,6 +50,9 @@ class MainActivity : AppCompatActivity() {
     private fun refreshIsland() {
         runOnUiThread {
             val island = dsuIsland ?: return@runOnUiThread
+            // 系统流体云（ColorOS / HyperOS / 小米 / 华为 / 荣耀等）会自动接管媒体通知上岛，
+            // 此时隐藏自家绘制的胶囊，避免与系统灵动岛形成双胶囊。
+            if (com.mcai.ubuntudsu.ui.Ui.fluidCloudSupported()) return@runOnUiThread
             val install = com.mcai.ubuntudsu.core.DsuInstallState.snapshot
             val download = com.mcai.ubuntudsu.core.DownloadIslandState.snapshot
             val phaseChanged = islandPhase != install.phase
