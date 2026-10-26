@@ -125,13 +125,14 @@ object DnaTools {
     // ============ 本机分区枚举 / 块设备解析 / dd 提取刷写 ============
 
     /**
-     * 列出本机全部分区名（扫描 /dev/block 下各 by-name 目录，去重排序）。
+     * 列出本机全部分区名（扫描 /dev/block 下各 by-name 目录 + 各 mapper 目录，去重排序）。
+     * mapper 目录放的是动态分区（super 拆分出的 system_a/vendor_a 等），仅扫 by-name 会漏掉它们。
      * root 不可用或目录缺失时返回空列表。
      */
     @JvmStatic
     fun listPartitions(ctx: Context): List<String> {
         val r = RootShell.exec(
-            "for d in $(find /dev/block -name by-name -type d 2>/dev/null); do ls -1 \"\$d\" 2>/dev/null; done | sort -u",
+            "{ for d in $(find /dev/block -name by-name -type d 2>/dev/null); do ls -1 \"\$d\" 2>/dev/null; done; for d in $(find /dev/block -name mapper -type d 2>/dev/null); do ls -1 \"\$d\" 2>/dev/null | grep -v '^control\$'; done; } | sort -u",
             timeoutMs = 15000)
         return if (r.success) r.stdout.lineSequence().map { it.trim() }
             .filter { it.isNotEmpty() }.distinct().sorted().toList()
@@ -140,13 +141,14 @@ object DnaTools {
 
     /**
      * 解析分区名对应的真实块设备路径（readlink -f），失败回退 /dev/block/by-name/<name>。
-     * 不同设备 by-name 目录位置不一（/dev/block/by-name、/dev/block/bootdevice/by-name、
-     * /dev/block/platform/<soc>/by-name），此处自动遍历定位。
+     * 定位顺序：先遍历各 by-name 目录，再到各 mapper 目录（动态分区实体位于此处）。
+     * 不同设备目录位置不一（/dev/block/by-name、/dev/block/bootdevice/by-name、
+     * /dev/block/platform/<soc>/by-name、/dev/block/mapper 等），此处全部自动覆盖。
      */
     @JvmStatic
     fun partitionPath(ctx: Context, name: String): String {
         val r = RootShell.exec(
-            "for d in $(find /dev/block -name by-name -type d 2>/dev/null); do p=\"\$d/$name\"; [ -e \"\$p\" ] && { readlink -f \"\$p\" && break; }; done",
+            "p=\"\"; for d in $(find /dev/block -name by-name -type d 2>/dev/null); do q=\"\$d/$name\"; [ -e \"\$q\" ] && p=$(readlink -f \"\$q\") && break; done; [ -z \"\$p\" ] && for d in $(find /dev/block -name mapper -type d 2>/dev/null); do q=\"\$d/$name\"; [ -e \"\$q\" ] && p=$(readlink -f \"\$q\") && break; done; [ -n \"\$p\" ] && echo \"\$p\"",
             timeoutMs = 10000)
         val line = r.stdout.lines().firstOrNull { it.isNotBlank() }
         return if (line != null) line.trim() else "/dev/block/by-name/$name"

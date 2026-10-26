@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * DNA · 本机分区 提取 / 刷写 独立二级页。
- * 列出 /dev/block/by-name 下全部本机分区，支持：
+ * 列出 /dev/block/by-name 与 /dev/block/mapper 下全部本机分区（含动态分区 system_a/vendor_a 等），支持：
  *  - 提取：dd if=<分区块设备> of=<目标 img>（默认保存到工程 Partitions 目录或 /sdcard/Download）
  *  - 刷写：dd if=<本地 img> of=<分区块设备>
  * 进度通过 /proc/<pid>/io 实时回传；需 ROOT。直接操作块设备有误刷变砖风险。
