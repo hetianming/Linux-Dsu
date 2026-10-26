@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.ComponentName
 import android.content.Intent
 import android.content.ServiceConnection
+import android.os.Build
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.os.SharedMemory
@@ -16,7 +17,6 @@ import com.mcai.ubuntudsu.MainActivity
 import com.mcai.ubuntudsu.PrivilegedRootService
 import com.mcai.ubuntudsu.core.DsuInstallState
 import com.mcai.ubuntudsu.core.DsuManager
-import com.mcai.ubuntudsu.core.FluidCloud
 import com.mcai.ubuntudsu.core.RootShell
 import com.topjohnwu.superuser.ipc.RootService
 import java.io.BufferedInputStream
@@ -61,10 +61,13 @@ class DsuInstallService : Service() {
 
     private var fileName: String = ""
 
+    /** 「取消」按钮意图（安装中在通知卡片上展示） */
+    private lateinit var cancelIntent: PendingIntent
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        FluidCloud.init(this)
+        ensureChannel()
 
         if (intent?.action == ACTION_CANCEL) {
             cancelled.set(true)
@@ -84,14 +87,14 @@ class DsuInstallService : Service() {
         fileName = File(zipPath).name
         cancelled.set(false)
 
-        // 流体云 / 系统级灵动岛：媒体会话通知交给 ColorOS 等系统接管上岛
-        val cancelIntent = PendingIntent.getService(
+        cancelIntent = PendingIntent.getService(
             this, 0,
             Intent(this, DsuInstallService::class.java).setAction(ACTION_CANCEL),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        FluidCloud.request(FluidCloud.Kind.INSTALL, "GSI 安装", fileName, "准备安装…", 0, cancelIntent)
-        startForeground(FluidCloud.NOTE_ID, FluidCloud.notification()!!)
+        // 标准进度通知（CATEGORY_PROGRESS）：ColorOS 流体云接管为顶部进度卡片，
+        // 卡片保留「取消」按钮。不使用 MediaStyle，避免被系统识别成音乐播放。
+        startForeground(NOTE_ID, buildNotif(0, "准备安装…", ongoing = true))
         DsuInstallState.publish(DsuInstallState.Phase.RUNNING, 0, "准备安装…", fileName)
 
         RootService.bind(Intent(this, PrivilegedRootService::class.java), connection)
@@ -233,10 +236,9 @@ class DsuInstallService : Service() {
 
     private fun progress(percent: Int, message: String) {
         DsuInstallState.publish(DsuInstallState.Phase.RUNNING, percent, message, fileName)
-        FluidCloud.update(FluidCloud.Kind.INSTALL, percent, message)
         runCatching {
             getSystemService(NotificationManager::class.java)
-                .notify(FluidCloud.NOTE_ID, FluidCloud.notification()!!)
+                .notify(NOTE_ID, buildNotif(percent, message, ongoing = true))
         }
     }
 
@@ -244,12 +246,72 @@ class DsuInstallService : Service() {
     private fun finish(percent: Int, text: String, success: Boolean) {
         busy.set(false)
         runCatching { RootService.unbind(connection) }
-        FluidCloud.finish(FluidCloud.Kind.INSTALL, success, text)
         runCatching {
             getSystemService(NotificationManager::class.java)
-                .notify(FluidCloud.NOTE_ID, FluidCloud.notification()!!)
+                .notify(NOTE_ID, buildNotif(percent, text, ongoing = false, success = success))
             stopForeground(STOP_FOREGROUND_DETACH)
         }
         stopSelf()
+    }
+
+    // ==================== 通知 ====================
+
+    private fun ensureChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val ch = NotificationChannel(CHANNEL_ID, "DSU 安装", NotificationManager.IMPORTANCE_LOW).apply {
+            description = "GSI / DSU 安装进度（离开应用后继续，流体云展示）"
+            setShowBadge(false)
+            enableVibration(false)
+            setSound(null, null)
+        }
+        getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
+    }
+
+    /** 标准进度卡片：CATEGORY_PROGRESS + 真实百分比 + 「取消」按钮，系统流体云直接接管 */
+    private fun buildNotif(
+        percent: Int,
+        text: String,
+        ongoing: Boolean,
+        success: Boolean = true,
+    ): Notification {
+        val content = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val b = Notification.Builder(this, CHANNEL_ID)
+            .setSmallIcon(
+                if (ongoing) android.R.drawable.stat_sys_download
+                else if (success) android.R.drawable.stat_sys_download_done
+                else android.R.drawable.stat_notify_error,
+            )
+            .setContentTitle("GSI 安装")
+            .setContentText("$text · ${percent}%")
+            .setSubText(fileName.ifBlank { null })
+            .setContentIntent(content)
+            .setCategory(Notification.CATEGORY_PROGRESS)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setShowWhen(false)
+            .setOnlyAlertOnce(true)
+            .setOngoing(ongoing)
+            .setProgress(100, percent.coerceIn(0, 100), false)
+        if (ongoing) {
+            b.addAction(android.R.drawable.ic_menu_close_clear_cancel, "取消", cancelIntent)
+            // 优先 Android 16 实时动态（进度胶囊）；老系统走媒体会话兜底（同样由系统上岛）
+            if (!com.mcai.ubuntudsu.core.ProgressNotification.applyLiveUpdate(b, percent)) {
+                com.mcai.ubuntudsu.core.ProgressNotification.applyMediaFallback(
+                    this, b, "GSI 安装", "$text · ${percent}%", 1,
+                )
+            }
+        } else {
+            b.setAutoCancel(true)
+            b.setProgress(0, 0, false)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            b.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
+        }
+        return b.build()
     }
 }

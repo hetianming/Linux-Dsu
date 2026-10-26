@@ -50,9 +50,9 @@ class MainActivity : AppCompatActivity() {
     private fun refreshIsland() {
         runOnUiThread {
             val island = dsuIsland ?: return@runOnUiThread
-            // 系统流体云（ColorOS / HyperOS / 小米 / 华为 / 荣耀等）会自动接管媒体通知上岛，
-            // 此时隐藏自家绘制的胶囊，避免与系统灵动岛形成双胶囊。
-            if (com.mcai.ubuntudsu.ui.Ui.fluidCloudSupported()) return@runOnUiThread
+            // 系统实时动态（ColorOS 16 流体云 / HyperOS 实况通知）会接管进度通知上岛，
+            // 此时隐藏自家绘制的胶囊，避免与系统胶囊重叠；不接管时由自绘胶囊兜底。
+            if (com.mcai.ubuntudsu.core.ProgressNotification.systemTakeOver(this)) return@runOnUiThread
             val install = com.mcai.ubuntudsu.core.DsuInstallState.snapshot
             val download = com.mcai.ubuntudsu.core.DownloadIslandState.snapshot
             val phaseChanged = islandPhase != install.phase
@@ -153,6 +153,76 @@ class MainActivity : AppCompatActivity() {
         buildUi()
         // 进程被杀重建时恢复上次所在 tab（如 DSU 页选择 GSI 后返回）
         selectTab(savedInstanceState?.getInt("last_tab")?.takeIf { it in tabs.indices } ?: 0)
+        // 首次启动引导：系统「流体云显示实时活动」未开启时提示并跳转（只提醒一次）
+        if (com.mcai.ubuntudsu.core.FluidCloudGuide.shouldGuide(this)) {
+            showFluidCloudGuide()
+        }
+        // 每 24 小时静默检测一次新版本；有更新且前台时弹更新框
+        registerReceiver(updateDoneReceiver, android.content.IntentFilter(com.mcai.ubuntudsu.service.UpdateService.ACTION_DONE))
+        com.mcai.ubuntudsu.core.AppUpdate.maybeCheck(this) { info -> showUpdateDialog(info) }
+    }
+
+    /** 更新包下载完成：APP 在前台时直接拉起安装 */
+    private val updateDoneReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
+            val apk = intent.getStringExtra(com.mcai.ubuntudsu.service.UpdateService.EXTRA_APK) ?: return
+            runCatching {
+                startActivity(
+                    android.content.Intent(android.content.Intent.ACTION_VIEW)
+                        .setDataAndType(
+                            androidx.core.content.FileProvider.getUriForFile(
+                                this@MainActivity, "$packageName.fileprovider", java.io.File(apk),
+                            ),
+                            "application/vnd.android.package-archive",
+                        )
+                        .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION),
+                )
+            }
+        }
+    }
+
+    /** 更新弹框：展示新版本与更新说明，确认后后台静默下载（可离开 APP） */
+    private fun showUpdateDialog(info: com.mcai.ubuntudsu.core.AppUpdate.Info) {
+        val notes = info.notes.take(800) + if (info.notes.length > 800) "\n…" else ""
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("发现新版本 ${info.version}")
+            .setMessage(notes.ifBlank { info.name })
+            .setPositiveButton("立即更新") { _, _ ->
+                runCatching {
+                    android.content.Intent(this, com.mcai.ubuntudsu.service.UpdateService::class.java)
+                        .putExtra(com.mcai.ubuntudsu.service.UpdateService.EXTRA_URL, info.apkUrl)
+                        .putExtra(com.mcai.ubuntudsu.service.UpdateService.EXTRA_VERSION, info.version)
+                        .putExtra(com.mcai.ubuntudsu.service.UpdateService.EXTRA_NAME, info.name)
+                        .let { androidx.core.content.ContextCompat.startForegroundService(this, it) }
+                    android.widget.Toast.makeText(
+                        this, "已开始后台下载，完成后提示安装", android.widget.Toast.LENGTH_SHORT,
+                    ).show()                }
+            }
+            .setNegativeButton("暂不", null)
+            .show()
+            .let { Ui.styleDialog(this, it) }
+    }
+
+    /** 灵动岛/流体云上岛依赖系统开关（各厂商名称与入口不同），首次启动引导开启 */
+    private fun showFluidCloudGuide() {
+        com.mcai.ubuntudsu.core.FluidCloudGuide.markAsked(this)
+        val v = com.mcai.ubuntudsu.core.FluidCloudGuide.vendor(this)
+        val system = v?.system ?: "系统"
+        val feature = v?.feature ?: "灵动岛 / 实时活动"
+        val path = v?.path ?: "设置 → 通知 → 本应用"
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("开启$system 灵动岛")
+            .setMessage(
+                "安装 / 下载 / 分区任务可在摄像头区域显示灵动岛胶囊，离开 APP 也能实时看到进度。\n\n" +
+                    "$system 需要手动开启「$feature」开关，入口：$path。\n" +
+                    "点击「去设置」直接打开本应用的通知设置页。",
+            )
+            .setPositiveButton("去设置") { _, _ ->
+                com.mcai.ubuntudsu.core.FluidCloudGuide.openSettings(this)
+            }
+            .setNegativeButton("暂不", null)
+            .show()
+            .let { Ui.styleDialog(this, it) }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -185,6 +255,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         com.mcai.ubuntudsu.core.DsuInstallState.removeListener(dsuIslandListener)
         com.mcai.ubuntudsu.core.DownloadIslandState.removeListener(downloadIslandListener)
+        runCatching { unregisterReceiver(updateDoneReceiver) }
         dsuPage?.release()
         dsuPage?.unbindRootService()
         lifecycleStopHooks.forEach { it.run() }

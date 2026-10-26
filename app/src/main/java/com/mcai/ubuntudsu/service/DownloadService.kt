@@ -10,7 +10,6 @@ import android.os.Build
 import android.os.IBinder
 import com.mcai.ubuntudsu.core.Aria2c
 import com.mcai.ubuntudsu.core.DownloadNode
-import com.mcai.ubuntudsu.core.FluidCloud
 import com.mcai.ubuntudsu.core.JavaDownloader
 import com.mcai.ubuntudsu.core.RomApi
 import java.io.File
@@ -100,7 +99,6 @@ class DownloadService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        FluidCloud.init(this)
         actionReceiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(context: android.content.Context?, intent: Intent?) {
                 when (intent?.action) {
@@ -408,7 +406,6 @@ class DownloadService : Service() {
     private fun promoteForeground() {
         val active = tasks.values.filter { it.notifActive && !it.done }
         if (active.isEmpty()) {
-            FluidCloud.clear()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
@@ -417,18 +414,6 @@ class DownloadService : Service() {
         val nm = getSystemService(NotificationManager::class.java)
         active.drop(1).forEach { nm.notify(it.notifId, buildNotif(it)) }
     }
-
-    /** 流体云胶囊的「取消」动作：取消当前焦点下载任务 */
-    private fun fluidCancelIntent(task: TaskCtx): PendingIntent =
-        PendingIntent.getBroadcast(
-            this,
-            task.notifId,
-            Intent(ACTION_CANCEL).apply {
-                setPackage(packageName)
-                putExtra(EXTRA_TASK_ID, task.id)
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
 
     /** 新任务启动时，为其余在途任务补发通知（各自独立小窗口） */
     private fun postOtherNotifs(exclude: TaskCtx) {
@@ -458,20 +443,6 @@ class DownloadService : Service() {
             speed = if (state == 1) task.speed else "",
             status = status,
         )
-        // 流体云 / 系统级灵动岛：下载中驱动系统媒体通知上岛（焦点取第一个活跃任务）
-        if (state == 1) {
-            val focus = tasks.values.firstOrNull { it.notifActive && !it.done }
-            if (focus != null) {
-                FluidCloud.request(
-                    FluidCloud.Kind.DOWNLOAD, "下载中", focus.fileName,
-                    if (focus.speed.isNotBlank()) "$progress% · ${focus.speed}" else "$progress%",
-                    progress, fluidCancelIntent(focus),
-                )
-            }
-        } else if (state == 2 || state == 3 || state == 4) {
-            // 完成 / 取消 / 失败：无活跃任务时收起流体云胶囊
-            if (tasks.values.none { it.notifActive && !it.done }) FluidCloud.clear()
-        }
         val intent = Intent(BROADCAST_UPDATE).apply {
             putExtra(EXTRA_STATE, state)
             putExtra(EXTRA_PROGRESS, progress)
@@ -539,22 +510,27 @@ class DownloadService : Service() {
 
     private fun buildNotif(task: TaskCtx): Notification {
         val paused = task.paused.get() && !task.done
+        val title = when {
+            task.done && task.progress >= 100 -> "下载完成"
+            paused -> "已暂停"
+            else -> "下载中"
+        }
+        val text = when {
+            paused -> "已暂停 · ${task.progress}%"
+            task.speed.isNotBlank() -> "${task.progress}% · ${task.speed}"
+            else -> "${task.progress}%"
+        }
         val builder = Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("${task.label} · ${task.fileName.takeLast(38)}")
-            .setContentText(
-                when {
-                    paused -> "已暂停 · ${task.progress}%"
-                    task.speed.isNotBlank() -> "${task.progress}% · ${task.speed}"
-                    else -> "${task.progress}%"
-                },
-            )
+            .setContentTitle(title)
+            .setContentText(text)
+            .setSubText(task.fileName.takeLast(48))
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setCategory(Notification.CATEGORY_PROGRESS)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setShowWhen(false)
             .setOnlyAlertOnce(true)
             .setOngoing(!task.done)
-            // 每任务独立小窗口：下载中 → [暂停][取消]；已暂停 → [继续][取消]
+            // 进度卡片操作：下载中 → [暂停][取消]；已暂停 → [继续][取消]
             .addAction(
                 if (paused) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause,
                 if (paused) "继续" else "暂停",
@@ -575,7 +551,16 @@ class DownloadService : Service() {
         } else {
             builder.setProgress(100, 0, false)
         }
-        if (task.done) builder.setAutoCancel(true)
+        if (task.done) {
+            builder.setAutoCancel(true)
+        } else {
+            // 进行中：优先 Android 16 实时动态（进度卡，非音乐）；老系统走媒体会话兜底（同样上岛）
+            if (!com.mcai.ubuntudsu.core.ProgressNotification.applyLiveUpdate(builder, task.progress)) {
+                com.mcai.ubuntudsu.core.ProgressNotification.applyMediaFallback(
+                    this, builder, title, text, 2,
+                )
+            }
+        }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         }
