@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import com.mcai.ubuntudsu.R
 import com.mcai.ubuntudsu.core.Aria2c
 import com.mcai.ubuntudsu.core.DownloadNode
 import com.mcai.ubuntudsu.core.JavaDownloader
@@ -524,7 +525,10 @@ class DownloadService : Service() {
             .setContentTitle(title)
             .setContentText(text)
             .setSubText(task.fileName.takeLast(48))
-            .setSmallIcon(android.R.drawable.stat_sys_download)
+            // 小图标统一用 APP 桌面图标（白色剪影版），流体云胶囊左侧显示的就是它
+            .setSmallIcon(R.drawable.ic_notify_app)
+            // 大字图标用彩色桌面图标，通知列表/展开卡片里显示为 APP 图标
+            .setLargeIcon(android.graphics.drawable.Icon.createWithResource(this, applicationInfo.icon))
             .setCategory(Notification.CATEGORY_PROGRESS)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setShowWhen(false)
@@ -547,7 +551,6 @@ class DownloadService : Service() {
         } else if (task.progress >= 100 && task.done) {
             builder.setProgress(0, 0, false)
             builder.setContentText("下载完成")
-            builder.setSmallIcon(android.R.drawable.stat_sys_download_done)
         } else {
             builder.setProgress(100, 0, false)
         }

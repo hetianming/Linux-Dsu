@@ -15,6 +15,7 @@ import android.os.SharedMemory
 import com.mcai.ubuntudsu.IPrivilegedService
 import com.mcai.ubuntudsu.MainActivity
 import com.mcai.ubuntudsu.PrivilegedRootService
+import com.mcai.ubuntudsu.R
 import com.mcai.ubuntudsu.core.DsuInstallState
 import com.mcai.ubuntudsu.core.DsuManager
 import com.mcai.ubuntudsu.core.RootShell
@@ -282,11 +283,8 @@ class DsuInstallService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val b = Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(
-                if (ongoing) android.R.drawable.stat_sys_download
-                else if (success) android.R.drawable.stat_sys_download_done
-                else android.R.drawable.stat_notify_error,
-            )
+            .setSmallIcon(R.drawable.ic_notify_app)
+            .setLargeIcon(android.graphics.drawable.Icon.createWithResource(this, applicationInfo.icon))
             .setContentTitle("GSI 安装")
             .setContentText("$text · ${percent}%")
             .setSubText(fileName.ifBlank { null })

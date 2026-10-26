@@ -10,6 +10,7 @@ import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.Build
+import com.mcai.ubuntudsu.R
 
 /**
  * 统一的进度通知构建器。
@@ -170,11 +171,9 @@ object ProgressNotification {
         success: Boolean = true,
     ): Notification {
         val builder = Notification.Builder(context, channelId)
-            .setSmallIcon(
-                if (ongoing) android.R.drawable.stat_sys_download
-                else if (success) android.R.drawable.stat_sys_download_done
-                else android.R.drawable.stat_notify_error,
-            )
+            // 统一用 APP 桌面图标（白色剪影），流体云/灵动岛胶囊左侧显示的就是它
+            .setSmallIcon(R.drawable.ic_notify_app)
+            .setLargeIcon(Icon.createWithResource(context, context.applicationInfo.icon))
             .setContentTitle(title)
             .setContentText(text)
             .setCategory(Notification.CATEGORY_PROGRESS)
