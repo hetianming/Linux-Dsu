@@ -52,16 +52,51 @@ object ProgressNotification {
     fun applyLiveUpdate(builder: Notification.Builder, percent: Int?): Boolean {
         if (Build.VERSION.SDK_INT < 36) return false
         val p = percent?.coerceIn(0, 100)
-        builder.setStyle(
-            Notification.ProgressStyle()
-                .setStyledByProgress(true)
-                .setProgress(100)
-                .setProgressIndeterminate(p == null),
-        )
+        val style = Notification.ProgressStyle()
+            .setStyledByProgress(true)
+            .setProgress(100)
+            .setProgressIndeterminate(p == null)
+        // 显式写入当前百分比：ColorOS 16 上依赖「默认继承通知 progress」不可靠，
+        // 进度条会停在原地不动（真机 1.8.42 实测）
+        if (p != null) runCatching { style.setProgress(p) }
+        builder.setStyle(style)
         // 胶囊内文字：系统最多展示 7 个字符，超出只留图标
         builder.setShortCriticalText(if (p == null) "" else "$p%")
         builder.extras?.putBoolean(EXTRA_REQUEST_PROMOTED_ONGOING, true)
         return true
+    }
+
+    // ==================== 通道选择 ====================
+
+    // 1.8.44：设置页的「猫脸封面」开关已移除。彩色封面必须走媒体会话通道，
+    // 而 ColorOS 一旦接管媒体会话通知就会渲染成完整音乐播放器控制卡
+    // （上一首/下一首/投播 + 控制中心占位），本项目是工具类应用，不应出现播放器形态。
+    // 因此流体云恒定走实时动态进度卡（小图标剪影 + 百分比），不再提供任何切换入口。
+
+    /**
+     * 进行中任务的通道选择（统一入口，DownloadService / DsuInstallService / build 共用）：
+     * - Android 16+ 走实时动态进度卡（流体云显示图标剪影 + 百分比）；
+     * - 老系统 / 用户关闭实时动态 → 走无封面媒体兜底（不写封面，避免变成播放器卡）。
+     */
+    fun applyOngoingStyle(
+        context: Context,
+        builder: Notification.Builder,
+        title: String,
+        text: String,
+        compactActions: Int,
+        percent: Int?,
+    ) {
+        if (!applyLiveUpdate(builder, percent)) {
+            applyMediaFallback(context, builder, title, text, compactActions)
+        }
+    }
+
+    /**
+     * 通知进度条：所有模式都写真实百分比（系统据此渲染进度胶囊/进度条）。
+     * 注意不要为了「胶囊彩色」去掉进度条 —— 1.8.39 实测那样会整条变成媒体控制卡。
+     */
+    fun applyProgress(context: Context, builder: Notification.Builder, percent: Int?) {
+        builder.setProgress(100, (percent ?: 0).coerceIn(0, 100), percent == null)
     }
 
     // ==================== 媒体会话兜底（Android 15 及以下） ====================
@@ -79,12 +114,11 @@ object ProgressNotification {
     }
 
     /**
-     * 媒体样式兜底：ColorOS 15 / HyperOS 等把「媒体会话通知」渲染为摄像头区域胶囊，
+     * 媒体样式通知：ColorOS / HyperOS 把「媒体会话通知」渲染为摄像头区域胶囊，
      * 这是第三方应用在老系统上唯一的上岛通道（本应用已在真机验证）。
      *
-     * 刻意不写 DURATION / ART 元数据、position 用 UNKNOWN：
-     * 时间轴（00:01/01:40）与音符封面都不会出现，卡片呈现为
-     * 「APP 图标 + 标题 + 进度文本 + 暂停/取消按钮」的进度卡。
+     * 「去音乐化」措施：不写封面、不写 DURATION、position 用 UNKNOWN ——
+     * 时间轴与播放器控件不会出现，胶囊只呈现「APP 图标 + 标题 + 进度文本 + 操作按钮」。
      *
      * @param compactActions 通知上的 action 个数（紧凑行显示前几个）
      */
@@ -102,6 +136,9 @@ object ProgressNotification {
                 .putString(MediaMetadata.METADATA_KEY_ARTIST, text)
                 .build(),
         )
+        // 刻意不写 DURATION、position 用 UNKNOWN：1.8.39 实测写了时长后，
+        // ColorOS 会把通知渲染成完整媒体控制卡（上一首/下一首/投播 + 控制中心占位），
+        // 还有胶囊展开白板 bug —— 进度只通过通知文本表达。
         s.setPlaybackState(
             PlaybackState.Builder()
                 .setActions(
@@ -120,7 +157,8 @@ object ProgressNotification {
             style.setShowActionsInCompactView(*IntArray(compactActions) { it })
         }
         builder.setStyle(style)
-        // 封面用 APP 图标（不设则系统默认画音符，被误认成音乐播放器）
+        // 不写封面元数据、保持「进度」类别：一旦写成媒体/传输类别，
+        // ColorOS 会把整条通知渲染成完整音乐播放器控制卡（1.8.39/1.8.40 真机实测）
         runCatching {
             builder.setLargeIcon(Icon.createWithResource(context, context.applicationInfo.icon))
         }
@@ -181,7 +219,7 @@ object ProgressNotification {
             .setShowWhen(false)
             .setOnlyAlertOnce(true)
             .setOngoing(ongoing)
-            .setProgress(100, (percent ?: 0).coerceIn(0, 100), percent == null)
+        applyProgress(context, builder, percent)
 
         if (contentIntent != null) builder.setContentIntent(contentIntent)
         if (!ongoing) builder.setAutoCancel(true)
@@ -190,11 +228,9 @@ object ProgressNotification {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         }
-        // 进行中的任务才申请提升为实时动态；不支持时走媒体会话兜底（同样由系统上岛）
+        // 进行中的任务：通道选择统一走 [applyOngoingStyle]
         if (ongoing) {
-            if (!applyLiveUpdate(builder, percent)) {
-                applyMediaFallback(context, builder, title, text, 0)
-            }
+            applyOngoingStyle(context, builder, title, text, 0, percent)
         }
         return builder.build()
     }

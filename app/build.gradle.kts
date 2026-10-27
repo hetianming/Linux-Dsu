@@ -44,8 +44,8 @@ android {
         applicationId = "com.mcai.ubuntudsu"
         minSdk = 26
         targetSdk = 28
-        versionCode = 85
-        versionName = "1.8.36"
+        versionCode = 99
+        versionName = "1.8.50"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
@@ -134,4 +134,7 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.connectbot:sshlib:2.2.36")
+
+    // 在线提取：bzip2 解压（payload 的 REPLACE_BZ 块）
+    implementation("org.apache.commons:commons-compress:1.26.2")
 }

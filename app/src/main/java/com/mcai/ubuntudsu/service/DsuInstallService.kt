@@ -96,6 +96,7 @@ class DsuInstallService : Service() {
         // 标准进度通知（CATEGORY_PROGRESS）：ColorOS 流体云接管为顶部进度卡片，
         // 卡片保留「取消」按钮。不使用 MediaStyle，避免被系统识别成音乐播放。
         startForeground(NOTE_ID, buildNotif(0, "准备安装…", ongoing = true))
+        heartbeat.postDelayed(heartbeatTask, 2_000)
         DsuInstallState.publish(DsuInstallState.Phase.RUNNING, 0, "准备安装…", fileName)
 
         RootService.bind(Intent(this, PrivilegedRootService::class.java), connection)
@@ -236,6 +237,10 @@ class DsuInstallService : Service() {
         }
 
     private fun progress(percent: Int, message: String) {
+        lastDelta = (percent - lastPercent).coerceAtLeast(0)
+        lastPercent = percent
+        lastMessage = message
+        lastPercentAt = android.os.SystemClock.elapsedRealtime()
         DsuInstallState.publish(DsuInstallState.Phase.RUNNING, percent, message, fileName)
         runCatching {
             getSystemService(NotificationManager::class.java)
@@ -243,9 +248,42 @@ class DsuInstallService : Service() {
         }
     }
 
+    // ==================== 通知心跳（进度条实时感） ====================
+
+    private var lastPercent = 0
+    private var lastMessage = ""
+    private var lastPercentAt = 0L
+    private var lastDelta = 0
+
+    private val heartbeat = android.os.Handler(android.os.Looper.getMainLooper())
+    private val heartbeatTask = object : Runnable {
+        override fun run() {
+            if (busy.get() && !cancelled.get()) {
+                runCatching {
+                    getSystemService(NotificationManager::class.java)
+                        .notify(NOTE_ID, buildNotif(smoothedPercent(), lastMessage, ongoing = true))
+                }
+                heartbeat.postDelayed(this, 2_000)
+            }
+        }
+    }
+
+    /**
+     * 底层脚本（dd 等）输出粒度粗，两次回调间可能几十秒不动。
+     * 按「上次回调的增量」做时间外推，最多补 3 个百分点，封顶 99；
+     * 真实回调到达即校准，保证进度条平滑前进。
+     */
+    private fun smoothedPercent(): Int {
+        if (lastPercentAt == 0L || lastDelta <= 0) return lastPercent
+        val elapsed = android.os.SystemClock.elapsedRealtime() - lastPercentAt
+        val boost = (elapsed / 10_000 * lastDelta.toLong()).coerceAtMost(3L) // 每 10 秒外推 1 点，最多 3 点
+        return (lastPercent + boost.toInt()).coerceIn(lastPercent, 99)
+    }
+
     /** 收尾：保留完成通知（点击可回到 APP），释放前台状态 */
     private fun finish(percent: Int, text: String, success: Boolean) {
         busy.set(false)
+        heartbeat.removeCallbacks(heartbeatTask)
         runCatching { RootService.unbind(connection) }
         runCatching {
             getSystemService(NotificationManager::class.java)
@@ -287,7 +325,6 @@ class DsuInstallService : Service() {
             .setLargeIcon(android.graphics.drawable.Icon.createWithResource(this, applicationInfo.icon))
             .setContentTitle("GSI 安装")
             .setContentText("$text · ${percent}%")
-            .setSubText(fileName.ifBlank { null })
             .setContentIntent(content)
             .setCategory(Notification.CATEGORY_PROGRESS)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
@@ -297,12 +334,10 @@ class DsuInstallService : Service() {
             .setProgress(100, percent.coerceIn(0, 100), false)
         if (ongoing) {
             b.addAction(android.R.drawable.ic_menu_close_clear_cancel, "取消", cancelIntent)
-            // 优先 Android 16 实时动态（进度胶囊）；老系统走媒体会话兜底（同样由系统上岛）
-            if (!com.mcai.ubuntudsu.core.ProgressNotification.applyLiveUpdate(b, percent)) {
-                com.mcai.ubuntudsu.core.ProgressNotification.applyMediaFallback(
-                    this, b, "GSI 安装", "$text · ${percent}%", 1,
-                )
-            }
+            // Android 16 实时动态（流体云进度卡）/ 老系统媒体兜底
+            com.mcai.ubuntudsu.core.ProgressNotification.applyOngoingStyle(
+                this, b, "GSI 安装", "$text · ${percent}%", 1, percent,
+            )
         } else {
             b.setAutoCancel(true)
             b.setProgress(0, 0, false)

@@ -524,7 +524,6 @@ class DownloadService : Service() {
         val builder = Notification.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(text)
-            .setSubText(task.fileName.takeLast(48))
             // 小图标统一用 APP 桌面图标（白色剪影版），流体云胶囊左侧显示的就是它
             .setSmallIcon(R.drawable.ic_notify_app)
             // 大字图标用彩色桌面图标，通知列表/展开卡片里显示为 APP 图标
@@ -557,12 +556,10 @@ class DownloadService : Service() {
         if (task.done) {
             builder.setAutoCancel(true)
         } else {
-            // 进行中：优先 Android 16 实时动态（进度卡，非音乐）；老系统走媒体会话兜底（同样上岛）
-            if (!com.mcai.ubuntudsu.core.ProgressNotification.applyLiveUpdate(builder, task.progress)) {
-                com.mcai.ubuntudsu.core.ProgressNotification.applyMediaFallback(
-                    this, builder, title, text, 2,
-                )
-            }
+            // 进行中：Android 16 实时动态（流体云进度卡）/ 老系统媒体兜底
+            com.mcai.ubuntudsu.core.ProgressNotification.applyOngoingStyle(
+                this, builder, title, text, 2, task.progress,
+            )
         }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)

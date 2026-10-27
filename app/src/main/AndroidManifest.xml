@@ -76,6 +76,9 @@
         <activity android:name=".UsbBootActivity"
             android:exported="false"
             android:theme="@style/Theme.App" />
+        <activity android:name=".PayloadOnlineActivity"
+            android:exported="false"
+            android:theme="@style/Theme.App" />
         <activity android:name=".WorkTimeActivity"
             android:exported="false"
             android:theme="@style/Theme.App" />

@@ -27,6 +27,7 @@ import com.mcai.ubuntudsu.R
 import com.mcai.ubuntudsu.core.RomDevice
 import com.mcai.ubuntudsu.core.RomVersion
 import com.mcai.ubuntudsu.core.RomApi
+import com.mcai.ubuntudsu.core.RomCache
 import com.mcai.ubuntudsu.core.YuleRomEntry
 import com.mcai.ubuntudsu.core.DownloadNode
 import com.mcai.ubuntudsu.core.JavaDownloader
@@ -69,6 +70,9 @@ class RomPage(
     /** 单选设备：null 表示显示当前品牌下全部设备 */
     private var selectedDevice: String? = null
     private var isLoading = false
+    /** 多品牌列表分帧渲染序号：切品牌/换数据时作废旧批次 */
+    private var multiRenderSeq = 0
+    private var multiBrandRendered = false
 
     private var downloadReceiver: BroadcastReceiver? = null
 
@@ -396,7 +400,15 @@ class RomPage(
             multiBrandScroll.visibility = View.VISIBLE
             brandRow.visibility = View.VISIBLE
             deviceRow.visibility = View.VISIBLE
-            if (allYuleEntries.isEmpty()) loadMultiBrandFirmware()
+            val query = searchInput.text?.toString() ?: ""
+            when {
+                allYuleEntries.isEmpty() -> loadMultiBrandFirmware()
+                query.isNotBlank() -> filterMultiBrand(query)
+                !multiBrandRendered -> {
+                    renderMultiBrandList(filteredYuleEntries)
+                    statusText.text = "共 ${allYuleEntries.size} 个固件"
+                }
+            }
             updateBrandChipStyles()
         }
         updateTabStyles()
@@ -420,19 +432,48 @@ class RomPage(
         if (allYuleEntries.isNotEmpty()) return
         statusText.text = if (activeTab == 1) "正在加载欧加固件..." else statusText.text
         scope.launch {
-            val result = RomApi.fetchYuleRomList()
-            allYuleEntries = result.entries
-            filteredYuleEntries = result.entries
-            activity.runOnUiThread {
-                if (activity.isFinishing) return@runOnUiThread
-                if (activeTab == 1) {
-                    renderMultiBrandList(filteredYuleEntries, result.error)
-                    statusText.text = when {
-                        result.entries.isNotEmpty() -> "共 ${result.entries.size} 个固件"
-                        result.error != null -> "加载失败：${result.error}"
-                        else -> "未获取到固件数据"
+            // 1) 缓存先上屏（1600+ 条，读缓存 + 解析约 100ms，且分帧渲染）
+            val cached = RomCache.yule(activity)
+            val fresh = cached != null && RomCache.yuleFresh(activity)
+            if (cached != null) {
+                allYuleEntries = cached
+                filteredYuleEntries = cached
+                withContext(Dispatchers.Main) {
+                    if (!activity.isFinishing && activeTab == 1) {
+                        multiBrandRendered = false
+                        renderMultiBrandList(filteredYuleEntries)
+                        statusText.text = "共 ${cached.size} 个固件"
+                        updateBrandChipStyles()
                     }
-                    updateBrandChipStyles()
+                }
+            }
+            if (fresh) return@launch
+
+            // 2) 后台刷新
+            val pair: Pair<String?, String?> = runCatching { RomApi.fetchYuleBody() }
+                .getOrElse { null to "网络异常" }
+            val body = pair.first
+            val error = pair.second
+            if (body != null) {
+                val list = RomApi.parseYuleBody(body)
+                if (list.isNotEmpty()) {
+                    RomCache.putYule(activity, body, list)
+                    allYuleEntries = list
+                    filteredYuleEntries = list
+                    withContext(Dispatchers.Main) {
+                        if (!activity.isFinishing && activeTab == 1) {
+                            multiBrandRendered = false
+                            renderMultiBrandList(filteredYuleEntries)
+                            statusText.text = "共 ${list.size} 个固件"
+                            updateBrandChipStyles()
+                        }
+                    }
+                }
+            } else if (cached == null) {
+                withContext(Dispatchers.Main) {
+                    if (activity.isFinishing || activeTab != 1) return@withContext
+                    renderMultiBrandList(emptyList(), error)
+                    statusText.text = "加载失败：$error"
                 }
             }
         }
@@ -528,6 +569,8 @@ class RomPage(
     private fun renderMultiBrandList(entries: List<YuleRomEntry>, errorHint: String? = null) {
         val d = activity.resources.displayMetrics.density
         val container = multiBrandScroll.getChildAt(0) as LinearLayout
+        val seq = ++multiRenderSeq
+        multiBrandRendered = true
         container.removeAllViews()
         if (entries.isEmpty()) {
             container.addView(TextView(activity).apply {
@@ -542,8 +585,23 @@ class RomPage(
         // 按版本号数字段从新到旧排序（同设备下高版本在上）；
         // buildTimestamp 多为空，不能用时间戳，改用 version 数字段比较
         val sorted = entries.sortedWith(buildVersionComparator())
-        for (entry in sorted) {
-            container.addView(buildMultiBrandItem(entry))
+        // 1600+ 条一次性建 View 会卡死主线程，这里每帧补一批，首屏立刻可用
+        appendMultiBrandChunk(container, sorted, 0, seq)
+    }
+
+    private fun appendMultiBrandChunk(
+        container: LinearLayout,
+        sorted: List<YuleRomEntry>,
+        start: Int,
+        seq: Int,
+    ) {
+        if (seq != multiRenderSeq || start >= sorted.size) return
+        val end = minOf(start + 40, sorted.size)
+        for (i in start until end) {
+            container.addView(buildMultiBrandItem(sorted[i]))
+        }
+        if (end < sorted.size) {
+            container.post { appendMultiBrandChunk(container, sorted, end, seq) }
         }
     }
 
@@ -655,6 +713,25 @@ class RomPage(
             setOnClickListener {
                 Haptics.perform(this)
                 resolveAndDownload(entry)
+            }
+        })
+        btnRow.addView(TextView(activity).apply {
+            text = "在线提取"
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(Ui.buttonText(activity))
+            background = Ui.glassButton(activity, Ui.buttonPrimary(activity))
+            Ui.pressAnimation(this)
+            setPadding(Ui.dp(12, d), Ui.dp(6, d), Ui.dp(12, d), Ui.dp(6, d))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { marginStart = Ui.dp(6, d) }
+            setOnClickListener {
+                Haptics.perform(this)
+                startOnlineExtract(entry.device, entry.version, null) {
+                    com.mcai.ubuntudsu.core.RomApi.resolveYuleDownload(entry)?.url
+                }
             }
         })
         btnRow.addView(TextView(activity).apply {
@@ -876,7 +953,7 @@ class RomPage(
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
                 activity.startActivity(intent)
-                Toast.makeText(activity, "请授予「所有文件访问权限」以保存到 /sdcard/Downloads", Toast.LENGTH_LONG).show()
+                Toast.makeText(activity, "请授予「所有文件访问权限」以便保存固件与镜像", Toast.LENGTH_LONG).show()
             }
         } else {
             activity.requestPermissions(
@@ -894,31 +971,60 @@ class RomPage(
     private fun loadDevices() {
         if (isLoading) return
         isLoading = true
-        statusText.text = "正在加载设备列表..."
 
         scope.launch {
-            try {
-                val devices = RomApi.fetchDeviceList()
-                allDevices = devices
-                filteredDevices = devices
-
-                activity.runOnUiThread {
-                    if (activity.isFinishing) return@runOnUiThread
-                    renderDeviceList(devices)
-                    statusText.text = "共 ${devices.size} 个设备"
+            // 1) 缓存（或内置列表）先上屏：0 等待
+            val cached = RomCache.devices(activity)
+            val fresh = cached != null && RomCache.devicesFresh(activity)
+            if (cached != null) {
+                allDevices = cached
+                withContext(Dispatchers.Main) {
+                    if (activity.isFinishing) return@withContext
+                    if (searchInput.text.isNullOrBlank()) {
+                        filteredDevices = cached
+                        renderDeviceList(cached)
+                        if (activeTab == 0) statusText.text = "共 ${cached.size} 个设备"
+                    }
                 }
-            } catch (e: Exception) {
-                val builtIn = RomApi.fetchDeviceList()
+            } else {
+                val builtIn = RomApi.builtInDevices()
                 allDevices = builtIn
-                filteredDevices = builtIn
-                activity.runOnUiThread {
-                    if (activity.isFinishing) return@runOnUiThread
-                    statusText.text = "加载失败，使用内置列表"
-                    renderDeviceList(builtIn)
+                withContext(Dispatchers.Main) {
+                    if (activity.isFinishing) return@withContext
+                    if (searchInput.text.isNullOrBlank()) {
+                        filteredDevices = builtIn
+                        renderDeviceList(builtIn)
+                        if (activeTab == 0) statusText.text = "共 ${builtIn.size} 个设备"
+                    }
                 }
-            } finally {
-                isLoading = false
             }
+
+            // 2) 缓存新鲜则不再请求，直接返回
+            if (fresh) {
+                isLoading = false
+                return@launch
+            }
+
+            // 3) 后台刷新（CDN 优先，raw 兜底）
+            val body = runCatching { RomApi.fetchDevicesBody() }.getOrNull()
+            if (body != null) {
+                val devices = RomApi.parseDevicesBody(body)
+                if (devices.isNotEmpty()) {
+                    RomCache.putDevices(activity, body, devices)
+                    allDevices = devices
+                    withContext(Dispatchers.Main) {
+                        if (activity.isFinishing) return@withContext
+                        if (searchInput.text.isNullOrBlank()) {
+                            filteredDevices = devices
+                            renderDeviceList(devices)
+                            if (activeTab == 0) statusText.text = "共 ${devices.size} 个设备"
+                        } else {
+                            filterDevices(searchInput.text.toString())
+                        }
+                    }
+                }
+            }
+            isLoading = false
         }
     }
 
@@ -1118,6 +1224,16 @@ class RomPage(
     }
 
     private fun queryDeviceVersions(device: RomDevice) {
+        // 命中缓存：立刻弹出卡片，后台静默续期（下次点击就是最新）
+        val cached = RomCache.versions(activity, device.codename)
+        if (cached != null) {
+            showVersionList(device, cached)
+            if (!RomCache.versionsFresh(activity, device.codename)) {
+                scope.launch { refreshVersionsQuietly(device) }
+            }
+            return
+        }
+
         val loading = AlertDialog.Builder(activity)
             .setTitle("查询中")
             .setMessage("正在查询 ${device.name} 的固件版本...")
@@ -1126,7 +1242,7 @@ class RomPage(
 
         scope.launch {
             val versions = try {
-                RomApi.fetchDeviceVersions(device.codename)
+                fetchAndCacheVersions(device)
             } catch (e: Exception) {
                 emptyList()
             }
@@ -1146,6 +1262,19 @@ class RomPage(
                 }
             }
         }
+    }
+
+    /** 拉取该设备版本列表并写入缓存 */
+    private suspend fun fetchAndCacheVersions(device: RomDevice): List<RomVersion> {
+        val json = RomApi.fetchDeviceVersionsJson(device.codename) ?: return emptyList()
+        val versions = RomApi.parseVersionsBody(json)
+        if (versions.isNotEmpty()) RomCache.putVersions(activity, device.codename, json, versions)
+        return versions
+    }
+
+    /** 后台静默续期：只更新缓存，不打扰当前界面 */
+    private suspend fun refreshVersionsQuietly(device: RomDevice) {
+        runCatching { fetchAndCacheVersions(device) }
     }
 
     private fun showVersionList(device: RomDevice, versions: List<RomVersion>) {
@@ -1260,6 +1389,12 @@ class RomPage(
         if (!version.recoveryFile.isNullOrBlank()) {
             btnRow.addView(buildDownloadBtn("Recovery 包", version.recoveryFile, version.version, device.name))
         }
+        // 卡刷包（Recovery 包）：在线提取直接复用该包的官方直链
+        if (!version.recoveryFile.isNullOrBlank()) {
+            btnRow.addView(buildExtractBtn(version.recoveryFile, version.version, device.name).apply {
+                (layoutParams as? LinearLayout.LayoutParams)?.marginStart = Ui.dp(8, d)
+            })
+        }
         if (!version.fastbootFile.isNullOrBlank()) {
             btnRow.addView(buildDownloadBtn("Fastboot 包", version.fastbootFile, version.version, device.name).apply {
                 (layoutParams as? LinearLayout.LayoutParams)?.marginStart = Ui.dp(8, d)
@@ -1285,6 +1420,59 @@ class RomPage(
             setOnClickListener {
                 Haptics.perform(this)
                 showDownloadConfigDialog(label, filename, version, deviceName)
+            }
+        }
+    }
+
+    /** 「在线提取」按钮（小米卡刷包）：解析直链后进入在线提取页 */
+    private fun buildExtractBtn(filename: String, version: String, deviceName: String): View {
+        val d = activity.resources.displayMetrics.density
+        return TextView(activity).apply {
+            text = "在线提取"
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setTextColor(Ui.buttonText(activity))
+            background = Ui.glassButton(activity, Ui.buttonPrimary(activity))
+            Ui.pressAnimation(this)
+            setPadding(Ui.dp(10, d), Ui.dp(5, d), Ui.dp(10, d), Ui.dp(5, d))
+            setOnClickListener {
+                Haptics.perform(this)
+                val display = if (filename.endsWith(".zip", true) || filename.endsWith(".tgz", true)) filename else "$filename.zip"
+                startOnlineExtract(deviceName, version, display) {
+                    com.mcai.ubuntudsu.core.RomApi.getDownloadUrl(
+                        display, version, com.mcai.ubuntudsu.core.DownloadNode.ALIYUN,
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * 进入「在线提取」页：把卡刷包的官方直链交给内置 libpayload_extract.so 边下边解，
+     * 由用户在下一页勾选分区后提取 img。
+     */
+    private fun startOnlineExtract(device: String, version: String, filename: String?, resolveUrl: suspend () -> String?) {
+        val loading = AlertDialog.Builder(activity)
+            .setTitle("正在获取卡刷包链接")
+            .setMessage("正在获取 $device 的下载直链…")
+            .setCancelable(false)
+            .show()
+        scope.launch {
+            val url = runCatching { resolveUrl() }.getOrNull()
+            val name = filename ?: com.mcai.ubuntudsu.core.JavaDownloader.fileNameFromUrl(url ?: "")
+            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                runCatching { loading.dismiss() }
+                if (activity.isFinishing) return@withContext
+                if (url.isNullOrBlank() || name.isBlank()) {
+                    Toast.makeText(activity, "获取卡刷包直链失败", Toast.LENGTH_SHORT).show()
+                    return@withContext
+                }
+                activity.startActivity(Intent(activity, com.mcai.ubuntudsu.PayloadOnlineActivity::class.java).apply {
+                    putExtra(com.mcai.ubuntudsu.PayloadOnlineActivity.EXTRA_TITLE, "$device · $version")
+                    putExtra(com.mcai.ubuntudsu.PayloadOnlineActivity.EXTRA_DEVICE, device)
+                    putExtra(com.mcai.ubuntudsu.PayloadOnlineActivity.EXTRA_FILENAME, name)
+                    putExtra(com.mcai.ubuntudsu.PayloadOnlineActivity.EXTRA_URL, url)
+                })
             }
         }
     }

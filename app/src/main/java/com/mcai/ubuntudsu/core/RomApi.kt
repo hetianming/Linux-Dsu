@@ -1,10 +1,10 @@
 package com.mcai.ubuntudsu.core
 
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -103,6 +103,9 @@ object RomApi {
 
     // 设备列表数据源
     private const val DEVICES_JSON_URL = "https://raw.githubusercontent.com/HegeKen/HyperData/main/devices.json"
+    // jsDelivr CDN 镜像：国内直连通常 1~2 秒，GitHub raw 常被墙（实测 19 秒 / 直接超时）
+    private const val DEVICES_JSON_CDN_URL = "https://cdn.jsdelivr.net/gh/HegeKen/HyperData@main/devices.json"
+    private const val DEVICES_JSON_FASTLY_URL = "https://fastly.jsdelivr.net/gh/HegeKen/HyperData@main/devices.json"
 
     // 欧加固件数据源（OPPO / OnePlus / Realme）
     private const val YULE_BASE_URL = "https://rom.yule.ink"
@@ -114,16 +117,43 @@ object RomApi {
         "Mozilla/5.0 (Linux; Android 15; PMA120) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
 
     /**
-     * 获取设备列表
+     * 获取设备列表（优先本地缓存由 RomCache 负责，这里只处理网络）
      */
     suspend fun fetchDeviceList(): List<RomDevice> = withContext(Dispatchers.IO) {
-        try {
-            val json = httpGet(DEVICES_JSON_URL, timeoutMs = 15000)
-                ?: return@withContext getBuiltInDevices()
-            parseDevicesJson(json)
-        } catch (e: Exception) {
-            getBuiltInDevices()
+        val body = fetchDevicesBody()
+        if (body != null) parseDevicesJson(body) else builtInDevices()
+    }
+
+    /**
+     * 拉取设备列表原始 JSON：先 CDN 镜像（国内快），再 GitHub raw 兜底。
+     * 不再长时间等待 raw 的 15 秒超时。
+     */
+    internal suspend fun fetchDevicesBody(): String? = withContext(Dispatchers.IO) {
+        val sources = listOf(
+            DEVICES_JSON_CDN_URL to 8000,
+            DEVICES_JSON_FASTLY_URL to 8000,
+            DEVICES_JSON_URL to 6000,
+        )
+        for ((url, timeout) in sources) {
+            val body = httpGet(url, timeoutMs = timeout)
+            if (!body.isNullOrBlank() && body.trimStart().startsWith("{")) {
+                val parsed = parseDevicesJson(body)
+                if (parsed.isNotEmpty() && parsed.size > 50) return@withContext body
+            }
         }
+        null
+    }
+
+    /** 内置设备列表（离线兜底，进入页面时立即渲染用） */
+    fun builtInDevices(): List<RomDevice> = getBuiltInDevices()
+
+    internal fun parseDevicesBody(json: String): List<RomDevice> = parseDevicesJson(json)
+    internal fun parseYuleBody(json: String): List<YuleRomEntry> = parseYuleRomList(json)
+
+    internal fun parseVersionsBody(json: String): List<RomVersion> = try {
+        parseVersionsFromBranches(JSONObject(json))
+    } catch (_: Exception) {
+        emptyList()
     }
 
     /**
@@ -132,28 +162,41 @@ object RomApi {
      * 返回结构：{ releases: [{id, device, version, region, size, md5, build_timestamp, source_url}], cached_at }
      */
     suspend fun fetchYuleRomList(): YuleRomResult = withContext(Dispatchers.IO) {
+        val (body, error) = fetchYuleBody()
+        if (body == null) YuleRomResult(emptyList(), error)
+        else YuleRomResult(parseYuleRomList(body))
+    }
+
+    /** 拉取欧加目录原始 JSON（1.1MB / 1600+ 条），并保留错误信息供界面提示 */
+    internal suspend fun fetchYuleBody(): Pair<String?, String?> = withContext(Dispatchers.IO) {
         try {
             val conn = URL(YULE_CATALOG_URL).openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
-            conn.connectTimeout = 20000
+            conn.connectTimeout = 15000
             conn.readTimeout = 20000
             conn.setRequestProperty("User-Agent", YULE_USER_AGENT)
             conn.setRequestProperty("Accept", "application/json, text/plain, */*")
+            conn.setRequestProperty("Accept-Encoding", "gzip")
             conn.setRequestProperty("Referer", "https://rom.yule.ink/")
 
             val code = conn.responseCode
             if (code !in 200..299) {
                 conn.disconnect()
-                return@withContext YuleRomResult(emptyList(), "HTTP $code（可能被站点防护拦截）")
+                return@withContext null to "HTTP $code（可能被站点防护拦截）"
             }
-            val body = conn.inputStream.bufferedReader().use { it.readText() }
+            // 服务端可能返回 gzip，HttpURLConnection 不会自动解压
+            val raw = conn.inputStream
+            val stream = if (conn.contentEncoding?.contains("gzip", true) == true) {
+                java.util.zip.GZIPInputStream(raw)
+            } else raw
+            val body = stream.bufferedReader().use { it.readText() }
             conn.disconnect()
             if (body.trimStart().startsWith("<")) {
-                return@withContext YuleRomResult(emptyList(), "接口返回HTML（被防护拦截或接口路径变更）")
+                return@withContext null to "接口返回HTML（被防护拦截或接口路径变更）"
             }
-            YuleRomResult(parseYuleRomList(body))
+            body to null
         } catch (e: Exception) {
-            YuleRomResult(emptyList(), "${e.javaClass.simpleName}: ${e.message ?: "网络异常"}")
+            null to "${e.javaClass.simpleName}: ${e.message ?: "网络异常"}"
         }
     }
 
@@ -224,23 +267,38 @@ object RomApi {
     }
 
     /**
-     * 查询设备 ROM 版本（并发请求三个源，取第一个可用的）
+     * 查询设备 ROM 版本（并发请求三个源，**第一个可用就返回**，不再等最慢的 GitHub raw）
      */
-    suspend fun fetchDeviceVersions(codename: String): List<RomVersion> = coroutineScope {
-        val fans = async { queryHyperData(FANS_DEVICE_URL + codename + ".json") }
-        val raw = async { queryHyperData(DEVICE_URL + codename + ".json") }
-        val cdn = async { queryHyperData(DEVICE_CDN_URL + codename + ".json") }
+    suspend fun fetchDeviceVersions(codename: String): List<RomVersion> {
+        val json = fetchDeviceVersionsJson(codename) ?: return emptyList()
+        return parseVersionsBody(json)
+    }
 
-        val results = listOf(fans, raw, cdn).awaitAll()
-        val firstValid = results.firstOrNull { it != null && hasUsableBranches(it) }
-
-        if (firstValid != null) {
-            parseVersionsFromBranches(firstValid)
-        } else {
-            // 三个源都失败了，尝试合并所有结果
-            val merged = mergeResults(results.filterNotNull())
-            parseVersionsFromBranches(merged)
+    /** 返回命中的原始 JSON 文本（便于写入缓存） */
+    internal suspend fun fetchDeviceVersionsJson(codename: String): String? = coroutineScope {
+        val urls = listOf(
+            FANS_DEVICE_URL + codename + ".json",
+            DEVICE_CDN_URL + codename + ".json",
+            DEVICE_URL + codename + ".json",
+        )
+        val channel = Channel<JSONObject?>(urls.size)
+        urls.forEach { url ->
+            launch { channel.send(runCatching { queryHyperData(url) }.getOrNull()) }
         }
+
+        val fallbacks = mutableListOf<JSONObject>()
+        var result: String? = null
+        for (i in 0 until urls.size) {
+            val json = channel.receive() ?: continue
+            if (hasUsableBranches(json)) {
+                result = json.toString()
+                // 命中第一个可用源，取消其余请求，避免被 raw.githubusercontent 拖到 8 秒
+                coroutineContext.cancelChildren()
+                break
+            }
+            fallbacks.add(json)
+        }
+        result ?: if (fallbacks.isEmpty()) null else mergeResults(fallbacks).toString()
     }
 
     /**
