@@ -104,6 +104,8 @@ class SettingsPage(
             "usbboot" to GridItem("U盘启动", R.drawable.icon_usb_boot, "#E65100") { view -> openUsbBoot(view) },
             "worktime" to GridItem("日历工时记", R.drawable.icon_worktime, "#00A98F") { view -> openWorkTime(view) },
             "dnatools" to GridItem("ROM移植", R.drawable.icon_rom_port, "#7C4DFF") { view -> openDnaTools(view) },
+            "phonetv" to GridItem("手机电视", R.drawable.icon_phone_tv, "#8E24AA") { view -> openPhoneTv(view) },
+            "gunyahvm" to GridItem("gunyahVM", R.drawable.icon_gunyah_vm, "#00897B") { view -> openGunyahVm(view) },
         )
         val defaultKeys = keyToItem.keys.toList()
         val orderedKeys: List<String> = if (savedOrder != null) {
@@ -199,6 +201,16 @@ class SettingsPage(
     private fun openDnaTools(iconView: View) {
         // 进入 DNA 工具箱首页（工具链状态 + 工程管理 + 分解/合成/转换/其他 全部功能入口）
         launchScaleUp(iconView, com.mcai.ubuntudsu.DnaToolsActivity::class.java)
+    }
+
+    private fun openPhoneTv(iconView: View) {
+        // 手机电视：IPTV 直播浏览 + 播放（TVBox 订阅 / m3u 源）
+        launchScaleUp(iconView, com.mcai.ubuntudsu.TvActivity::class.java)
+    }
+
+    private fun openGunyahVm(iconView: View) {
+        // gunyahVM：工具链下载 + 启动配置 + 镜像映射 + 内核模块 + 启动/停止（unixnu / iOS 运行）
+        launchScaleUp(iconView, com.mcai.ubuntudsu.GunyahVMActivity::class.java)
     }
 
 

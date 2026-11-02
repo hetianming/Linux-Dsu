@@ -10,6 +10,16 @@
         <item name="android:windowBackground">#F5F6FB</item>
     </style>
 
+    <!--
+        gunyahVM 页面专用：关闭 forceDark。
+        该页面所有颜色都是代码按 Ui.isDark 自行绘制的，若系统深色模式再叠加一次
+        自动反色（forceDark），会出现「浅卡 + 白字」「深字 + 深卡」的错乱，文字直接看不见。
+    -->
+    <style name="Theme.App.Gunyah" parent="Theme.App">
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
+
     <style name="Theme.App.Terminal" parent="Theme.Material3.Dark.NoActionBar">
         <item name="android:forceDarkAllowed">true</item>
         <item name="android:windowBackground">#241F1B</item>

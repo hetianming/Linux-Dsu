@@ -44,8 +44,8 @@ android {
         applicationId = "com.mcai.ubuntudsu"
         minSdk = 26
         targetSdk = 28
-        versionCode = 99
-        versionName = "1.8.50"
+        versionCode = 114
+        versionName = "1.8.65"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
@@ -137,4 +137,9 @@ dependencies {
 
     // 在线提取：bzip2 解压（payload 的 REPLACE_BZ 块）
     implementation("org.apache.commons:commons-compress:1.26.2")
+
+    // 手机电视：IPTV 直播播放（ExoPlayer / media3）
+    implementation("androidx.media3:media3-exoplayer:1.5.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.5.1")
+    implementation("androidx.media3:media3-ui:1.5.1")
 }
