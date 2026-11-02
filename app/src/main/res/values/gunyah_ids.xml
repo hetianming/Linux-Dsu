@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- gunyahVM 主页面入口卡片右侧的状态文本 -->
+    <item name="gunyah_card_state" type="id" />
+</resources>

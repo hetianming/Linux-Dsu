@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- 圆角背景 -->
+    <path
+        android:fillColor="#00897B"
+        android:pathData="M0,12C0,5.4 5.4,0 12,0h24c6.6,0 12,5.4 12,12v24c0,6.6 -5.4,12 -12,12H12C5.4,48 0,42.6 0,36z" />
+    <!-- 芯片引脚 -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M21,11 v4 M27,11 v4 M21,33 v4 M27,33 v4 M11,21 h4 M11,27 h4 M33,21 h4 M33,27 h4" />
+    <!-- 芯片主体 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M16,16h16v16h-16z" />
+    <!-- 内部核心（虚拟化方块） -->
+    <path
+        android:fillColor="#00897B"
+        android:pathData="M20,20h8v8h-8z" />
+    <!-- 核心虚线分割，象征多实例 -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:pathData="M24,20v8 M20,24h8" />
+</vector>
