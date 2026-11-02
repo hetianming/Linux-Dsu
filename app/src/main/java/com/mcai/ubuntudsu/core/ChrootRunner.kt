@@ -127,32 +127,40 @@ exit 0
             ROOTFS=${q(rootfs.absolutePath)}
             HOST_FILES=${q(File(rootfs.absolutePath, "..").absolutePath)}
 
-            cleanup() {
-              /system/bin/toybox umount "${'$'}ROOTFS/dev/pts" 2>/dev/null
-              /system/bin/toybox umount "${'$'}ROOTFS/dev" 2>/dev/null
-              /system/bin/toybox umount "${'$'}ROOTFS/proc" 2>/dev/null
-              /system/bin/toybox umount "${'$'}ROOTFS/sys" 2>/dev/null
-              /system/bin/toybox umount "${'$'}ROOTFS/tmp" 2>/dev/null
-              /system/bin/toybox umount "${'$'}ROOTFS/etc/resolv.conf" 2>/dev/null
-            }
-            trap cleanup EXIT INT TERM HUP
-
             if [ ! -x "${'$'}ROOTFS/bin/bash" ] && [ ! -x "${'$'}ROOTFS/usr/bin/bash" ]; then
               echo "Linux-Dsu: rootfs 中没有可执行的 /bin/bash" >&2
               exit 127
             fi
 
-            # 挂载 /dev /dev/pts /proc /sys /tmp（toybox）
+            # 多终端会话共用同一 rootfs：挂载必须幂等（已挂则跳过），
+            # 否则第二个及后续会话会报 "Device or resource busy" 并以 exit 125 退出。
+            # 绝不 umount：rootfs 内的 /dev /proc /sys 是宿主内核的全局挂载，
+            # 退出时卸载会破坏宿主挂载表导致定屏，也会拆掉其它会话正在用的挂载（与卸载流程一致）。
             /system/bin/toybox mkdir -p "${'$'}ROOTFS/dev/pts" "${'$'}ROOTFS/proc" "${'$'}ROOTFS/sys" "${'$'}ROOTFS/tmp" "${'$'}ROOTFS/root"
-            /system/bin/toybox mount --bind /dev "${'$'}ROOTFS/dev" || { echo "挂载 /dev 失败" >&2; exit 125; }
-            /system/bin/toybox mount --bind /dev/pts "${'$'}ROOTFS/dev/pts" || { echo "挂载 /dev/pts 失败" >&2; exit 125; }
-            /system/bin/toybox mount -t proc proc "${'$'}ROOTFS/proc" || { echo "挂载 /proc 失败" >&2; exit 125; }
-            /system/bin/toybox mount -t sysfs sysfs "${'$'}ROOTFS/sys" || { echo "挂载 /sys 失败" >&2; exit 125; }
-            /system/bin/toybox mount -t tmpfs tmpfs "${'$'}ROOTFS/tmp" || { echo "挂载 /tmp 失败" >&2; exit 125; }
-            # resolv.conf：bind host 的，缺失则写国内 DNS
-            /system/bin/toybox rm -f "${'$'}ROOTFS/etc/resolv.conf"
-            /system/bin/toybox touch "${'$'}ROOTFS/etc/resolv.conf"
-            /system/bin/toybox mount --bind /etc/resolv.conf "${'$'}ROOTFS/etc/resolv.conf" 2>/dev/null || true
+
+            is_mounted() {
+              /system/bin/toybox grep -q " ${'$'}1 " /proc/mounts 2>/dev/null
+            }
+            mount_if_needed() {
+              local tgt="${'$'}1"; shift
+              is_mounted "${'$'}tgt" && return 0
+              /system/bin/toybox mount "${'$'}@" "${'$'}tgt" 2>/dev/null && return 0
+              # 并发兜底：可能已被其它会话抢先挂上
+              is_mounted "${'$'}tgt"
+            }
+
+            # 挂载 /dev /dev/pts /proc /sys /tmp（toybox，幂等）
+            mount_if_needed "${'$'}ROOTFS/dev" --bind /dev || { echo "挂载 /dev 失败" >&2; exit 125; }
+            mount_if_needed "${'$'}ROOTFS/dev/pts" --bind /dev/pts || { echo "挂载 /dev/pts 失败" >&2; exit 125; }
+            mount_if_needed "${'$'}ROOTFS/proc" -t proc proc || { echo "挂载 /proc 失败" >&2; exit 125; }
+            mount_if_needed "${'$'}ROOTFS/sys" -t sysfs sysfs || { echo "挂载 /sys 失败" >&2; exit 125; }
+            mount_if_needed "${'$'}ROOTFS/tmp" -t tmpfs tmpfs || { echo "挂载 /tmp 失败" >&2; exit 125; }
+            # resolv.conf：已挂好则跳过；否则 bind host 的，缺失则写国内 DNS
+            if ! is_mounted "${'$'}ROOTFS/etc/resolv.conf"; then
+              /system/bin/toybox rm -f "${'$'}ROOTFS/etc/resolv.conf"
+              /system/bin/toybox touch "${'$'}ROOTFS/etc/resolv.conf"
+              /system/bin/toybox mount --bind /etc/resolv.conf "${'$'}ROOTFS/etc/resolv.conf" 2>/dev/null || true
+            fi
             if ! /system/bin/toybox test -s "${'$'}ROOTFS/etc/resolv.conf"; then
               /system/bin/toybox printf '%s\n' 'nameserver 114.114.114.114' 'nameserver 223.5.5.5' > "${'$'}ROOTFS/etc/resolv.conf"
             fi

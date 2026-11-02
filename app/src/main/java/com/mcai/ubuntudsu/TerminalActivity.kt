@@ -3,6 +3,7 @@ package com.mcai.ubuntudsu
 import android.annotation.SuppressLint
 import android.graphics.Color
 import android.os.Bundle
+import android.os.Looper
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -14,6 +15,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.Toast
 import android.widget.PopupWindow
 import android.content.Intent
@@ -53,9 +55,21 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
         DesktopOption(id = "xfce", name = "XFCE4", packages = "xfce4 xfce4-goodies xfce4-terminal", commandCheck = "startxfce4", startup = "exec startxfce4"),
         DesktopOption(id = "kde", name = "KDE Plasma", packages = "kde-full konsole plasma-session-x11", packagesDebian = "kde-full konsole plasma-workspace plasma-desktop", commandCheck = "startplasma-x11", startup = "exec dbus-launch startplasma-x11"),
     )
-    private var session: TerminalSession? = null
+    private var activeSession: TerminalSession? = null
     private lateinit var terminalView: TerminalView
     private var audioBridge: AudioBridge? = null
+    private lateinit var tabRow: LinearLayout
+    private lateinit var addTabButton: View
+    private val tabChips = mutableListOf<TabChip>()
+    /** 正在被用户主动关闭的会话 handle：用于区分「主动关标签」和「shell 自身退出」，避免重复处理与多余 Toast。 */
+    private val closingHandles = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    /** 顶部多终端标签栏中的一个标签 */
+    private data class TabChip(
+        val session: TerminalSession,
+        val view: View,
+        val label: TextView,
+    )
 
     @SuppressLint("MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,20 +92,54 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
         terminalView.setTerminalViewClient(this)
         terminalView.isFocusable = true
         terminalView.isFocusableInTouchMode = true
+
+        val main = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.BLACK)
+        }
+        // 顶部多终端标签栏（可横向滚动）：每个 chroot 会话一个标签 + 末尾「+」
+        val tabBar = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            setBackgroundColor(Color.argb(235, 10, 16, 32))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
+        }
+        tabRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(
+                (6 * resources.displayMetrics.density).toInt(),
+                (4 * resources.displayMetrics.density).toInt(),
+                (6 * resources.displayMetrics.density).toInt(),
+                (4 * resources.displayMetrics.density).toInt(),
+            )
+        }
+        tabBar.addView(
+            tabRow,
+            ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+        )
+        main.addView(tabBar)
+
         val terminalContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.BLACK)
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
         }
         terminalContainer.addView(
             terminalView,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
         )
         terminalContainer.addView(createShortcutBar())
-        frame.addView(terminalContainer)
+        main.addView(terminalContainer)
+        frame.addView(main)
         setContentView(frame)
 
+        // 「+」新建标签页按钮（常驻标签栏末尾，先于 initSessions 初始化）
+        addTabButton = makeAddTabButton()
         terminalView.post {
-            startSession()
+            initSessions()
         }
         // 从 Linux 页"桌面环境"入口进入时：已装桌面则直接弹启动菜单，未装才弹安装菜单
         if (intent.getBooleanExtra(EXTRA_DESKTOP, false)) {
@@ -463,23 +511,23 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
 
     private fun sendHiddenCommand(command: String) {
         val disableEcho = "stty -echo 2>/dev/null\n"
-        session?.write(disableEcho.toByteArray(), 0, disableEcho.toByteArray().size)
+        activeSession?.write(disableEcho.toByteArray(), 0, disableEcho.toByteArray().size)
         terminalView.postDelayed({
             val clearPreviousLine = "\u001b[2J\u001b[H"
             val commandBytes = (clearPreviousLine + command + " ; stty echo 2>/dev/null\n").toByteArray()
-            session?.write(commandBytes, 0, commandBytes.size)
+            activeSession?.write(commandBytes, 0, commandBytes.size)
         }, 150)
     }
 
     private fun sendVisibleCommand(command: String) {
         val commandBytes = (command + "\n").toByteArray()
-        session?.write(commandBytes, 0, commandBytes.size)
+        activeSession?.write(commandBytes, 0, commandBytes.size)
     }
 
     private var ctrlKeyActive = false
 
     private fun sendShortcut(bytes: ByteArray) {
-        session?.takeIf { it.isRunning }?.write(bytes, 0, bytes.size)
+        activeSession?.takeIf { it.isRunning }?.write(bytes, 0, bytes.size)
     }
 
     private fun showTerminalMenu(anchor: View) {
@@ -521,12 +569,19 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
         var popup: PopupWindow? = null
         item("唤醒锁") { window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); popup?.dismiss() }
         item("结束") {
-            session?.write("exit\n".toByteArray(), 0, 5)
-            terminalView.postDelayed({ session?.finishIfRunning() }, 3000)
             popup?.dismiss()
+            val s = activeSession ?: return@item
+            // 先标记为主动关闭：shell 若在宽限期内自己退出，不弹「会话已结束」Toast
+            closingHandles.add(s.mHandle)
+            val bytes = "exit\n".toByteArray()
+            s.write(bytes, 0, bytes.size)
+            // 给 shell 1.2 秒收尾时间，仍未退出则强制关闭该标签
+            android.os.Handler(mainLooper).postDelayed({
+                if (TerminalSessionStore.sessions.any { it === s }) closeSession(s)
+            }, 1200)
         }
-        item("重置") { session?.reset(); terminalView.onScreenUpdated(); popup?.dismiss() }
-        item("粘贴") { onPasteTextFromClipboard(session); popup?.dismiss() }
+        item("重置") { activeSession?.reset(); terminalView.onScreenUpdated(); popup?.dismiss() }
+        item("粘贴") { onPasteTextFromClipboard(activeSession); popup?.dismiss() }
         item("后台运行") {
             popup?.dismiss()
             finish()
@@ -552,19 +607,195 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
         }, 100)
     }
 
-    private fun startSession() {
-        val existing = TerminalSessionStore.takeRunning()
-        if (existing != null) {
-            session = existing
-            existing.updateTerminalSessionClient(TerminalSessionStore.client)
-        } else {
-            val rootfs = Env.rootfs(this)
-            val (executable, args) = ChrootRunner.terminalLaunchSpec(this, rootfs)
-            session = TerminalSession(executable, "/", args, ChrootRunner.terminalEnvironment(), 2000, TerminalSessionStore.client)
-            TerminalSessionStore.session = session
+    // ===================== 多终端标签（仿 Termux） =====================
+
+    /** 初始化会话：复用后台仍在运行的会话，否则新建一个。 */
+    private fun initSessions() {
+        TerminalSessionStore.pruneDead()
+        var list = TerminalSessionStore.runningSessions()
+        if (list.isEmpty()) {
+            list = listOf(createNewSession())
         }
-        terminalView.attachSession(session)
+        rebuildTabs()
+        switchTo(list.last())
+    }
+
+    /** 创建一个全新的 chroot 终端会话并登记到会话池。 */
+    private fun createNewSession(): TerminalSession {
+        val rootfs = Env.rootfs(this)
+        val (executable, args) = ChrootRunner.terminalLaunchSpec(this, rootfs)
+        val s = TerminalSession(executable, "/", args, ChrootRunner.terminalEnvironment(), 2000, TerminalSessionStore.client)
+        TerminalSessionStore.addSession(s)
+        return s
+    }
+
+    /** 新建标签页：建会话、加标签、切换过去并弹出键盘。 */
+    private fun newTab() {
+        val s = createNewSession()
+        rebuildTabs()
+        switchTo(s)
+        focusTerminalAndShowKeyboard()
+    }
+
+    /** 重建顶部标签栏：为每个会话生成一个标签芯片，末尾追加「+」。 */
+    private fun rebuildTabs() {
+        tabRow.removeAllViews()
+        tabChips.clear()
+        val list = TerminalSessionStore.sessions
+        list.forEachIndexed { i, s ->
+            val chip = makeTabChip(s, i)
+            tabChips.add(chip)
+            tabRow.addView(chip.view)
+        }
+        tabRow.addView(addTabButton)
+        updateTabHighlight()
+    }
+
+    /** 构建一个标签芯片（含名称与关闭按钮）。 */
+    private fun makeTabChip(session: TerminalSession, index: Int): TabChip {
+        val density = resources.displayMetrics.density
+        val view = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = chipBg(false)
+            setPadding(
+                (9 * density).toInt(),
+                0,
+                (2 * density).toInt(),
+                0,
+            )
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                (28 * density).toInt(),
+            ).apply { marginEnd = (4 * density).toInt() }
+        }
+        val label = TextView(this).apply {
+            text = tabLabel(session, index)
+            textSize = 11f
+            setTypeface(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD)
+            includeFontPadding = false
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setTextColor(Color.WHITE)
+        }
+        val close = TextView(this).apply {
+            text = "×"
+            textSize = 15f
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            setTextColor(Color.argb(210, 205, 220, 245))
+            isClickable = true
+            isFocusable = false
+            // 点击区撑满标签高度，避免 16dp 小点难点中
+            layoutParams = LinearLayout.LayoutParams(
+                (22 * density).toInt(),
+                (28 * density).toInt(),
+            )
+        }
+        view.addView(label)
+        view.addView(close)
+        view.setOnClickListener { switchTo(session) }
+        // 关闭该标签：结束 shell 并从标签栏移除（不触发行切换）
+        close.setOnClickListener { closeSession(session, fromUser = true) }
+        Ui.pressAnimation(view)
+        return TabChip(session, view, label)
+    }
+
+    /** 标签背景：激活态用高亮绿色，非激活用深蓝灰。 */
+    private fun chipBg(active: Boolean): android.graphics.drawable.GradientDrawable {
+        val density = resources.displayMetrics.density
+        return android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = 6f * density
+            setColor(if (active) Color.argb(255, 40, 150, 95) else Color.argb(190, 34, 44, 68))
+            setStroke(
+                (1 * density).toInt(),
+                if (active) Color.argb(180, 90, 230, 160) else Color.argb(90, 140, 170, 200),
+            )
+        }
+    }
+
+    /** 「+」新建标签按钮。 */
+    private fun makeAddTabButton(): View {
+        val density = resources.displayMetrics.density
+        return TextView(this).apply {
+            text = "+"
+            textSize = 16f
+            setTypeface(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            includeFontPadding = false
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = 6f * density
+                setColor(Color.argb(200, 40, 60, 95))
+                setStroke((1 * density).toInt(), Color.argb(120, 150, 190, 235))
+            }
+            setPadding((10 * density).toInt(), (2 * density).toInt(), (10 * density).toInt(), (2 * density).toInt())
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, (26 * density).toInt(),
+            ).apply { marginStart = (4 * density).toInt() }
+            setOnClickListener { newTab() }
+            Ui.pressAnimation(this)
+        }
+    }
+
+    /** 切换到指定会话：仅改变 TerminalView 挂载的会话，不重建进程。 */
+    private fun switchTo(s: TerminalSession) {
+        activeSession = s
+        s.updateTerminalSessionClient(TerminalSessionStore.client)
+        terminalView.attachSession(s)
         terminalView.requestFocus()
+        updateTabHighlight()
+    }
+
+    /** 高亮当前激活的标签。 */
+    private fun updateTabHighlight() {
+        tabChips.forEach { (session, view) ->
+            view.background = chipBg(session === activeSession)
+        }
+    }
+
+    /** 标签显示名：优先用终端标题（如 shell 设置的 xterm title），否则「终端 N」。 */
+    private fun tabLabel(s: TerminalSession, index: Int): String {
+        val t = s.getTitle()
+        if (!t.isNullOrBlank()) return t
+        return "终端 ${index + 1}"
+    }
+
+    /** 终端标题变化时刷新对应标签。 */
+    private fun updateTabLabel(s: TerminalSession) {
+        val chip = tabChips.find { it.session === s } ?: return
+        val idx = TerminalSessionStore.sessions.indexOf(s)
+        chip.label.text = tabLabel(s, idx)
+    }
+
+    /**
+     * 关闭一个会话（「×」按钮、菜单「结束」或 shell 自身退出都会走到这里）。
+     * 线程安全：onSessionFinished 可能来自后台线程，统一切到主线程再动 View。
+     */
+    private fun closeSession(s: TerminalSession, fromUser: Boolean = false) {
+        if (fromUser) closingHandles.add(s.mHandle)
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            closeSessionOnUi(s)
+        } else {
+            runOnUiThread { closeSessionOnUi(s) }
+        }
+    }
+
+    private fun closeSessionOnUi(s: TerminalSession) {
+        if (TerminalSessionStore.sessions.none { it === s }) return
+        val wasActive = activeSession === s
+        TerminalSessionStore.removeSession(s)
+        s.finishIfRunning()
+        val remaining = TerminalSessionStore.runningSessions()
+        if (remaining.isEmpty()) {
+            // 最后一个标签：直接退出终端界面，不再自动新建（否则用户会觉得「关不掉」）
+            activeSession = null
+            TerminalSessionStore.pruneDead()
+            finish()
+            return
+        }
+        if (wasActive) switchTo(remaining.last())
+        rebuildTabs()
     }
 
     override fun onDestroy() {
@@ -574,19 +805,22 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
     }
 
     override fun onTextChanged(changedSession: TerminalSession) {
-        terminalView.onScreenUpdated()
+        if (changedSession === activeSession) terminalView.onScreenUpdated()
     }
 
-    override fun onTitleChanged(changedSession: TerminalSession) {}
+    override fun onTitleChanged(changedSession: TerminalSession) {
+        updateTabLabel(changedSession)
+    }
 
     override fun onSessionFinished(finishedSession: TerminalSession) {
-        if (TerminalSessionStore.session === finishedSession) {
-            TerminalSessionStore.session = null
-        }
         val code = finishedSession.exitStatus
-        runOnUiThread {
-            Toast.makeText(this, "进程已结束 (code $code)", Toast.LENGTH_SHORT).show()
-            finish()
+        // 用户主动关闭（点「×」或菜单「结束」）不弹 Toast；shell 自己退出才提示
+        val userClosed = closingHandles.remove(finishedSession.mHandle)
+        closeSession(finishedSession)
+        if (!userClosed) {
+            runOnUiThread {
+                Toast.makeText(this, "会话已结束 (code $code)", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
