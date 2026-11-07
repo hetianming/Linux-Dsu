@@ -28,3 +28,11 @@
 
 # JNI 方法通过静态导出符号绑定；类名和 native 方法名必须与 Rust 导出符号一致。
 -keep class com.mcai.ubuntudsu.core.dna.PayloadExtractNative { *; }
+
+# v2.0 内置原生显示：AIDL Stub 由 binder 反射加载，root 服务由 libsu 按类名启动
+-keep class com.mcai.ubuntudsu.core.INativeDisplayService$Stub { *; }
+-keep class com.mcai.ubuntudsu.core.INativeDisplayService$Stub$Proxy { *; }
+-keep class com.mcai.ubuntudsu.core.NativeDisplayRootService { *; }
+-keep class android.crosvm.ICrosvmAndroidDisplayService$Stub { *; }
+-keep class android.crosvm.ICrosvmAndroidDisplayService$Stub$Proxy { *; }
+-keep class android.crosvm.DisplayConfig { *; }

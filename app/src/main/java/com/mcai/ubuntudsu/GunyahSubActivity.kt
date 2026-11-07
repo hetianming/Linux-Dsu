@@ -1,7 +1,6 @@
 package com.mcai.ubuntudsu
 
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.text.InputType
@@ -12,16 +11,16 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import com.mcai.ubuntudsu.ui.Ui
+import com.mcai.ubuntudsu.ui.GunTheme
 
 /**
- * gunyahVM 子页面基类：统一「弥散光背景 + 返回顶栏 + 滚动内容」骨架与卡片控件工厂，
- * 与 APP 主体（Ui.liquidBackground / neuCard / glassButton）完全同步主题。
+ * GunyaniOS 子页面基类：统一「暗绿玻璃背景 + 返回顶栏 + 滚动内容」骨架与卡片控件工厂，
+ * 与主界面 GunTheme 视觉规范一致（对齐 GunyahiOS 暗绿玻璃主题）。
  */
-abstract class GunyahSubActivity : AppCompatActivity() {
+abstract class GunyahSubActivity : HapticAppCompatActivity() {
     protected val d: Float get() = resources.displayMetrics.density
     private lateinit var scroll: ScrollView
 
@@ -36,6 +35,7 @@ abstract class GunyahSubActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        GunTheme.applyTheme(this)
         pickLauncher = registerForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
         ) { result ->
@@ -45,23 +45,24 @@ abstract class GunyahSubActivity : AppCompatActivity() {
             if (path != null) cb?.invoke(path)
         }
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.background = Ui.liquidBackground(this)
-        Ui.animateLiquidBackground(root)
+        root.background = GunTheme.background()
 
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(Ui.dp(12, d), Ui.dp(10, d), Ui.dp(12, d), Ui.dp(6, d))
+            setPadding(GunTheme.dp(12, d), GunTheme.dp(2, d), GunTheme.dp(12, d), GunTheme.dp(4, d))
         }
         bar.addView(TextView(this).apply {
-            text = "‹"; textSize = 26f
-            setTextColor(Ui.primaryText(this@GunyahSubActivity))
-            setPadding(0, 0, Ui.dp(10, d), 0)
+            text = "‹"; textSize = 24f
+            includeFontPadding = false
+            setTextColor(GunTheme.TEXT)
+            setPadding(0, 0, GunTheme.dp(10, d), 0)
             setOnClickListener { finish() }
         })
         bar.addView(TextView(this).apply {
             text = pageTitle(); textSize = 18f; setTypeface(null, Typeface.BOLD)
-            setTextColor(Ui.primaryText(this@GunyahSubActivity))
+            includeFontPadding = false
+            setTextColor(GunTheme.TEXT)
         })
         root.addView(bar)
 
@@ -72,7 +73,7 @@ abstract class GunyahSubActivity : AppCompatActivity() {
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(Ui.dp(12, d), Ui.dp(4, d), Ui.dp(12, d), Ui.dp(16, d))
+            setPadding(GunTheme.dp(12, d), GunTheme.dp(2, d), GunTheme.dp(12, d), GunTheme.dp(16, d))
         }
         // 关键：先填充子页面内容（初始化各 lateinit 字段），再挂滚动容器
         buildContent(content)
@@ -82,7 +83,7 @@ abstract class GunyahSubActivity : AppCompatActivity() {
         buildActionBar()?.let { root.addView(it) }
         setContentView(root)
 
-        Ui.enableEdgeToEdge(this, root)
+        com.mcai.ubuntudsu.ui.Ui.enableEdgeToEdge(this, root)
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
@@ -102,58 +103,60 @@ abstract class GunyahSubActivity : AppCompatActivity() {
         overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out)
     }
 
-    // ------------------------- 控件工厂（与主界面一致） -------------------------
+    // ------------------------- 控件工厂（GunTheme 暗绿玻璃） -------------------------
 
     protected fun card(title: String): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        background = Ui.neuCard(this@GunyahSubActivity, 18f)
-        setPadding(Ui.dp(12, d), Ui.dp(10, d), Ui.dp(12, d), Ui.dp(10, d))
+        background = GunTheme.card(16f, d)
+        setPadding(GunTheme.dp(12, d), GunTheme.dp(10, d), GunTheme.dp(12, d), GunTheme.dp(10, d))
         layoutParams = LinearLayout.LayoutParams(
             android.view.ViewGroup.LayoutParams.MATCH_PARENT,
             android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-        ).apply { bottomMargin = Ui.dp(10, d) }
+        ).apply { bottomMargin = GunTheme.dp(10, d) }
         addView(TextView(this@GunyahSubActivity).apply {
             text = title
-            textSize = 14f
+            textSize = 13f
             setTypeface(null, Typeface.BOLD)
-            setTextColor(Ui.primaryText(this@GunyahSubActivity))
-            setPadding(0, 0, 0, Ui.dp(6, d))
+            setTextColor(GunTheme.TEXT)
+            setPadding(0, 0, 0, GunTheme.dp(6, d))
         })
     }
 
     protected fun hintText(text: String): TextView = TextView(this).apply {
         this.text = text
-        textSize = 11f
-        setTextColor(Ui.secondaryText(this@GunyahSubActivity))
-        setPadding(0, 0, 0, Ui.dp(4, d))
+        textSize = 10.5f
+        setTextColor(GunTheme.MUTED)
+        setPadding(0, 0, 0, GunTheme.dp(4, d))
     }
 
     protected fun actionButton(text: String, accent: Int, onClick: () -> Unit): TextView =
         TextView(this).apply {
             this.text = text
-            textSize = 15f
+            textSize = 14f
             setTypeface(null, Typeface.BOLD)
-            setTextColor(Ui.buttonText(this@GunyahSubActivity))
+            setTextColor(if (accent == GunTheme.ACCENT || accent == GunTheme.WARN) GunTheme.ON_ACCENT else GunTheme.TEXT)
             gravity = Gravity.CENTER
-            background = Ui.glassButton(this@GunyahSubActivity, accent)
-            setPadding(Ui.dp(14, d), Ui.dp(13, d), Ui.dp(14, d), Ui.dp(13, d))
+            background = GunTheme.chip(d, accent)
+            setPadding(GunTheme.dp(12, d), GunTheme.dp(12, d), GunTheme.dp(12, d), GunTheme.dp(12, d))
             setOnClickListener { onClick() }
             layoutParams = LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            GunTheme.pressAnimation(this)
         }
 
     protected fun primaryButton(text: String, onClick: () -> Unit): TextView = TextView(this).apply {
         this.text = text
         textSize = 14f
         setTypeface(null, Typeface.BOLD)
-        setTextColor(Color.WHITE)
+        setTextColor(GunTheme.ON_ACCENT)
         gravity = Gravity.CENTER
-        background = Ui.chipSelected(this@GunyahSubActivity)
-        setPadding(0, Ui.dp(11, d), 0, Ui.dp(11, d))
+        background = GunTheme.primaryButton(d)
+        setPadding(0, GunTheme.dp(12, d), 0, GunTheme.dp(12, d))
         layoutParams = LinearLayout.LayoutParams(
             android.view.ViewGroup.LayoutParams.MATCH_PARENT,
             android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
         )
         setOnClickListener { onClick() }
+        GunTheme.pressAnimation(this)
     }
 
     protected fun editRow(
@@ -168,24 +171,24 @@ abstract class GunyahSubActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = Ui.dp(6, d) }
+            ).apply { topMargin = GunTheme.dp(6, d) }
         }
         row.addView(TextView(this).apply {
-            text = labelText; textSize = 11.5f
-            setTextColor(Ui.secondaryText(this@GunyahSubActivity))
-            layoutParams = LinearLayout.LayoutParams(Ui.dp(84, d), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+            text = labelText; textSize = 11f
+            setTextColor(GunTheme.TEXT2)
+            layoutParams = LinearLayout.LayoutParams(GunTheme.dp(88, d), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
         })
         val edit = EditText(this).apply {
             setText(value)
             this.inputType = inputType
-            textSize = 13f
+            textSize = 12.5f
             isSingleLine = true
-            setTextColor(Ui.primaryText(this@GunyahSubActivity))
-            setHintTextColor(Ui.secondaryText(this@GunyahSubActivity))
-            background = Ui.glassButton(this@GunyahSubActivity)
+            setTextColor(GunTheme.TEXT)
+            setHintTextColor(GunTheme.MUTED)
+            background = GunTheme.cardAlt(10f, d)
             backgroundTintList = null
-            setPadding(Ui.dp(10, d), Ui.dp(8, d), Ui.dp(10, d), Ui.dp(8, d))
-            layoutParams = LinearLayout.LayoutParams(0, Ui.dp(42, d), 1f)
+            setPadding(GunTheme.dp(10, d), GunTheme.dp(8, d), GunTheme.dp(10, d), GunTheme.dp(8, d))
+            layoutParams = LinearLayout.LayoutParams(0, GunTheme.dp(40, d), 1f)
         }
         row.addView(edit)
         parent.addView(row)
@@ -199,11 +202,11 @@ abstract class GunyahSubActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = Ui.dp(8, d) }
+            ).apply { topMargin = GunTheme.dp(8, d) }
         }
         row.addView(TextView(this).apply {
-            text = labelText; textSize = 11.5f
-            setTextColor(Ui.secondaryText(this@GunyahSubActivity))
+            text = labelText; textSize = 11f
+            setTextColor(GunTheme.TEXT2)
             layoutParams = LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
         var state = init
@@ -211,12 +214,14 @@ abstract class GunyahSubActivity : AppCompatActivity() {
             text = if (state) "ON" else "OFF"
             textSize = 11f
             setTypeface(null, Typeface.BOLD)
-            setTextColor(Ui.buttonText(this@GunyahSubActivity))
-            background = Ui.glassButton(this@GunyahSubActivity)
-            setPadding(Ui.dp(14, d), Ui.dp(5, d), Ui.dp(14, d), Ui.dp(5, d))
+            setTextColor(if (state) GunTheme.ON_ACCENT else GunTheme.TEXT2)
+            background = GunTheme.pill(d, if (state) GunTheme.ACCENT else GunTheme.CHIP)
+            setPadding(GunTheme.dp(14, d), GunTheme.dp(5, d), GunTheme.dp(14, d), GunTheme.dp(5, d))
             setOnClickListener {
                 state = !state
                 text = if (state) "ON" else "OFF"
+                setTextColor(if (state) GunTheme.ON_ACCENT else GunTheme.TEXT2)
+                background = GunTheme.pill(d, if (state) GunTheme.ACCENT else GunTheme.CHIP)
                 onChange(state)
             }
         })
@@ -224,6 +229,127 @@ abstract class GunyahSubActivity : AppCompatActivity() {
     }
 
     protected fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+
+    /**
+     * 配置类页面保存后的统一收尾：提示一句，然后直接回虚拟机主页。
+     *
+     * 以前保存只弹 toast、人还留在配置页，用户得自己按返回 ——
+     * 而且返回是逐层退，中间夹着的页面还得一层层点。这里一次性清到主页。
+     */
+    protected fun saveAndGoHome(msg: String) {
+        toast(msg)
+        val home = Intent(this, GunyahVMActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        runCatching { startActivity(home) }
+        finish()
+    }
+
+    /**
+     * 下拉选择行：点击弹出单选对话框。
+     * @param options 显示文本 -> 存储值
+     */
+    protected fun selectorRow(
+        labelText: String,
+        options: List<Pair<String, String>>,
+        current: String,
+        onSelect: (String) -> Unit,
+        parent: LinearLayout,
+    ): TextView {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = GunTheme.dp(6, d) }
+        }
+        row.addView(TextView(this).apply {
+            text = labelText; textSize = 11f
+            setTextColor(GunTheme.TEXT2)
+            layoutParams = LinearLayout.LayoutParams(GunTheme.dp(88, d), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+        })
+        val value = TextView(this).apply {
+            text = options.firstOrNull { it.second == current }?.first ?: current
+            textSize = 12.5f
+            setTextColor(GunTheme.TEXT)
+            gravity = Gravity.CENTER_VERTICAL
+            isSingleLine = true
+            background = GunTheme.cardAlt(10f, d)
+            setPadding(GunTheme.dp(10, d), GunTheme.dp(10, d), GunTheme.dp(10, d), GunTheme.dp(10, d))
+            layoutParams = LinearLayout.LayoutParams(0, GunTheme.dp(40, d), 1f)
+        }
+        value.setOnClickListener {
+            val labels = options.map { it.first }.toTypedArray()
+            val idx = options.indexOfFirst { it.first == value.text }.coerceAtLeast(0)
+            AlertDialog.Builder(this)
+                .setTitle(labelText)
+                .setSingleChoiceItems(labels, idx) { dlg, which ->
+                    onSelect(options[which].second)
+                    value.text = options[which].first
+                    dlg.dismiss()
+                }
+                .setNegativeButton("取消", null)
+                .show()
+        }
+        row.addView(value)
+        parent.addView(row)
+        return value
+    }
+
+    /** 路径行：左侧可手填路径，右侧「选择」唤起 APP 内设文件管理。返回 EditText。 */
+    protected fun fileRow(
+        labelText: String,
+        value: String,
+        parent: LinearLayout,
+        pickerTitle: String = labelText,
+        onPicked: (String) -> Unit = {},
+    ): EditText {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = GunTheme.dp(6, d) }
+        }
+        row.addView(TextView(this).apply {
+            text = labelText; textSize = 11f
+            setTextColor(GunTheme.TEXT2)
+            layoutParams = LinearLayout.LayoutParams(GunTheme.dp(88, d), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+        })
+        val edit = EditText(this).apply {
+            setText(value)
+            textSize = 11.5f
+            isSingleLine = true
+            setTextColor(GunTheme.TEXT)
+            setHintTextColor(GunTheme.MUTED)
+            background = GunTheme.cardAlt(10f, d)
+            backgroundTintList = null
+            setPadding(GunTheme.dp(10, d), GunTheme.dp(8, d), GunTheme.dp(10, d), GunTheme.dp(8, d))
+            layoutParams = LinearLayout.LayoutParams(0, GunTheme.dp(40, d), 1f)
+        }
+        row.addView(edit)
+        row.addView(TextView(this).apply {
+            text = "选择"; textSize = 12f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(GunTheme.ON_ACCENT)
+            gravity = Gravity.CENTER
+            background = GunTheme.chip(d, GunTheme.ACCENT)
+            setPadding(GunTheme.dp(12, d), GunTheme.dp(9, d), GunTheme.dp(12, d), GunTheme.dp(9, d))
+            layoutParams = LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, GunTheme.dp(40, d),
+            ).apply { marginStart = GunTheme.dp(6, d) }
+            setOnClickListener {
+                openFilePicker(pickerTitle) { p ->
+                    edit.setText(p)
+                    onPicked(p)
+                }
+            }
+        })
+        parent.addView(row)
+        return edit
+    }
 
     protected fun openFilePicker(title: String, onPicked: (String) -> Unit) {
         // 复用 APP 内设文件管理（RootfsFilesActivity）选择任意文件

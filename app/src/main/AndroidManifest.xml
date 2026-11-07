@@ -5,7 +5,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- 开机后自动加载本机内核模块（Gunyah 依赖 + 大页池），否则手机重启后 VM 起不来 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Android 16 Live Updates：把进度通知提升为「实时动态」，ColorOS 16 流体云 / HyperOS 实况通知按此渲染 -->
@@ -106,6 +109,23 @@
             android:exported="false"
             android:theme="@style/Theme.App.Gunyah"
             android:windowSoftInputMode="adjustResize" />
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter android:priority="1000">
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+        <activity android:name=".GunyahBootActivity"
+            android:exported="false"
+            android:theme="@style/Theme.App.Gunyah"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+        <activity android:name=".GunyahDisplayActivity"
+            android:exported="false"
+            android:theme="@style/Theme.App.Gunyah"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".WorkTimeActivity"
             android:exported="false"
             android:theme="@style/Theme.App" />
@@ -159,6 +179,7 @@
         <activity
             android:name="com.gaurav.avnc.ui.vnc.VncActivity"
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:enableOnBackInvokedCallback="false"
             android:resizeableActivity="true"
             android:supportsPictureInPicture="false"
             android:theme="@style/Theme.App" />
@@ -179,6 +200,17 @@
         <service
             android:name=".PrivilegedRootService"
             android:exported="true" />
+        <!-- v2.0 内置原生显示：主程序自有 root 服务，只负责查 crosvm_display binder -->
+        <service
+            android:name=".core.NativeDisplayRootService"
+            android:exported="false" />
+        <!-- v2.0 内置原生显示器（替代独立 display_app） -->
+        <activity
+            android:name=".NativeDisplayActivity"
+            android:exported="false"
+            android:theme="@style/Theme.App.Gunyah"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density"
+            android:resizeableActivity="true" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

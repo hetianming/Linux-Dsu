@@ -14,23 +14,89 @@ object Haptics {
     private var lastFeedbackAt: Long = 0
     private const val MIN_INTERVAL_MS = 180L // 防抖间隔
 
+    // ---- 手势判定状态：所有页面共用一个实例，天然互斥（一次只有一根手指在处理） ----
+    private var downView: View? = null
+    private var downX = 0f
+    private var downY = 0f
+    private var downAt = 0L
+    private var moved = false
+    private var slop = 0
+
     /**
-     * 全局触摸事件处理：在 ACTION_UP 时对可点击 View 触发震动
+     * 全局触摸入口：**只有真正的「点一下」才震**。
+     *
+     * 判定：按下时记住手指底下的可点击 View，位移一旦超过系统 touchSlop 就作废，
+     * 抬手时仍是同一次按压且时长 ≤700ms 才震。滚动列表、拖日志、划卡片都不震。
+     *
+     * 早先的实现是一按下就震，用户的原话是「滑一次震动一次」。
      */
     fun onTouch(root: View?, event: MotionEvent) {
-        if (root == null || event.actionMasked != MotionEvent.ACTION_UP) return
-        val target = findClickable(root, event.x, event.y)
-        if (target != null) perform(target)
+        if (root == null) return
+        if (slop == 0) {
+            slop = android.view.ViewConfiguration.get(root.context).scaledTouchSlop
+            if (slop <= 0) slop = 8
+        }
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downView = findClickable(root, event.x, event.y)
+                downX = event.x
+                downY = event.y
+                downAt = android.os.SystemClock.uptimeMillis()
+                moved = false
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (downView != null && !moved) {
+                    if (Math.abs(event.x - downX) > slop || Math.abs(event.y - downY) > slop) {
+                        moved = true
+                    }
+                }
+            }
+            MotionEvent.ACTION_UP -> {
+                val v = downView
+                val held = android.os.SystemClock.uptimeMillis() - downAt
+                if (v != null && !moved && held <= 700L) perform(v)
+                downView = null
+                moved = false
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                downView = null
+                moved = false
+            }
+        }
     }
 
     /**
      * 单次点击震动（带 180ms 防抖）
      */
     fun perform(view: View?) {
+        if (view == null) return
         val now = android.os.SystemClock.uptimeMillis()
-        if (view != null && now - lastFeedbackAt > MIN_INTERVAL_MS) {
-            lastFeedbackAt = now
-            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+        if (now - lastFeedbackAt <= MIN_INTERVAL_MS) return
+        lastFeedbackAt = now
+        // 1) View 触觉反馈：不需要 VIBRATE 权限，跟随系统「触感反馈」开关
+        val ok = runCatching {
+            view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+        }.getOrDefault(false)
+        // 2) 部分 ROM（尤其关掉系统触感的定制系统）会直接返回 false，退回振动器
+        if (!ok) {
+            runCatching {
+                val ctx = view.context
+                val v = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    (ctx.getSystemService(android.content.Context.VIBRATOR_MANAGER_SERVICE)
+                        as android.os.VibratorManager).defaultVibrator
+                } else {
+                    @Suppress("DEPRECATION")
+                    ctx.getSystemService(android.content.Context.VIBRATOR_SERVICE) as android.os.Vibrator
+                }
+                if (v.hasVibrator()) {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                        v.vibrate(android.os.VibrationEffect.createOneShot(12, 60))
+                    } else {
+                        @Suppress("DEPRECATION")
+                        v.vibrate(12)
+                    }
+                }
+            }
         }
     }
 
@@ -51,7 +117,7 @@ object Haptics {
     /**
      * 递归查找触摸点下的可点击 View
      */
-    private fun findClickable(view: View, x: Float, y: Float): View? {
+    fun findClickable(view: View, x: Float, y: Float): View? {
         if (!view.isShown || x < 0 || y < 0 || x > view.width || y > view.height) return null
 
         if (view is ViewGroup) {

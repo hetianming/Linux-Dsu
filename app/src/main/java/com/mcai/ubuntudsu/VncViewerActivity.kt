@@ -271,7 +271,10 @@ class VncViewerActivity : AppCompatActivity() {
                 else -> false
             }
         }
-        showPasswordDialog()
+        // v2.0.3：crosvm 的 --vnc-server 不带 password=，RFB 走 None 认证，
+        // 旧版却无条件弹密码框，把「无密码直连」硬生生挡住了。
+        // 现在默认直接连；只有服务端真的要求 VncAuth 时才由协议层回调弹框。
+        connect(intent.getStringExtra(EXTRA_PASSWORD).orEmpty())
     }
 
     private fun showVncKeyboard() {
@@ -396,6 +399,7 @@ class VncViewerActivity : AppCompatActivity() {
             password = password,
             onStatus = { text -> runOnUiThread { status.text = text; status.visibility = if (text.isEmpty()) View.GONE else View.VISIBLE } },
             onFrame = { bitmap -> runOnUiThread { image.setImageBitmap(bitmap) } },
+            onPasswordRequired = { runOnUiThread { showPasswordDialog() } },
         )
         executor.execute { protocol?.connect() }
     }
@@ -415,6 +419,7 @@ private class VncProtocol(
     private val password: String,
     private val onStatus: (String) -> Unit,
     private val onFrame: (Bitmap) -> Unit,
+    private val onPasswordRequired: () -> Unit,
 ) {
     private val pointerExecutor = Executors.newSingleThreadExecutor()
     private val pointerLock = Any()
@@ -446,6 +451,13 @@ private class VncProtocol(
             val securityCount = input!!.readUnsignedByte()
             val security = ByteArray(securityCount); input!!.readFully(security)
             if (security.contains(2.toByte())) {
+                // 服务端要求密码但调用方没给：不要拿空密码去撞认证，直接回 UI 要密码
+                if (password.isEmpty()) {
+                    onStatus("VNC 服务端需要密码")
+                    onPasswordRequired()
+                    runCatching { socket?.close() }
+                    return
+                }
                 output!!.writeByte(2); output!!.flush()
                 val challenge = ByteArray(16); input!!.readFully(challenge)
                 val key = ByteArray(8); password.toByteArray().copyInto(key, endIndex = minOf(8, password.length))
@@ -573,9 +585,17 @@ private class VncProtocol(
                 if (moveWriteScheduled) return
                 moveWriteScheduled = true
             }
-            pointerExecutor.execute { drainPointerMoves() }
+            submitPointer { drainPointerMoves() }
         } else {
-            pointerExecutor.execute { writePointer(packet, true) }
+            submitPointer { writePointer(packet, true) }
+        }
+    }
+
+    /** 关屏/退出后 pointerExecutor 已 shutdownNow，再提交会抛 RejectedExecutionException 直接闪退 */
+    private fun submitPointer(block: () -> Unit) {
+        try {
+            pointerExecutor.execute(block)
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
         }
     }
 

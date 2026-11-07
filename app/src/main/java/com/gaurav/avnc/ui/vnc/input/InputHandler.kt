@@ -8,10 +8,12 @@
 
 package com.gaurav.avnc.ui.vnc.input
 
+import android.graphics.PointF
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import com.gaurav.avnc.ui.vnc.VncActivity
+import com.mcai.ubuntudsu.core.TouchBridge
 
 /**
  * Input handler for remote session.
@@ -56,6 +58,14 @@ class InputHandler(private val activity: VncActivity) {
     }
 
     fun onTouchEvent(event: MotionEvent): Boolean {
+        // 平板模式：手指事件直接写进 guest 的 virtio-input 触摸屏，不再翻译成鼠标。
+        // 只有 feed() 确认「链路真的通了」才吞事件 —— 否则 crosvm 没建触摸设备
+        // （guest 没有 virtio-input 驱动时就是这样）会造成点击完全没反应。
+        if (TouchBridge.active &&
+            TouchBridge.feed(event) { x, y -> activity.viewModel.frameState.toFb(PointF(x, y)) }
+        ) {
+            return true
+        }
         return touchHandler?.onTouchEvent(event) == true
     }
 

@@ -49,19 +49,39 @@ class AppPreferences(context: Context) {
          val style; get() = prefs.getString("gesture_style", "touchpad")!!
         val tap1 = "left-click" //Preference UI was removed
         val tap2; get() = prefs.getString("gesture_tap2", "open-keyboard")!!
-        val tap3; get() = prefs.getString("gesture_tap3", "none")!!
+        // 三指轻点 = 中键（桌面里粘贴选中内容 / 中键关闭标签页），触控板常见习惯
+        val tap3; get() = prefs.getString("gesture_tap3", "middle-click")!!
         val doubleTap; get() = prefs.getString("gesture_double_tap", "double-click")!!
         val longPress; get() = prefs.getString("gesture_long_press", "right-click")!!
         val swipe1; get() = prefs.getString("gesture_swipe1", "pan")!!
-        val swipe2; get() = prefs.getString("gesture_swipe2", "pan")!!
+        // 双指滑动 = 远程滚轮。原默认是 pan（平移画面），而 touchpad 风格下单指已经在
+        // 移动指针，画面平移几乎用不到 —— 结果就是双指怎么搓都「没有手势」。
+        // 改成 remote-scroll 后 TouchHandler 里的 SwipeVsScale 会自动区分
+        // 「双指同向滑动=滚动」与「双指反向捏合=缩放」，互不误触发。
+        val swipe2; get() = prefs.getString("gesture_swipe2", "remote-scroll")!!
         val swipe3; get() = prefs.getString("gesture_swipe3", "pan")!!
         val doubleTapSwipe; get() = prefs.getString("gesture_double_tap_swipe", "remote-drag")!!
         val longPressSwipe; get() = prefs.getString("gesture_long_press_swipe", "none")!!
         val longPressSwipeEnabled; get() = (longPressSwipe != "none" && longPress != "left-press")
         val longPressDetectionEnabled; get() = (longPress != "none" || longPressSwipeEnabled)
         val swipeSensitivity; get() = prefs.getInt("gesture_swipe_sensitivity", 10) / 10f
+
+        /**
+         * 手指每移动多少像素才发一个滚轮刻度。数值越大越慢。
+         * 原来是 20，一屏滑动能发上百个滚轮事件，桌面里像飞一样；60 接近系统列表的跟手速度。
+         */
+        val scrollStep; get() = prefs.getInt("gesture_scroll_step", 80)
         val invertVerticalScrolling; get() = prefs.getBoolean("invert_vertical_scrolling", false)
         val quickTap1Enabled; get() = ((doubleTap == "none" || doubleTap == "double-click") && doubleTapSwipe == "none")
+
+        /**
+         * 手机式触摸：单指点击 = 左键、单指上下滑 = 滚轮、长按 = 右键、双指 = 滚动/缩放。
+         *
+         * 这是纯 VNC 层的翻译（绝对定位指针 + 滚轮事件），guest 不需要任何驱动，
+         * Windows / Linux / macOS 全部可用 —— 与「平板模式（virtio-input 直通）」互补：
+         * 后者更原生，但只有带 virtio 触摸驱动的 Linux 才有效。
+         */
+        val phoneMode; get() = prefs.getBoolean("phone_touch_mode", true)
     }
 
     inner class Input {
@@ -76,7 +96,8 @@ class AppPreferences(context: Context) {
         val mousePassthrough; get() = prefs.getBoolean("mouse_passthrough", true)
         val capturePointer; get() = mousePassthrough && prefs.getBoolean("capture_pointer", false)
         val hideLocalCursor; get() = prefs.getBoolean("hide_local_cursor", false)
-        val hideRemoteCursor; get() = prefs.getBoolean("hide_remote_cursor", false)
+        // 触摸屏模式点哪到哪，VNC 再画一个箭头纯属遮挡；触控板模式靠光标定位，不能关。
+        val hideRemoteCursor; get() = prefs.getBoolean("hide_remote_cursor", gesture.style == "touchscreen")
         val mouseBack; get() = prefs.getString("mouse_back", "right-click")!!
         val interceptMouseBack; get() = mouseBack != "default"
 

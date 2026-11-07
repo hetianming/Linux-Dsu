@@ -60,10 +60,33 @@ class HomePage(
     private val metricsRunning = AtomicBoolean(false)
     private val statusRunning = AtomicBoolean(false)
     private val statusGeneration = AtomicLong(0L)
+    // Activity 已销毁 / 页面已释放：此后一切提交都直接丢弃。
+    // 首页的指标轮询是 Handler 自循环，onDestroy 里只 shutdown 线程池不够——
+    // 循环下一拍仍会 execute()，撞上 Terminated 的 ThreadPoolExecutor 就抛
+    // RejectedExecutionException（主线程，直接闪退）。
+    @Volatile private var released = false
+    @Volatile private var metricsHandler: android.os.Handler? = null
+
+    /** 安全提交：已释放或线程池已关闭时静默丢弃，绝不把异常抛到主线程。 */
+    private fun submit(exec: java.util.concurrent.ExecutorService, block: () -> Unit): Boolean {
+        if (released || exec.isShutdown) return false
+        return try {
+            exec.execute(block)
+            true
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            false
+        }
+    }
 
     fun build(): View {
         val d = activity.resources.displayMetrics.density
         activity.addLifecycleStopHook(Runnable {
+            released = true
+            // 先停轮询，再关线程池：顺序反了就会有一次「关完还提交」的窗口
+            metricsHandler?.removeCallbacksAndMessages(null)
+            metricsHandler = null
+            metricsRunning.set(false)
+            statusRunning.set(false)
             metricsExecutor.shutdownNow()
             statusExecutor.shutdownNow()
             imageExecutor.shutdownNow()
@@ -250,18 +273,22 @@ class HomePage(
             ).apply { topMargin = Ui.dp(8, d) },
         )
 
-        // 指标轮询（每 2 秒）
-        val metricsHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        // 指标轮询（每 2 秒）。重复 build（切换页签会重新构建首页）时先停掉上一轮，
+        // 否则每切一次就多一条自循环，既有旧任务残留也会把线程池打满。
+        metricsHandler?.removeCallbacksAndMessages(null)
+        val h = android.os.Handler(android.os.Looper.getMainLooper())
+        metricsHandler = h
         val updater = object : Runnable {
             override fun run() {
+                if (released) return
                 updateMetrics { cpu, gpu ->
                     cpuGauge.value = cpu
                     gpuGauge.value = gpu
                 }
-                metricsHandler.postDelayed(this, 2000L)
+                if (!released) h.postDelayed(this, 2000L)
             }
         }
-        metricsHandler.post(updater)
+        h.post(updater)
         // GPU 首次值依赖 root 探测（比 CPU 直读慢），页面就绪时另起轻线程立即探一次
         Thread {
             runCatching { com.mcai.ubuntudsu.core.StatusDetector.warmupGpuProbe() }
@@ -270,7 +297,6 @@ class HomePage(
                 gpuGauge.value = com.mcai.ubuntudsu.core.StatusDetector.currentGpuPercent()
             }
         }.start()
-        activity.addLifecycleStopHook(Runnable { metricsHandler.removeCallbacks(updater) })
 
         return card
     }
@@ -440,9 +466,10 @@ class HomePage(
     }
 
     private fun updateMetrics(onResult: (Int?, Int?) -> Unit) {
+        if (released) return
         // GPU 节点在未授权 ROOT 设备上可能需要数秒超时；跳过重入，避免 2 秒轮询无限堆积。
         if (!metricsRunning.compareAndSet(false, true)) return
-        metricsExecutor.execute {
+        val queued = submit(metricsExecutor) {
             try {
                 val result = com.mcai.ubuntudsu.core.StatusDetector.deviceMetrics(activity, cpuSample)
                 cpuSample = result.second
@@ -483,6 +510,8 @@ class HomePage(
                 metricsRunning.set(false)
             }
         }
+        // 提交被丢弃（页面已销毁）：把重入标记放回去，避免以后状态卡死
+        if (!queued) metricsRunning.set(false)
     }
 
     /** 电池实时数据：电量 / 充电状态 / 温度。 */
@@ -817,6 +846,7 @@ class HomePage(
 
     fun refreshStatus() {
         val ctx = activity
+        if (released || activity.isFinishing || activity.isDestroyed) return
         statusGeneration.incrementAndGet()
         val grayText = Ui.secondaryText(activity)
         gsiText.text = "检测中…"; gsiText.setTextColor(grayText)
@@ -838,8 +868,9 @@ class HomePage(
 
     /** 状态刷新独占轻量队列；请求合并后只渲染最新一次，避免旧结果覆盖新状态。 */
     private fun scheduleStatusRefresh(ctx: MainActivity) {
+        if (released || statusExecutor.isShutdown) return
         if (!statusRunning.compareAndSet(false, true)) return
-        statusExecutor.execute {
+        val queued = submit(statusExecutor) {
             var renderedGeneration = -1L
             try {
                 while (true) {
@@ -908,11 +939,14 @@ class HomePage(
             } finally {
                 statusRunning.set(false)
                 // 检测完成后正好有新请求到达时，再启动一轮，保证不遗留“检测中”。
-                if (renderedGeneration != statusGeneration.get() && !activity.isFinishing && !activity.isDestroyed) {
+                if (!released && renderedGeneration != statusGeneration.get() &&
+                    !activity.isFinishing && !activity.isDestroyed
+                ) {
                     scheduleStatusRefresh(ctx)
                 }
             }
         }
+        if (!queued) statusRunning.set(false)
     }
 
     // ==================== 顶部头图卡片 ====================
@@ -1214,7 +1248,8 @@ class HomePage(
 
     // 背景选择回调：按 MIME 分流——视频存 card_bg.mp4（隐藏静图、播放视频），图片存 card_bg.jpg（隐藏视频、显示静图）
     fun onHeroImagePicked(uri: android.net.Uri) {
-        imageExecutor.execute {
+        if (released) return
+        submit(imageExecutor) {
             val mime = activity.contentResolver.getType(uri) ?: ""
             val isVideo = mime.startsWith("video/") || uri.path?.lowercase()?.endsWith(".mp4") == true
             val copied = runCatching {

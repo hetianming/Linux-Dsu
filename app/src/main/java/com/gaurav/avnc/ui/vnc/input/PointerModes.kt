@@ -24,7 +24,9 @@ abstract class BasePointerMode(val viewModel: VncViewModel) {
     //Used for remote scrolling
     private var accumulatedDx = 0F
     private var accumulatedDy = 0F
-    private val deltaPerScroll = 20F //For how much dx/dy, one scroll event will be sent
+    //For how much dx/dy, one scroll event will be sent
+    //60px 一个刻度：原来 20 太快，一屏滑动上百个滚轮事件，桌面里像按了加速键。
+    private val deltaPerScroll = viewModel.pref.input.gesture.scrollStep.toFloat()
     private val yScrollDirection = (if (viewModel.pref.input.gesture.invertVerticalScrolling) -1 else 1)
 
     abstract fun transformPoint(p: PointF): PointF?

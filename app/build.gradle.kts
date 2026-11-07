@@ -44,8 +44,8 @@ android {
         applicationId = "com.mcai.ubuntudsu"
         minSdk = 26
         targetSdk = 28
-        versionCode = 114
-        versionName = "1.8.65"
+        versionCode = 179
+        versionName = "2.0.21"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
@@ -107,6 +107,15 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    androidResources {
+        // crosvm-mmio / gunydhcpd / gunytap 是可执行 ELF: 压缩会破坏 mmap/执行,
+        // 也让 openFd 拿不到真实长度
+        noCompress += "crosvm-mmio"
+        noCompress += "gunydhcpd"
+        noCompress += "gunytap"
+        noCompress += "touchd"
+    }
+
     packaging {
         resources.excludes += setOf("META-INF/AL2.0", "META-INF/LGPL2.1", "META-INF/DEPENDENCIES")
         jniLibs.useLegacyPackaging = true

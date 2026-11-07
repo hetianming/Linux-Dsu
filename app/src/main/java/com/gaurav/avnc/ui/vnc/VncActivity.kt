@@ -27,6 +27,7 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import android.content.pm.ActivityInfo
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
@@ -108,6 +109,10 @@ class VncActivity : AppCompatActivity() {
     private var onStartTime = 0L
     private var autoReconnectDelay = 5
 
+    /** 上一次「返回」的时间，用于把一次误触和真正的退出区分开 */
+    private var lastBackAt = 0L
+    private var backToast: Toast? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         DeviceAuthPrompt.applyFingerprintDialogFix(supportFragmentManager)
 
@@ -122,6 +127,7 @@ class VncActivity : AppCompatActivity() {
         binding.frameView.initialize(viewModel)
         binding.inputView.initialize(viewModel, inputHandler)
         viewModel.frameViewRef = WeakReference(binding.frameView)
+        setupBackGuard()
 
         setupLayout()
         setupNoVideoOverlay()
@@ -349,6 +355,36 @@ class VncActivity : AppCompatActivity() {
         imm.showSoftInput(binding.inputView, 0)
 
         virtualKeys.onKeyboardOpen()
+    }
+
+    /**********************************************************************************************
+     * 防误退
+     *********************************************************************************************/
+
+    /**
+     * 边缘侧滑（系统手势返回）、返回键、三键导航的返回，最后都汇聚到这里。
+     * 原来一次就 finish，等于在画面边缘蹭一下就把整个显示器关了 —— 这里改成两次才退出。
+     */
+    private fun setupBackGuard() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastBackAt < 2000) {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                    isEnabled = true
+                } else {
+                    lastBackAt = now
+                    // 连续误触时不堆叠提示
+                    backToast?.cancel()
+                    backToast = Toast.makeText(
+                        this@VncActivity,
+                        "再滑一次退出画面（虚拟机继续运行）",
+                        Toast.LENGTH_SHORT
+                    ).also { it.show() }
+                }
+            }
+        })
     }
 
     private fun onClientStateChanged(newState: VncViewModel.State) {

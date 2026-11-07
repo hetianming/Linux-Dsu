@@ -65,7 +65,10 @@ class Dispatcher(private val activity: VncActivity) {
     private var config = Config()
 
     private inner class Config {
-        val gestureStyle = viewModel.activeGestureStyle.value ?: gesturePref.style
+        /** 手机式触摸：所有手势按「手指直接落在画面上」来解释，不依赖 guest 驱动 */
+        private val phoneMode = gesturePref.phoneMode
+        val gestureStyle = viewModel.activeGestureStyle.value
+            ?: if (phoneMode) "touchscreen" else gesturePref.style
         val defaultMode = if (gestureStyle == "touchscreen") directMode else relativeMode
 
         val tap1Action = selectPointAction(gesturePref.tap1)
@@ -74,7 +77,13 @@ class Dispatcher(private val activity: VncActivity) {
         val doubleTapAction = selectPointAction(gesturePref.doubleTap)
         val longPressAction = selectPointAction(gesturePref.longPress)
 
-        val swipe1Pref = if (gestureStyle == "touchpad") "move-pointer" else gesturePref.swipe1
+        // 手机式：单指滑动 = 滚轮（像刷手机页面），而不是平移画面。
+        // 触控板风格下才把单指滑动留给「移动指针」。
+        val swipe1Pref = when {
+            gestureStyle == "touchpad" -> "move-pointer"
+            phoneMode -> "remote-scroll"
+            else -> gesturePref.swipe1
+        }
         val swipe1Action = selectSwipeAction(swipe1Pref)
         val swipe2Action = selectSwipeAction(gesturePref.swipe2)
         val swipe3Action = selectSwipeAction(gesturePref.swipe3)
