@@ -546,7 +546,7 @@ class GunyahImageActivity : GunyahSubActivity() {
             })
             runOnUiThread {
                 convertStatus.text = if (r.ok) "✓ ${r.message}" else "✗ ${r.message}"
-                convertStatus.setTextColor(if (r.ok) GunTheme.ACCENT else 0xFFFF6B6B.toInt())
+                convertStatus.setTextColor(if (r.ok) GunTheme.ACCENT else GunTheme.DANGER)
                 toast(r.message)
             }
         }

@@ -67,6 +67,10 @@
         <activity android:name=".ProcessManagerActivity"
             android:exported="false"
             android:theme="@style/Theme.App" />
+        <!-- v2.0.28：Linux 容器功能页（原第 3 个 tab，现由「多功能」页卡片进入） -->
+        <activity android:name=".LinuxContainerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.App" />
         <activity android:name=".RomActivity"
             android:exported="false"
             android:theme="@style/Theme.App" />

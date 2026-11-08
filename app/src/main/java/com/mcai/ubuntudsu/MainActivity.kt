@@ -1,5 +1,6 @@
 package com.mcai.ubuntudsu
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.view.MotionEvent
@@ -19,7 +20,6 @@ import com.mcai.ubuntudsu.ui.Haptics
 import com.mcai.ubuntudsu.ui.Ui
 import com.mcai.ubuntudsu.ui.pages.DsuPage
 import com.mcai.ubuntudsu.ui.pages.HomePage
-import com.mcai.ubuntudsu.ui.pages.LinuxPage
 import com.mcai.ubuntudsu.ui.pages.SettingsPage
 import java.util.concurrent.Executors
 
@@ -27,7 +27,10 @@ class MainActivity : AppCompatActivity() {
     private val lifecycleStopHooks = mutableListOf<Runnable>()
     fun addLifecycleStopHook(hook: Runnable) { lifecycleStopHooks.add(hook) }
     private val executor = Executors.newSingleThreadExecutor()
-    private val tabs = listOf("首页", "多功能", "Linux", "DSU")
+    // v2.0.29：第 3 格「VMiOS」= 内嵌虚拟机主界面（VmPage），像 DSU 一样点/滑直达，
+    // 不再有 VmEntryPage 二次入口，也不再弹独立 Activity；简称短标题避免 tab 过长显大。
+    private val tabs = listOf("首页", "多功能", "VMiOS", "DSU")
+    private val vmTab = tabs.indexOf("VMiOS")
     private var currentTab = 0
     private lateinit var pageHost: FrameLayout
     private lateinit var pageStrip: android.widget.HorizontalScrollView
@@ -35,8 +38,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rootLayout: FrameLayout
     private val navItems = mutableListOf<TextView>()
     private var homePage: HomePage? = null
-    private var linuxPage: LinuxPage? = null
     private var dsuPage: DsuPage? = null
+    // v2.0.29：第 3 格缓存 VmPage 实例，切 tab 时转发 onResume/onPause 控制 3s 状态轮询；
+    // LinuxPage 已整体搬到 LinuxContainerActivity，MainActivity 不再持有它。
+    private var vmPage: VmPage? = null
     // 顶部灵动岛：挂在 decorView 上（覆盖状态栏/摄像头区域），同时显示 GSI 安装与固件下载
     private var dsuIsland: com.mcai.ubuntudsu.ui.DynamicIsland? = null
     private var islandShown = false
@@ -249,7 +254,13 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         homePage?.refreshStatus()
-        linuxPage?.refreshInfo()
+        // v2.0.29：从显示器/启动控制台等独立 Activity 返回且停留在 VMiOS tab 时恢复状态轮询
+        if (currentTab == vmTab) vmPage?.onResume()
+    }
+
+    override fun onPause() {
+        vmPage?.onPause()
+        super.onPause()
     }
 
     override fun onDestroy() {
@@ -258,6 +269,7 @@ class MainActivity : AppCompatActivity() {
         runCatching { unregisterReceiver(updateDoneReceiver) }
         dsuPage?.release()
         dsuPage?.unbindRootService()
+        vmPage?.onDestroy()
         lifecycleStopHooks.forEach { it.run() }
         super.onDestroy()
     }
@@ -329,7 +341,7 @@ class MainActivity : AppCompatActivity() {
                     // 抬手同样由切页手势消费，绝不下发，杜绝滑动结束误点按钮
                     return true
                 } else if (event.actionMasked == MotionEvent.ACTION_UP && dragDownInNav) {
-                    tabAtPoint(event.rawX, event.rawY).takeIf { it >= 0 }?.let { selectTab(it) }
+                    tabAtPoint(event.rawX, event.rawY).takeIf { it >= 0 }?.let { onTabActivate(it) }
                 }
                 dragActive = false
                 dragTargetTab = -1
@@ -434,7 +446,7 @@ class MainActivity : AppCompatActivity() {
                 layoutParams = LinearLayout.LayoutParams(
                     0, ViewGroup.LayoutParams.MATCH_PARENT, 1f,
                 )
-                setOnClickListener { selectTab(tab) }
+                setOnClickListener { onTabActivate(tab) }
             }
             Ui.pressAnimation(item)
             navItems.add(item)
@@ -527,6 +539,15 @@ class MainActivity : AppCompatActivity() {
         selectTab(tab)
     }
 
+    /**
+     * v2.0.29：底部导航「点击」统一入口 —— 只切页。
+     * 第 3 格「VMiOS」本身就是内嵌的虚拟机主界面（VmPage），点击和横滑一样直接停在这页，
+     * 没有 VmEntryPage 二次入口，也不会再弹独立 GunyahVMActivity。
+     */
+    private fun onTabActivate(tab: Int) {
+        selectTab(tab)
+    }
+
     /** 预构建四个页面并水平并排到 pageRow，保证横滑时相邻页即时可见（酷安式跟手） */
     private fun ensureAllPagesBuilt() {
         val sw = pageStrip.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
@@ -534,11 +555,14 @@ class MainActivity : AppCompatActivity() {
             if (pageCache.containsKey(index)) return@forEachIndexed
             val page: View = when (index) {
                 1 -> { if (settingsPage == null) settingsPage = SettingsPage(this, { recreate() }); settingsPage!!.build() }
-                2 -> { if (linuxPage == null) linuxPage = LinuxPage(this, executor); linuxPage!!.build() }
+                // v2.0.29：第 3 格直接内嵌 VmPage（虚拟机主界面），像 DSU 一样点/滑直达
+                vmTab -> { if (vmPage == null) vmPage = VmPage(this, showBack = false); vmPage!!.build() }
                 3 -> { if (dsuPage == null) { dsuPage = DsuPage(this, executor, pickZipLauncher); dsuPage?.bindRootService() }; dsuPage!!.build() }
                 else -> { if (homePage == null) homePage = HomePage(this); homePage!!.build() }
             }
-            val wrapped = ScrollView(this).apply {
+            // VmPage 自带「可滚动内容区(weight=1) + 固定底部操作坞」，需要确定高度；
+            // 外层再套 ScrollView 会让 weight 失效、底栏被顶出屏幕，所以只有它不包 ScrollView。
+            val wrapped: View = if (index == vmTab) page else ScrollView(this).apply {
                 if (index == 1) isFillViewport = true
                 addView(page)
             }
@@ -613,6 +637,9 @@ class MainActivity : AppCompatActivity() {
         when (tab) {
             0 -> homePage?.refreshStatus()
         }
+        // v2.0.29：切到 VMiOS tab 开始 3s 状态轮询，切离立即停（避免后台空跑）
+        if (previousTab == vmTab && tab != vmTab) vmPage?.onPause()
+        if (tab == vmTab) vmPage?.onResume()
     }
 
     /**

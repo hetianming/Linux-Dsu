@@ -7,7 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.content.ServiceConnection
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.PointF
 import android.graphics.Rect
 import android.graphics.RenderEffect
@@ -70,11 +73,35 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
     companion object {
         private const val TAG = "NativeDisplay"
         const val SERVICE_NAME = "crosvm_display"
-        /** 输入模式：鼠标（相对，桌面/GRUB 用）| 多点触控（绝对，iOS/触控系统用） */
-        const val MODE_MOUSE = 0
+        /**
+         * v2.0.24 输入模式（0/1 与旧版兼容）：
+         *  0 = 触摸板：整屏当笔记本触摸板，相对位移移动光标（默认，替代旧的「鼠标」档）
+         *  1 = 多点触控：绝对触点，留给 iOS/触控系统的手势
+         *  2 = 直接点按：旧的「按哪到哪」绝对指针，保留为可随时切回的一档
+         * 老用户存的 0 会自然变成触摸板，1 仍是多点触控，无需迁移配置。
+         */
+        const val MODE_TOUCHPAD = 0
         const val MODE_MULTITOUCH = 1
+        const val MODE_ABSOLUTE = 2
         private const val SP_NAME = "native_disp"
         private const val SP_MODE = "input_mode"
+        private const val SP_TP_GAIN = "tp_gain"
+        // v2.0.27：软件箭头默认不画（桌面系统自带指针），开关按「当前启动盘组合」分别记忆。
+        // 旧版全局键 tp_cursor 不再读取：升级后一律回到默认关，立刻消除双箭头。
+        private const val SP_TP_CURSOR_PROFILE = "tp_cursor_"
+        private const val SP_TP_CURSOR_SIZE = "tp_cursor_size"  // v2.0.26 箭头大小档位
+        // v2.0.26：v2.0.25 的箭头约 26dp 高 + 2.5dp 描边，实测偏大、盖在浅色桌面上不自然。
+        // 以尖端 (0,0) 为锚整体缩放：小 0.58 / 中 0.75 / 大 0.92（约 15 / 19 / 24 dp 高）。
+        // 长按「指针」循环，持久化；默认「小」。
+        private val CURSOR_SCALES = floatArrayOf(0.58f, 0.75f, 0.92f)
+        private val CURSOR_SIZE_NAMES = arrayOf("小", "中", "大")
+        private const val CURSOR_SIZE_DEFAULT = 0
+        // v2.0.24 触摸板手势参数
+        private const val TP_TAP_SLOP_DP = 10f       // 位移小于它判「轻点」
+        private const val TP_TAP_TIMEOUT_MS = 240L   // 轻点最长按下时长
+        private const val TP_LONG_PRESS_MS = 260L    // 按住不动超过它 → 左键按住拖动
+        private const val TP_WHEEL_STEP_DP = 20f     // 双指每滑动这么多 dp 发一格滚轮
+        private val TP_GAINS = floatArrayOf(0.7f, 1.0f, 1.6f)  // 长按「模式」循环：慢/中/快
         // v2.0.18：键盘入口贴边收纳。0=浮球，1/2/3/4=贴左/右/上/下边缘的透明细杠条。
         private const val SP_DOCK_EDGE = "dock_edge"
         private const val SP_DOCK_POS = "dock_pos"
@@ -161,10 +188,34 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
     @Volatile private var absPointer = true
     private val ui = Handler(Looper.getMainLooper())
     private var alive = true
-    // v2.0.7：双输入模式。默认鼠标（桌面/GRUB 最通用）；切到多点触控留给 iOS/触控系统，
-    // 手势才有意义（不会退化成鼠标）。持久化，下次进原生显示沿用上次选择。
-    @Volatile     private var inputMode = MODE_MOUSE
+    // v2.0.7 双输入模式 → v2.0.24 三档：默认触摸板（笔记本手感）；多点触控留给
+    // iOS/触控系统；直接点按保留旧的绝对指针。持久化，下次进原生显示沿用上次选择。
+    @Volatile     private var inputMode = MODE_TOUCHPAD
     private var modeToggle: TextView? = null
+    // v2.0.24 触摸板状态机：只在 UI 线程读写（setOnTouchListener 回调），无需加锁。
+    private var tpVX = 0f; private var tpVY = 0f      // 虚拟光标（guest ABS 坐标，浮点累积）
+    private var tpInit = false                        // 是否已与 guest 光标对齐
+    private var tpLastX = 0f; private var tpLastY = 0f
+    private var tpDownX = 0f; private var tpDownY = 0f
+    private var tpDownTime = 0L
+    private var tpMoved = false
+    private var tpDragging = false
+    private var tpLongPress: Runnable? = null
+    private var tpTwoFinger = false
+    private var tpTwoCX = 0f; private var tpTwoCY = 0f
+    private var tpTwoMoved = false
+    private var tpTwoDownTime = 0L
+    private var tpTwoTapDone = false
+    private var tpWheelAccX = 0f; private var tpWheelAccY = 0f
+    private var tpGainIdx = 1                        // 默认中速 ×1.0
+    // v2.0.25 软件光标：guest 不画指针的系统（固件/GRUB/部分 Linux）靠它知道光标在哪。
+    // 只在触摸板模式显示 —— 只有这个模式 APP 才持有光标位置。默认开，工具条「指针」可关。
+    private var cursorView: CursorOverlayView? = null
+    private var cursorBtn: TextView? = null
+    // v2.0.27：默认不画。guest 自带指针时 APP 那个箭头是多余且不同步的第二个箭头。
+    private var cursorVisible = false
+    private var cursorKey = SP_TP_CURSOR_PROFILE + "default"   // 当前启动盘组合对应的记忆键
+    private var cursorSizeIdx = CURSOR_SIZE_DEFAULT   // v2.0.26：默认「小」
     // v2.0.3：把链路每一步的结果直接显示在状态栏，不用 logcat 也能一次定位
     @Volatile private var diag = "初始化…"
 
@@ -224,6 +275,21 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
         attachTouch(surfaceView)
         root.addView(surfaceView)
 
+        // v2.0.25 软件光标：普通 View 叠加，**不是第二个 SurfaceView**。历史教训见
+        // 249 行注释：早期叠过 cursor surface，结果把触摸吞了才删掉。普通 View 默认
+        // 不 clickable、onTouchEvent 返回 false，触摸会自然穿透到下层 SurfaceView；
+        // 加在 surfaceView 之后、kbHost 之前，键盘弹出时光标被键盘盖住，不挡按键。
+        cursorView = CursorOverlayView(this).apply {
+            val d = resources.displayMetrics.density
+            val size = (28 * d).roundToInt()
+            layoutParams = FrameLayout.LayoutParams(size, size).apply {
+                gravity = Gravity.TOP or Gravity.START
+            }
+            isClickable = false
+            isFocusable = false
+        }
+        root.addView(cursorView)
+
         // v2.0.15：顶部检测状态卡片已删除（用户要求）。同时停掉每秒轮询
         // startStatusLoop()，省电、省 binder。诊断改为「长按 ⌨ 浮球 / 面板 ⓘ」临时查看，
         // 平时画面零遮挡。
@@ -277,7 +343,7 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
         // v2.0.15：状态卡片与每秒轮询均已移除。
         ui.postDelayed({
             if (!isFinishing && !isDestroyed) {
-                Toast.makeText(this, "默认已上锁 🔒（软件锁）：拦返回键与左右侧滑返回防误退；屏幕底部不占用，Windows 任务栏 / Linux 开始菜单可直接点。点 🔓 解锁后返回键恢复。点 ⌨ 出全键盘，按住工具条可拖动；「旋转」切 0/90/180/270°；长按 ⌨ 看诊断", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "触摸板模式（像笔记本）：单指滑动移光标 / 轻点单击 / 长按拖动 / 双指滚动 / 双指轻点右键。工具条「模式」点按切 触摸板→直接点按→多点触控，长按调光标速度；「指针」默认关（用系统自带指针，不再出现两个箭头），没有指针的固件/GRUB 界面点按打开即可、且按当前启动盘记住，长按切箭头大小 小/中/大。默认已上锁 🔒（软件锁）：拦返回键与左右侧滑返回防误退；屏幕底部不占用，Windows 任务栏 / Linux 开始菜单可直接点。点 🔓 解锁后返回键恢复。点 ⌨ 出全键盘，按住工具条可拖动；「旋转」切 0/90/180/270°；长按 ⌨ 看诊断", Toast.LENGTH_LONG).show()
             }
         }, 1200)
     }
@@ -414,6 +480,7 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
         super.onConfigurationChanged(newConfig)
         // configChanges 已声明 orientation，旋转不重建 Activity，在这里重算。
         updateSurfaceLayout()
+        rootFrame.post { updateCursorOverlay() }  // v2.0.25：布局完成后重算箭头偏移
         if (!entryDragging) positionEntry()   // v2.0.18：旋转后按新宽高重新贴边
         applyKbDensity()
         applyKbRotation()                     // v2.0.19：宽高变了重算 4 向旋转的 pivot
@@ -619,7 +686,13 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
                     EvdevEncoder.sendMultiTouch(
                         NativeInputBridge.sink(NativeInputBridge.CH_TOUCH), e, s.x, s.y)
                 }
-                // 鼠标模式（手指）以及物理鼠标/触摸板：全部走 7790 的 usb-tablet 绝对指针。
+                // v2.0.24 触摸板模式（手指）：整块屏当笔记本触摸板，见 handleTouchpad()。
+                // 同样走 7790，但由 APP 维护虚拟光标、把手指位移增量累加后下发，
+                // 不要求 crosvm 具备 REL_X/REL_Y —— 因此启动链 / 输入设备一律不用改。
+                inputMode == MODE_TOUCHPAD && !isPhysicalPointer -> {
+                    handleTouchpad(e, s.x, s.y, bw, bh)
+                }
+                // 直接点按（按哪到哪）以及物理鼠标/触摸板：全部走 7790 的 usb-tablet 绝对指针。
                 // v2.0.14：7790 已从相对 mouse 换成 absolute-mouse，能力位图只有 EV_ABS，
                 // 必须发 ABS_X/ABS_Y，发 EV_REL 相对位移会被 guest 按能力位图直接丢弃。
                 // 绝对指针「按哪到哪」，不需要 APP 维护虚拟光标、不存在漂移/不同步。
@@ -652,6 +725,330 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
             hideIme()
             true
         }
+    }
+
+    /**
+     * v2.0.24：把整块手机屏当笔记本触摸板用。
+     *
+     * 为什么不直接发 EV_REL：当前 7790 是 `absolute-mouse`，能力位图只有
+     * EV_ABS(ABS_X,ABS_Y) + EV_KEY(BTN_*) + EV_REL(WHEEL,HWHEEL)，**没有 REL_X/REL_Y**，
+     * 发相对位移会被 guest input core 按能力位图直接丢弃（见 EvdevEncoder 注释）。
+     * 所以这里在 APP 内维护一个虚拟光标：手指位移增量累加到它，再走已验证可用的
+     * EV_ABS 绝对通道下发。guest 看到的是「光标从当前位置按增量移动」，正是触摸板手感，
+     * 而 crosvm / --input / 启动脚本 / 启动盘 / 内核一律不用改，也不需要重启手机。
+     *
+     * absPointer=false（旧工具链回退，7790 是相对 mouse）时更简单：增量直接交给
+     * sendMouseMotion 发 EV_REL，连虚拟光标都不用维护。
+     *
+     * 手势（对齐笔记本触摸板）：
+     *   单指滑动     → 移动光标（手指不必对准目标）
+     *   单指轻点     → 左键单击（在光标当前位置，不跳到手指落点）
+     *   按住不动再滑 → 左键按住拖动
+     *   双指滑动     → 滚轮（上下 / 左右）
+     *   双指轻点     → 右键单击
+     */
+    private fun handleTouchpad(e: MotionEvent, sx: Float, sy: Float, bw: Int, bh: Int) {
+        val sink = NativeInputBridge.sink(NativeInputBridge.CH_MOUSE)
+        val d = resources.displayMetrics.density
+        val slop = TP_TAP_SLOP_DP * d
+        val step = TP_WHEEL_STEP_DP * d
+        val gain = TP_GAINS[tpGainIdx.coerceIn(0, TP_GAINS.size - 1)]
+        val now = e.eventTime
+
+        fun cancelLongPress() {
+            tpLongPress?.let { ui.removeCallbacks(it) }
+            tpLongPress = null
+        }
+        /** 一帧绝对坐标；相对设备（旧工具链）不需要它。 */
+        fun absFrame(button: Boolean?) {
+            if (absPointer) {
+                EvdevEncoder.sendAbsoluteMouse(
+                    sink,
+                    tpVX.roundToInt().coerceIn(0, bw - 1),
+                    tpVY.roundToInt().coerceIn(0, bh - 1),
+                    button,
+                )
+            }
+        }
+        /** 在当前光标位置单击（buttonRight=true 为右键）。 */
+        fun click(buttonRight: Boolean) {
+            if (buttonRight) {
+                EvdevEncoder.sendRightClick(sink)
+            } else if (absPointer) {
+                absFrame(true); absFrame(false)
+            } else {
+                EvdevEncoder.sendMouseButton(sink, true)
+                EvdevEncoder.sendMouseButton(sink, false)
+            }
+        }
+        fun buttonDown(down: Boolean) {
+            if (absPointer) absFrame(down)
+            else EvdevEncoder.sendMouseButton(sink, down)
+        }
+        // absolute-mouse 与 mouse 的能力位图都含 REL_WHEEL/HWHEEL，滚轮协议通用。
+        fun wheel(h: Int, v: Int) = EvdevEncoder.sendAbsoluteWheel(sink, h, v)
+
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                cancelLongPress()
+                tpDownX = e.x; tpDownY = e.y
+                tpLastX = e.x; tpLastY = e.y
+                tpDownTime = now
+                tpMoved = false; tpDragging = false
+                tpTwoFinger = false; tpTwoMoved = false; tpTwoTapDone = false
+                tpWheelAccX = 0f; tpWheelAccY = 0f
+                // 首次进入：把 guest 光标拉到屏幕中心并与本地虚拟光标对齐，之后两边
+                // 一直同步。否则第一次滑动会从 guest 一个未知位置突然跳过来。
+                if (!tpInit) {
+                    tpVX = bw / 2f; tpVY = bh / 2f
+                    tpInit = true
+                    absFrame(null)
+                    updateCursorOverlay()   // v2.0.25：对齐后立刻显示箭头
+                }
+                val lp = Runnable {
+                    if (!tpMoved && !tpTwoFinger && !tpDragging) {
+                        tpDragging = true
+                        buttonDown(true)
+                    }
+                }
+                tpLongPress = lp
+                ui.postDelayed(lp, TP_LONG_PRESS_MS)
+            }
+
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                if (e.pointerCount >= 2) {
+                    cancelLongPress()
+                    // 单指按住拖动中途来了第二指：先松开左键，别让 guest 卡在按下态
+                    if (tpDragging) { buttonDown(false); tpDragging = false }
+                    tpTwoFinger = true
+                    tpTwoMoved = false
+                    tpTwoTapDone = false
+                    tpTwoDownTime = now
+                    tpTwoCX = (e.getX(0) + e.getX(1)) / 2f
+                    tpTwoCY = (e.getY(0) + e.getY(1)) / 2f
+                    tpWheelAccX = 0f; tpWheelAccY = 0f
+                }
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                if (tpTwoFinger && e.pointerCount >= 2) {
+                    val cx = (e.getX(0) + e.getX(1)) / 2f
+                    val cy = (e.getY(0) + e.getY(1)) / 2f
+                    val dcx = cx - tpTwoCX
+                    val dcy = cy - tpTwoCY
+                    tpTwoCX = cx; tpTwoCY = cy
+                    if (kotlin.math.abs(dcx) + kotlin.math.abs(dcy) > slop) tpTwoMoved = true
+                    // 自然滚动：手指往哪滑内容往哪走（双指上滑 → 页面向下 → REL_WHEEL +1）
+                    tpWheelAccX += -dcx
+                    tpWheelAccY += -dcy
+                    while (kotlin.math.abs(tpWheelAccY) >= step) {
+                        val v = if (tpWheelAccY > 0) 1 else -1
+                        wheel(0, v)
+                        tpWheelAccY -= (if (tpWheelAccY > 0) 1f else -1f) * step
+                    }
+                    while (kotlin.math.abs(tpWheelAccX) >= step) {
+                        val h = if (tpWheelAccX > 0) 1 else -1
+                        wheel(h, 0)
+                        tpWheelAccX -= (if (tpWheelAccX > 0) 1f else -1f) * step
+                    }
+                } else if (!tpTwoFinger && e.pointerCount == 1) {
+                    val dx = e.x - tpLastX
+                    val dy = e.y - tpLastY
+                    tpLastX = e.x; tpLastY = e.y
+                    if (kotlin.math.abs(e.x - tpDownX) + kotlin.math.abs(e.y - tpDownY) > slop) {
+                        tpMoved = true
+                        cancelLongPress()
+                    }
+                    if (dx != 0f || dy != 0f) {
+                        // v2.0.25：虚拟光标两种工具链都维护 —— 绝对通道靠它下发坐标，
+                        // 相对通道虽不下发，但软件箭头需要它来定位。
+                        tpVX = (tpVX + dx * sx * gain).coerceIn(0f, (bw - 1).toFloat())
+                        tpVY = (tpVY + dy * sy * gain).coerceIn(0f, (bh - 1).toFloat())
+                        if (absPointer) {
+                            absFrame(null)
+                        } else {
+                            EvdevEncoder.sendMouseMotion(
+                                sink,
+                                (dx * sx * gain).roundToInt(),
+                                (dy * sy * gain).roundToInt(),
+                            )
+                        }
+                        updateCursorOverlay()
+                    }
+                }
+            }
+
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (tpTwoFinger && !tpTwoTapDone) {
+                    if (!tpTwoMoved && now - tpTwoDownTime < TP_TAP_TIMEOUT_MS) {
+                        click(true)              // 双指轻点 = 右键
+                        tpTwoTapDone = true
+                    }
+                    tpTwoFinger = false
+                    tpMoved = true              // 回到单指时别再判成轻点
+                    // 用剩下那根指的坐标做新基准，避免抬指瞬间光标跳一下
+                    val idx = if (e.actionIndex == 0) 1 else 0
+                    if (idx < e.pointerCount) {
+                        tpLastX = e.getX(idx); tpLastY = e.getY(idx)
+                    }
+                }
+            }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                cancelLongPress()
+                if (tpTwoFinger && !tpTwoTapDone &&
+                    !tpTwoMoved && now - tpTwoDownTime < TP_TAP_TIMEOUT_MS) {
+                    click(true)                  // 两指几乎同时抬起
+                    tpTwoTapDone = true
+                }
+                if (tpDragging) {
+                    buttonDown(false)
+                } else if (!tpMoved && !tpTwoFinger &&
+                    e.actionMasked == MotionEvent.ACTION_UP &&
+                    now - tpDownTime < TP_TAP_TIMEOUT_MS) {
+                    click(false)                 // 轻点 = 左键单击
+                }
+                tpDragging = false
+                tpTwoFinger = false
+                tpMoved = false
+            }
+        }
+    }
+
+    /**
+     * v2.0.25 软件鼠标箭头；v2.0.26 整体缩小并支持三档大小。
+     *
+     * 只画一个 28dp 的小 View（28dp 是绘制上界，不是显示尺寸），靠 translationX/Y 移动，
+     * 重绘范围只有自身。箭头尖端落在 (0,0)，正是 guest 光标位置。
+     * 白填充 + 黑描边，深/浅背景都能看清。
+     */
+    private class CursorOverlayView(ctx: Context) : View(ctx) {
+        private val d = ctx.resources.displayMetrics.density
+        private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE; style = Paint.Style.FILL
+        }
+        private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK; style = Paint.Style.STROKE
+            strokeWidth = 2.5f * d
+            strokeJoin = Paint.Join.ROUND
+            strokeCap = Paint.Cap.ROUND
+        }
+        private val arrow = Path()
+        private val unit = d * 1.15f
+
+        init {
+            // 标准鼠标箭头轮廓（单位 dp，尖端在 0,0）
+            arrow.moveTo(0f, 0f)
+            arrow.lineTo(0f, 19f * unit)
+            arrow.lineTo(4.6f * unit, 14.6f * unit)
+            arrow.lineTo(8.2f * unit, 22.5f * unit)
+            arrow.lineTo(11.2f * unit, 21.1f * unit)
+            arrow.lineTo(7.6f * unit, 13.4f * unit)
+            arrow.lineTo(14.2f * unit, 13.4f * unit)
+            arrow.close()
+        }
+
+        /**
+         * v2.0.26：以尖端 (0,0) 为锚缩放。pivot 默认是 View 中心（14dp），不改成 0 的话
+         * 缩放会让尖端偏移 (1-scale)*14dp，箭头就和 guest 光标错位了。
+         * 白填充、黑描边一起等比变细，小箭头配细边更自然。
+         */
+        fun setSizeScale(scale: Float) {
+            pivotX = 0f
+            pivotY = 0f
+            scaleX = scale
+            scaleY = scale
+        }
+
+        /** localX/Y 是相对 SurfaceView 左上角的局部坐标；ox/oy 是 SurfaceView 在 root 中的偏移（横屏等比居中时非 0）。 */
+        fun setPosition(localX: Float, localY: Float, ox: Float, oy: Float) {
+            translationX = ox + localX
+            translationY = oy + localY
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            // 先描黑边再填白，尖角处也能留出均匀轮廓
+            canvas.drawPath(arrow, stroke)
+            canvas.drawPath(arrow, fill)
+        }
+
+        // 关键：绝不消费触摸，事件继续穿透到下层 SurfaceView 的 OnTouchListener。
+        // 历史教训：早期用第二个 SurfaceView 画光标，把触摸全吞了，已删除。
+        override fun onTouchEvent(event: MotionEvent): Boolean = false
+    }
+
+    /** 把虚拟光标（guest ABS 坐标）映射回 View 局部坐标，并更新叠加层位置 / 可见性。 */
+    private fun updateCursorOverlay() {
+        val cv = cursorView ?: return
+        // v2.0.26：每次都重新应用缩放，避免 loadInputMode / 配置变更的先后顺序影响默认档位。
+        cv.setSizeScale(CURSOR_SCALES[cursorSizeIdx.coerceIn(0, CURSOR_SCALES.size - 1)])
+        // 只在触摸板模式显示：只有这个模式 APP 才持有光标位置；且要与 guest 对齐过（tpInit）。
+        val show = inputMode == MODE_TOUCHPAD && cursorVisible && tpInit
+        cv.visibility = if (show) View.VISIBLE else View.INVISIBLE
+        if (!show) return
+        val s = scales()
+        val localX = if (s.x != 0f) tpVX / s.x else tpVX
+        val localY = if (s.y != 0f) tpVY / s.y else tpVY
+        val ox = if (::surfaceView.isInitialized) surfaceView.left.toFloat() else 0f
+        val oy = if (::surfaceView.isInitialized) surfaceView.top.toFloat() else 0f
+        cv.setPosition(localX, localY, ox, oy)
+    }
+
+    /**
+     * v2.0.27：把「当前启动盘组合」折成一个稳定的记忆键。
+     *
+     * guest 有没有自带指针，APP 侧检测不到：原生显示只交出一个 Surface，帧缓冲由
+     * crosvm 直写，APP 拿不到像素；simplefb 也没有硬件光标通道（AIDL 那条主 APP
+     * 从未启用，早期叠 cursor surface 还因吞触摸被删）。硬做图像识别会误判 + 耗电。
+     * 所以用「按盘记忆」代替自动检测：桌面系统盘默认关，遇到没指针的固件/GRUB
+     * 界面点开一次，之后这套盘一直开；换盘互不干扰。
+     */
+    private fun cursorProfileKey(): String = runCatching {
+        val c = GunyahManager.loadConfig(this)
+        val raw = listOf(c.bootDisk, c.systemDisk, c.cdRom, c.mmio, c.displayBackend)
+            .joinToString("|")
+        SP_TP_CURSOR_PROFILE + Integer.toHexString(raw.hashCode())
+    }.getOrDefault(SP_TP_CURSOR_PROFILE + "default")
+
+    /** 工具条「指针」按钮文字直接带状态，一眼能看出当前画不画。 */
+    private fun cursorLabel(): String = if (cursorVisible) "指针 开" else "指针 关"
+
+    /** v2.0.27 工具条「指针」点按：开/关软件箭头，按当前启动盘组合分别记忆。 */
+    private fun toggleCursor() {
+        cursorVisible = !cursorVisible
+        runCatching {
+            getSharedPreferences(SP_NAME, MODE_PRIVATE).edit()
+                .putBoolean(cursorKey, cursorVisible).apply()
+        }
+        cursorBtn?.apply {
+            text = this@NativeDisplayActivity.cursorLabel()
+            alpha = if (cursorVisible) 1f else 0.4f
+        }
+        updateCursorOverlay()
+        Toast.makeText(
+            this,
+            if (cursorVisible)
+                "软件箭头：开（仅当前这套启动盘记住；没指针的固件/GRUB 界面用）"
+            else
+                "软件箭头：关（用系统自带指针，不再出现两个箭头）",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    /** v2.0.26 长按「指针」：循环箭头大小 小/中/大，持久化。返回后立刻重绘，不用重启原生显示。 */
+    private fun cycleCursorSize() {
+        cursorSizeIdx = (cursorSizeIdx + 1) % CURSOR_SCALES.size
+        runCatching {
+            getSharedPreferences(SP_NAME, MODE_PRIVATE).edit()
+                .putInt(SP_TP_CURSOR_SIZE, cursorSizeIdx).apply()
+        }
+        updateCursorOverlay()
+        val tail = if (cursorVisible) "" else "（箭头当前为关，点按「指针」打开后可见）"
+        Toast.makeText(
+            this,
+            "软件光标大小：${CURSOR_SIZE_NAMES[cursorSizeIdx]}（×${CURSOR_SCALES[cursorSizeIdx]}）$tail",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     private fun hideIme() {
@@ -1119,9 +1516,14 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
             setPadding((4 * d).roundToInt(), (2 * d).roundToInt(),
                 (4 * d).roundToInt(), (2 * d).roundToInt())
         }
-        // 模式按钮文案最长（「触摸模式: 多点触控」），给 1.8 份宽度才不挤成两行。
+        // 模式按钮给 1.8 份宽度，装得下「模式: 多点触控」不挤成两行。
         val mt = this@NativeDisplayActivity.barButton(this@NativeDisplayActivity.modeLabel(), 1.8f) {
             this@NativeDisplayActivity.toggleInputMode()
+        }
+        // v2.0.24：长按循环触摸板光标速度。返回 true 消费长按，不会误触发上面的 click 切模式。
+        mt.setOnLongClickListener {
+            this@NativeDisplayActivity.cycleTpGain()
+            true
         }
         modeToggle = mt
         bar.addView(mt)
@@ -1141,6 +1543,18 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
         }
         lockBtn = lb
         bar.addView(lb)
+        // v2.0.27 软件光标开关：默认关（桌面系统自带指针），点按开/关并按盘记忆。
+        val cb = this@NativeDisplayActivity.barButton(this@NativeDisplayActivity.cursorLabel(), 0.9f) {
+            this@NativeDisplayActivity.toggleCursor()
+        }
+        // v2.0.26：长按循环箭头大小。返回 true 消费长按，不会误触发上面的 click 开关。
+        cb.setOnLongClickListener {
+            this@NativeDisplayActivity.cycleCursorSize()
+            true
+        }
+        cb.alpha = if (this@NativeDisplayActivity.cursorVisible) 1f else 0.4f
+        this@NativeDisplayActivity.cursorBtn = cb
+        bar.addView(cb)
         bar.addView(this@NativeDisplayActivity.barButton("ⓘ", 0.6f) { this@NativeDisplayActivity.showDiagnostics() })
         bar.addView(this@NativeDisplayActivity.barButton("收起 ×", 0.9f) {
             this@NativeDisplayActivity.hideKeyPreview()
@@ -1663,6 +2077,17 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
                 .append(if (inputW > 0) "${inputW}x${inputH}" else "?")
                 .append(" / 画面 ${guestW}x${guestH}")
             append("\n").append(modeLabel())
+            if (inputMode == MODE_TOUCHPAD) {
+                append(" 速度×${TP_GAINS[tpGainIdx.coerceIn(0, TP_GAINS.size - 1)]}")
+                append(" 箭头").append(
+                    if (cursorVisible) CURSOR_SIZE_NAMES[cursorSizeIdx.coerceIn(0, CURSOR_SCALES.size - 1)]
+                    else "关"
+                )
+            }
+            // v2.0.27：显示当前这套启动盘的记忆键尾，确认「按盘记忆」确实分了档。
+            append("\n").append("软件箭头按盘记忆: ")
+                .append(cursorKey.removePrefix(SP_TP_CURSOR_PROFILE))
+                .append(" / ").append(if (cursorVisible) "开" else "关（默认）")
             append("\n").append(NativeInputBridge.inputDiagnostics.replace(" | ", "\n"))
             append("\n通道 触摸/键盘/鼠标/开关: ")
                 .append(if (r.getOrNull(0) == true) "✓" else "✗")
@@ -1675,27 +2100,59 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
 
     // ---------------- 输入模式切换（v2.0.7） ----------------
 
-    private fun modeLabel(): String =
-        "触摸模式: " + if (inputMode == MODE_MULTITOUCH) "多点触控" else "鼠标"
+    private fun modeLabel(): String = "模式: " + when (inputMode) {
+        MODE_MULTITOUCH -> "多点触控"
+        MODE_ABSOLUTE -> "直接点按"
+        else -> "触摸板"
+    }
 
+    /** v2.0.24：三档循环 触摸板 → 直接点按 → 多点触控 → 触摸板。原绝对指针没被删，随时可切回。 */
     private fun toggleInputMode() {
-        inputMode = if (inputMode == MODE_MOUSE) MODE_MULTITOUCH else MODE_MOUSE
+        inputMode = when (inputMode) {
+            MODE_TOUCHPAD -> MODE_ABSOLUTE
+            MODE_ABSOLUTE -> MODE_MULTITOUCH
+            else -> MODE_TOUCHPAD
+        }
+        // 切回触摸板时重新与 guest 光标对齐（期间 guest 光标可能被别的输入移动过）。
+        if (inputMode == MODE_TOUCHPAD) tpInit = false
         saveInputMode()
         modeToggle?.text = modeLabel()
+        updateCursorOverlay()   // v2.0.25：切出触摸板时隐藏箭头，切回时恢复
         Toast.makeText(
             this,
-            if (inputMode == MODE_MULTITOUCH)
-                "已切到多点触控（iOS/触控系统：手势可用）"
-            else
-                "已切到鼠标模式（桌面/GRUB：手指=鼠标）",
+            when (inputMode) {
+                MODE_TOUCHPAD -> "触摸板：单指滑动移光标 / 轻点单击 / 长按拖动 / 双指滚动 / 双指轻点右键；长按本按钮调光标速度"
+                MODE_ABSOLUTE -> "直接点按：按哪到哪（原来的鼠标模式）"
+                else -> "多点触控：iOS/触控系统，手势可用"
+            },
             Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    /** v2.0.24：长按「模式」按钮循环触摸板光标速度（慢 0.7 / 中 1.0 / 快 1.6），不改变模式。 */
+    private fun cycleTpGain() {
+        tpGainIdx = (tpGainIdx + 1) % TP_GAINS.size
+        runCatching {
+            getSharedPreferences(SP_NAME, MODE_PRIVATE).edit()
+                .putInt(SP_TP_GAIN, tpGainIdx).apply()
+        }
+        val names = arrayOf("慢", "中", "快")
+        Toast.makeText(
+            this, "触摸板光标速度：${names[tpGainIdx]}（×${TP_GAINS[tpGainIdx]}）", Toast.LENGTH_SHORT
         ).show()
     }
 
     private fun loadInputMode() {
         runCatching {
             val sp = getSharedPreferences(SP_NAME, MODE_PRIVATE)
-            inputMode = sp.getInt(SP_MODE, MODE_MOUSE)
+            inputMode = sp.getInt(SP_MODE, MODE_TOUCHPAD).coerceIn(0, 2)
+            tpGainIdx = sp.getInt(SP_TP_GAIN, 1).coerceIn(0, TP_GAINS.size - 1)
+            // v2.0.27：按盘读取，默认关。旧版全局键 tp_cursor 不再读取 —— 升级后一律
+            // 回到「不画」，避免 Windows 桌面又冒出第二个箭头。
+            cursorKey = cursorProfileKey()
+            cursorVisible = sp.getBoolean(cursorKey, false)
+            cursorSizeIdx = sp.getInt(SP_TP_CURSOR_SIZE, CURSOR_SIZE_DEFAULT)
+                .coerceIn(0, CURSOR_SCALES.size - 1)
         }
     }
 

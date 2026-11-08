@@ -11,9 +11,9 @@
     </style>
 
     <!--
-        gunyahVM 页面专用：关闭 forceDark。
-        该页面所有颜色都是代码按 Ui.isDark 自行绘制的，若系统深色模式再叠加一次
-        自动反色（forceDark），会出现「浅卡 + 白字」「深字 + 深卡」的错乱，文字直接看不见。
+        VM 页面族（含内嵌 tab 与各子 Activity）：仅关闭系统 forceDark，不带任何独立配色。
+        v2.0.30 起所有颜色 / 卡片 / 按钮都由全局 Ui 转发层（GunTheme）按 Ui.isDark 绘制，
+        与 APP 主界面完全同步；若系统深色模式再叠加一次自动反色会出现文字看不清，故关之。
     -->
     <style name="Theme.App.Gunyah" parent="Theme.App">
         <item name="android:forceDarkAllowed">false</item>

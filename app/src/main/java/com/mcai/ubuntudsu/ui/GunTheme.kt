@@ -2,121 +2,93 @@ package com.mcai.ubuntudsu.ui
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
-import android.graphics.drawable.ColorDrawable
 import android.view.View
 
 /**
- * Gunyah 页面族双主题（每个 Activity onCreate 首行调 [applyTheme]）：
- * ─ 夜间：GunyahiOS 暗绿玻璃（深绿黑底 + 绿主色 #3DDC84）
- * ─ 日间：同步 APP 本身拟态主题（#E0E5EC 浅灰蓝底 + 蓝主色 #2E5FB8）
- * 日夜判定与 APP 一致（Ui.isDark → 系统 uiMode）。
+ * v2.0.30：Gunyah 页面族主题 = APP 全局 [Ui] 的转发层，不再自带独立色板。
+ *
+ * 历史问题：这里曾维护「夜间暗绿玻璃 / 日间蓝灰」两套自有色板，还给根布局铺不透明底，
+ * 导致虚拟机 tab 在 APP 里像另一套皮肤（白底灰蓝卡片 vs 全局液态渐变 + 玻璃拟态）。
+ *
+ * 现在：所有颜色、卡片、按钮一律从 [Ui] 取，日夜判定也用 [Ui.isDark]，
+ * 与首页 / 多功能 / DSU 完全同步；内嵌 tab 页保持透明，直接透出 MainActivity 的液态背景。
+ *
+ * 兼容：公开 API 的字段名、方法名、参数、返回类型全部保持不变，因此 9 个 VM 页面里
+ * 277 处 GunTheme.dp、60 处 GunTheme.TEXT 等调用点一字未改。每个页面 onCreate 首行
+ * （或 VmPage.build 首行）仍需调用 [applyTheme] 装载当前主题色板。
  */
 object GunTheme {
-    // ==================== 夜间：暗绿玻璃 ====================
-    private object Night {
-        const val BG = 0xFF0A120E.toInt()
-        const val BG2 = 0xFF0D1A13.toInt()
-        const val CARD = 0xFF13241D.toInt()
-        const val CARD_ALT = 0xFF0F1C16.toInt()
-        const val ACCENT = 0xFF3DDC84.toInt()
-        const val ACCENT_SOFT = 0xFF2FBF71.toInt()
-        const val DANGER = 0xFFFF6B6B.toInt()
-        const val WARN = 0xFFE0A458.toInt()
-        const val TEXT = 0xFFF0F7F2.toInt()
-        const val TEXT2 = 0xFFA9C4B4.toInt()
-        const val MUTED = 0xFF95AFA0.toInt()
-        const val BORDER = 0xFF1E3A2E.toInt()
-        const val CHIP = 0xFF33473E.toInt()
-        const val ON_ACCENT = 0xFF062012.toInt() // 绿底上的深字
-        const val ON_WARN = 0xFF201508.toInt()
-    }
 
-    // ==================== 日间：同步 APP 拟态主题 ====================
-    // 与 Ui.Day 完全对齐：浅灰蓝底 #E0E5EC + 蓝灰玻璃卡片（#B7C6DA→#A6B5C6），
-    // 不再用近白卡片（纯白在日间和 APP 其它页面强烈割裂）。
-    private object Day {
-        const val BG = 0xFFE0E5EC.toInt()          // 与 Ui.Day.BG 一致
-        const val BG2 = 0xFFE7EDF5.toInt()
-        const val CARD = 0xFFBCC9DA.toInt()        // 卡片基色（渐变中间调）
-        const val CARD_TOP = 0xFFC8D4E3.toInt()    // 与 Ui.Day.CARD_TOP 同系
-        const val CARD_BOTTOM = 0xFFB0BFD2.toInt() // 与 Ui.Day.CARD_BOTTOM 同系
-        const val CARD_ALT = 0xFFD3DBE8.toInt()    // 与 Ui.Day.TRACK 一致
-        const val ACCENT = 0xFF23509F.toInt()      // Ui.Day.PRIMARY 加深一档，浅蓝卡片上文字可读
-        const val ACCENT_SOFT = 0xFF3F86D8.toInt() // 与 Ui.Day.PRIMARY_TOP 同系
-        const val DANGER = 0xFFC23B3B.toInt()
-        const val WARN = 0xFF9A6410.toInt()
-        const val TEXT = 0xFF16202C.toInt()
-        const val TEXT2 = 0xFF34455B.toInt()
-        const val MUTED = 0xFF46586E.toInt()
-        const val BORDER = 0xFFA9B7C9.toInt()
-        const val CHIP = 0xFFC7D2E1.toInt()
-        const val ON_ACCENT = 0xFFFFFFFF.toInt()   // 蓝底白字
-        const val ON_WARN = 0xFFFFFFFF.toInt()
-    }
+    // 默认取 APP 日间色板作兜底；applyTheme 后按当前日夜模式覆盖
+    var isNight = false
+    var BG = 0xFFE0E5EC.toInt(); var BG2 = 0xFFDCE3EE.toInt()
+    var CARD = 0xFFDCE3EE.toInt(); var CARD_ALT = 0xFFDCE3EE.toInt()
+    var CARD_TOP = 0xD9CDD9E8.toInt(); var CARD_BOTTOM = 0xD0BAC9DD.toInt()
+    var ACCENT = 0xFF1F5FA8.toInt(); var ACCENT_SOFT = 0xFF2E5FB8.toInt()
+    var DANGER = 0xFFC62828.toInt(); var WARN = 0xFFB57623.toInt()
+    var TEXT = 0xFF141B26.toInt(); var TEXT2 = 0xFF3B4A5E.toInt(); var MUTED = 0xB23B4A5E.toInt()
+    var BORDER = 0xFFC4D2E6.toInt(); var CHIP = 0xFFDCE3EE.toInt()
+    var ON_ACCENT = Color.WHITE; var ON_WARN = 0xFF201508.toInt()
 
-    // ==================== 当前色板（applyTheme 时写入） ====================
-    var isNight = true
-    var BG = Night.BG; var BG2 = Night.BG2
-    var CARD = Night.CARD; var CARD_ALT = Night.CARD_ALT
-    var CARD_TOP = Night.CARD; var CARD_BOTTOM = Night.CARD
-    var ACCENT = Night.ACCENT; var ACCENT_SOFT = Night.ACCENT_SOFT
-    var DANGER = Night.DANGER; var WARN = Night.WARN
-    var TEXT = Night.TEXT; var TEXT2 = Night.TEXT2; var MUTED = Night.MUTED
-    var BORDER = Night.BORDER; var CHIP = Night.CHIP
-    var ON_ACCENT = Night.ON_ACCENT; var ON_WARN = Night.ON_WARN
-
-    /** 按 APP 日夜模式装载色板。每个 Gunyah Activity 的 onCreate 首行调用。 */
+    /** 按 APP 全局主题装载色板。每个 Gunyah Activity onCreate 首行 / VmPage.build 首行调用。 */
     fun applyTheme(ctx: Context) {
         isNight = Ui.isDark(ctx)
+        TEXT = Ui.primaryText(ctx)
+        TEXT2 = Ui.secondaryText(ctx)
+        MUTED = withAlpha(Ui.secondaryText(ctx), 0.70f)
+        // 卡片上可读的强调色（夜间亮青蓝 / 日间深蓝），与全局弹框强调色一致
+        ACCENT = Ui.dialogAction(ctx)
+        ACCENT_SOFT = Ui.buttonPrimary(ctx)
+        DANGER = Ui.buttonDanger(ctx)
+        WARN = Ui.buttonWarning(ctx)
+        BG = Ui.background(ctx)
+        BG2 = Ui.surfaceMuted(ctx)
+        CARD = Ui.surfaceMuted(ctx)
+        CARD_ALT = Ui.dsuEntry(ctx)
+        BORDER = Ui.border(ctx)
+        CHIP = Ui.surfaceMuted(ctx)
+        ON_ACCENT = Color.WHITE
+        ON_WARN = 0xFF201508.toInt()
+        // 半透明玻璃填充：与 Ui.neuCard 完全同款，让背后 APP 液态背景透出来
         if (isNight) {
-            BG = Night.BG; BG2 = Night.BG2
-            CARD = Night.CARD; CARD_ALT = Night.CARD_ALT
-            CARD_TOP = Night.CARD; CARD_BOTTOM = Night.CARD
-            ACCENT = Night.ACCENT; ACCENT_SOFT = Night.ACCENT_SOFT
-            DANGER = Night.DANGER; WARN = Night.WARN
-            TEXT = Night.TEXT; TEXT2 = Night.TEXT2; MUTED = Night.MUTED
-            BORDER = Night.BORDER; CHIP = Night.CHIP
-            ON_ACCENT = Night.ON_ACCENT; ON_WARN = Night.ON_WARN
+            CARD_TOP = 0xD9161D2B.toInt()
+            CARD_BOTTOM = 0xD00D131B.toInt()
         } else {
-            BG = Day.BG; BG2 = Day.BG2
-            CARD = Day.CARD; CARD_ALT = Day.CARD_ALT
-            CARD_TOP = Day.CARD_TOP; CARD_BOTTOM = Day.CARD_BOTTOM
-            ACCENT = Day.ACCENT; ACCENT_SOFT = Day.ACCENT_SOFT
-            DANGER = Day.DANGER; WARN = Day.WARN
-            TEXT = Day.TEXT; TEXT2 = Day.TEXT2; MUTED = Day.MUTED
-            BORDER = Day.BORDER; CHIP = Day.CHIP
-            ON_ACCENT = Day.ON_ACCENT; ON_WARN = Day.ON_WARN
+            CARD_TOP = 0xD9CDD9E8.toInt()
+            CARD_BOTTOM = 0xD0BAC9DD.toInt()
         }
     }
 
-    /** 页面底：双色渐变（夜间深绿黑 / 日间浅灰蓝） */
-    fun background(): GradientDrawable = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        intArrayOf(BG2, BG),
+    private fun withAlpha(color: Int, factor: Float): Int = Color.argb(
+        (Color.alpha(color) * factor).toInt().coerceIn(0, 255),
+        Color.red(color), Color.green(color), Color.blue(color),
     )
 
-    /** 玻璃卡片：圆角 + 描边（日间用 APP 同款蓝灰玻璃渐变，夜间纯色） */
+    /** 页面底：APP 全局拟态渐变（夜深 / 日浅）。仅独立 Activity 铺；内嵌 tab 页透明。 */
+    fun background(): GradientDrawable = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR, intArrayOf(BG2, BG),
+    )
+
+    /** 玻璃卡片：与 Ui.neuCard 同款半透明填充 + 亮描边，圆角对齐全局。 */
     fun card(radiusDp: Float = 18f, density: Float = 1f): GradientDrawable =
-        GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
+        GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(CARD_TOP, CARD_BOTTOM),
+        ).apply {
             cornerRadius = radiusDp * density
-            if (isNight) {
-                setColor(CARD)
-            } else {
-                colors = intArrayOf(CARD_TOP, CARD_BOTTOM)
-                orientation = GradientDrawable.Orientation.TL_BR
-            }
-            setStroke((1 * density).toInt(), BORDER)
+            setStroke((1 * density).toInt(), if (isNight) 0x33FFFFFF else 0x66FFFFFF)
         }
 
-    /** 内嵌小块（环境网格 / 盘位行底） */
+    /** 内嵌小块（环境网格 / 盘位行底）：全局凹陷槽色。 */
     fun cardAlt(radiusDp: Float = 12f, density: Float = 1f): GradientDrawable =
         GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = radiusDp * density
             setColor(CARD_ALT)
+            setStroke((1 * density).toInt(), if (isNight) 0x26000000 else 0x2AA3B1C6)
         }
 
     /** 通用药丸按钮 */
@@ -126,7 +98,9 @@ object GunTheme {
             cornerRadius = 12f * density
             setColor(accent)
         }
-        return RippleDrawable(android.content.res.ColorStateList.valueOf(0x33FFFFFF), bg, ColorDrawable(Color.WHITE))
+        return RippleDrawable(
+            android.content.res.ColorStateList.valueOf(0x33FFFFFF), bg, ColorDrawable(Color.WHITE),
+        )
     }
 
     /** 全圆角徽章 */
@@ -137,14 +111,12 @@ object GunTheme {
             setColor(accent)
         }
 
-    /** 主按钮（主色渐变：夜间绿 / 日间蓝） */
+    /** 主按钮：与全局 Ui.chipSelected 同款亮蓝渐变（夜间也醒目），白字。 */
     fun primaryButton(density: Float = 1f): GradientDrawable =
         GradientDrawable(
             GradientDrawable.Orientation.LEFT_RIGHT,
-            intArrayOf(ACCENT, ACCENT_SOFT),
-        ).apply {
-            cornerRadius = 15f * density
-        }
+            intArrayOf(0xFF4A90E2.toInt(), 0xFF2E5FB8.toInt()),
+        ).apply { cornerRadius = 15f * density }
 
     /** 底部/侧边按钮的纯色块 */
     fun iconTile(density: Float = 1f, fill: Int = CHIP, radiusDp: Float = 12f): GradientDrawable =

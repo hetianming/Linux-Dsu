@@ -194,6 +194,19 @@ object EvdevEncoder {
         write(sink, events)
     }
 
+    /**
+     * v2.0.24：在**当前光标位置**来一次右键单击（双指轻点）。
+     * 只发 EV_KEY BTN_RIGHT down/up，不动坐标 —— 与 absolute-mouse / mouse 两种设备
+     * 的能力位图都兼容（都含 EV_KEY BTN_*），所以两种工具链共用这一个函数。
+     * 一次 write 带上两个 SYN_REPORT，保证 guest 收到完整的一对按下/抬起。
+     */
+    fun sendRightClick(sink: OutputStream) {
+        write(sink, listOf(
+            Event(EV_KEY, BTN_RIGHT, 1), Event(EV_SYN, SYN_REPORT, 0),
+            Event(EV_KEY, BTN_RIGHT, 0), Event(EV_SYN, SYN_REPORT, 0),
+        ))
+    }
+
     // ── Multi-touch ─────────────────────────────────────────────────────────
 
     /**

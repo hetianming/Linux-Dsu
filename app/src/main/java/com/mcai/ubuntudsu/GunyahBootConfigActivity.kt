@@ -17,7 +17,7 @@ class GunyahBootConfigActivity : GunyahSubActivity() {
         val c = card("② 启动配置")
 
         val memEdit = editRow("内存 MEM(MB)", cfg.memMB.toString(), InputType.TYPE_CLASS_NUMBER, c)
-        c.addView(hintText("Windows / Debian 建议 3072~4096；XNU 需要 4096。2MB 大页池已由「工具链」页的大页内存模块在开机时预留，一般不需要手动降档；若仍报 MEM_ACCEPT 0x9，多为手机用久后物理内存碎片化，重启后趁内存干净再启动即可。"))
+        c.addView(hintText("以这里填的值为上限，按宿主可用内存自动适配（留 512MB 给系统、256MB 对齐）：例如填 7168 而宿主可用 6144，会落到约 5.5G。Windows 建议 4096 以上，XNU 建议 4096（切回 iOS 盘请调回 4096）。2MB 大页池已由「工具链」页的模块在开机时预留，模块未加载时才会保底 2029 MB；若报 MEM_ACCEPT 0x9，多为物理内存碎片化，重启后趁内存干净再启动即可。"))
         val cpuEdit = editRow("CPU 核心数", cfg.cpus.toString(), InputType.TYPE_CLASS_NUMBER, c)
         val nameEdit = editRow("实例名称", cfg.name, parent = c)
         // 保护模式：auto 自动回退（pseudo→without→none，GPU 开启时含 gpu 组合）

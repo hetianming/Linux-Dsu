@@ -41,6 +41,12 @@ object GunyahManager {
     private const val STOP_SCRIPT = "unixnu-stop.sh"
     private const val MARKER = "gunyah_toolchain_ready"
 
+    // ---- 日志体积看护（v2.0.22）：guest 串口刷屏时按体积轮转 boot.log ----
+    private const val LOG_GUARD_SCRIPT = "unixnu-log-guard.sh"
+    private const val LOG_GUARD_STOP = "log-guard.stop"
+    private const val LOG_GUARD_MAX = 4 * 1024 * 1024   // 4 MiB 触发轮转
+    private const val LOG_GUARD_KEEP = 256 * 1024        // 保留上一轮尾部 256 KiB
+
     /** 内置的 MMIO 版 crosvm（自编：gunyah + virtio-mmio，见 assets/）。 */
     const val CROSVM_BIN = "crosvm-mmio"
     private const val CROSVM_ASSET = "crosvm-mmio"
@@ -1343,7 +1349,10 @@ else
 fi
 # 大页模块只检查：已加载 = 2MB 大页池已由 Magisk 模块在开机时预留，无需 APP 再做任何事；
 # 没加载就提示去「工具链」装模块并重启，绝不在启动脚本里 insmod（错 KMI 会蓝屏）。
+# v2.0.23：把检测结果存成 HP_LOADED，供 2.4 节判断要不要沿用旧的 2029 保底。
+HP_LOADED=0
 if ls -d /sys/module/*hugepage* >/dev/null 2>&1; then
+    HP_LOADED=1
     echo "[✓] 运行内存适配模块: 已加载（2MB 大页池已就位，由 Magisk 模块接管）"
 else
     echo "[!] 运行内存适配模块未加载：在「工具链」页安装大页内存模块并重启手机后生效"
@@ -1353,20 +1362,25 @@ fi
 # 大页池只能在「系统还有空闲物理内存」时采出来。手机用久了后台吃满，acquire 扫到
 # system_reserve 下限也凑不够 → pool_avail < pool_want → MEM_ACCEPT err=0x9。
 # 所以先看 MemAvailable：不够就回收缓存 + 压缩内存；仍不够再按可用额度降本次 VM 内存。
+# 以「启动配置里填的 MEM」为上限动态适配，不再写死任何固定值。
 MEMFIT=${if (cfg.memAutoFit) 1 else 0}
 VMEM=${cfg.memMB}
-# 保护模式大页上限：4 GiB 的 guest RAM 要 ~2045 个 2MiB 大页，这台手机一次采不满，
-# MADV_COLLAPSE 会 ENOMEM(12)，SHARE-BLOB 阶段直接 Out of memory。实测 2029 MiB
-# 能让 SHARE-BLOB 走完（本次日志已验证：took 1.15s、shim 正常起来）。
-# MMIO 的 XNU ADT 带 --dynamic，RAM 由固件 FDT 补全，压内存不会让内核看到错误地址空间；
-# PCI/EDK2 同样按 --mem 建内存表。需要更大内存可在启动配置里改（>2048 会再次压到 2029）。
-if [ "@DVMEM" -gt 2048 ] 2>/dev/null; then
-    echo "[*] 保护模式大页上限: VM 内存 @DVMEM → 2029 MB（4GB 会在 SHARE-BLOB 阶段 OOM 12）" >&2
+# v2.0.23：取消「>2048 无条件压到 2029」的旧钳位。
+# 旧钳位来自「没有大页池模块、靠 MADV_COLLAPSE 现采 2MB 大页」的时期：4GB 要 ~2045 页，
+# 这台机一次采不满 → SHARE-BLOB OOM 12，于是写死 2029 保底。代价是 Win11 只拿到 2GB，
+# boot.wim 展开就要 2.5~3GB，直接蓝屏（v32 归档「内存 2029 MB 是蓝屏的直接推手」）。
+# 现在大页池由 gh_hugepage_reserve 在开机时预留，>2048MB 可以正常借出；
+# 只有「模块确实没加载」时才沿用 2029 保底，避免退回 OOM 12。
+if [ "@DHP_LOADED" != "1" ] && [ "@DVMEM" -gt 2048 ] 2>/dev/null; then
+    echo "[!] 未检测到大页池模块：沿用 2029 MB 保底（>2GB 会在 SHARE-BLOB 阶段 OOM 12）" >&2
+    echo "    要 4GB+ 内存：到「工具链」页安装大页内存模块并重启手机" >&2
     VMEM=2029
 fi
 
-mem_avail() { awk '/^MemAvailable:/{print int(@D2/1024); exit}' /proc/meminfo 2>/dev/null; }
-mem_total() { awk '/^MemTotal:/{print int(@D2/1024); exit}' /proc/meminfo 2>/dev/null; }
+# 不依赖 awk：部分 ROM 的 toybox 没编 awk，旧写法会返回空 → 宿主内存检测整段失效，
+# 于是「按可用内存自动适配」根本不触发，用户填 7G 就真给 7G。改走 sed 取 kB + shell 算术。
+mem_avail() { _kb=$(sed -n 's/^MemAvailable:[[:space:]]*\([0-9][0-9]*\)[[:space:]]*kB.*/\1/p' /proc/meminfo 2>/dev/null | head -n1); [ -n "@D_kb" ] && echo @D((_kb / 1024)); }
+mem_total() { _kb=$(sed -n 's/^MemTotal:[[:space:]]*\([0-9][0-9]*\)[[:space:]]*kB.*/\1/p' /proc/meminfo 2>/dev/null | head -n1); [ -n "@D_kb" ] && echo @D((_kb / 1024)); }
 MT=$(mem_total); MA=$(mem_avail)
 [ -n "@DMT" ] && echo "[*] 宿主内存: 可用 @D{MA:-?} MB / 共 @D{MT:-?} MB, 本次 VM 申请 @D{VMEM} MB"
 if [ -n "@DMA" ] && [ "@DMA" -lt "@D((VMEM + 768))" ] 2>/dev/null; then
@@ -1382,6 +1396,18 @@ if [ -n "@DMA" ] && [ "@DMA" -lt "@D((VMEM + 768))" ] 2>/dev/null; then
     if [ "@DMEMFIT" = "1" ]; then
         FIT=@D(( (MA - 512) / 256 * 256 ))
         [ "@DFIT" -gt "@DVMEM" ] 2>/dev/null && FIT="@DVMEM"
+        # v2.0.23：目标 >=4G 时，降档下限从 1024 抬到 4096 —— Win11 至少要 4G，
+        # 别再出现「宿主稍微一紧就掉回 2G、WinPE 蓝屏」。
+        # 若宿主连 4.5G 可用都拿不出，硬撑 4G 只会 MEM_ACCEPT 0x9，
+        # 就按实际可用降并明确告警（清后台 / 重启后立刻启动）。
+        if [ "@DVMEM" -ge 4096 ] 2>/dev/null && [ "@DFIT" -lt 4096 ] 2>/dev/null; then
+            if [ "@DMA" -ge 4608 ] 2>/dev/null; then
+                FIT=4096
+            else
+                echo "[!!] 宿主可用内存仅 @D{MA} MB，撑不住 4GB：本次降到 @D{FIT} MB" >&2
+                echo "    Win11 需要 4096MB 以上，建议清后台或重启手机后立刻启动" >&2
+            fi
+        fi
         [ "@DFIT" -lt 1024 ] 2>/dev/null && FIT=1024
         # MMIO/Darwin 的 ADT 里已经把 DRAM 写死成 2016 MB，VM 内存一旦低于它，
         # 内核会按 ADT 去访问根本不存在的物理页 → data abort（比 0x9 更难查）。
@@ -1771,7 +1797,7 @@ ${cfg.extraDisks.mapIndexed { i, d ->
     """check_img "@DEXTRA${i + 1}_PATH" "硬盘 ${sh(d.label)}""""
 }.joinToString("\n")}
 if [ -f "@DBOOT_DISK" ] && [ -f "@DSYSTEM_DISK" ]; then
-    echo "[*] 启动盘+系统盘已激活 (当前 MEM=@DMEM；保护模式下脚本已按大页上限自动压到 2029 MB, 属正常)"
+    echo "[*] 启动盘+系统盘已激活 (当前 MEM=@DMEM MB；已按宿主可用内存自动适配，Win11 建议 4096 MB 以上)"
 fi
 
 # ---------- 4.6 网络: tap + bridge + 内置 DHCP + NAT ----------
@@ -3229,6 +3255,69 @@ else
 fi
 """.replace("@D", "$")
 
+    /**
+     * 生成日志看护脚本。独立进程，只在「启动判定结束」之后才按体积轮转 boot.log。
+     * 用 __XXX__ 占位符注入绝对路径（与项目原有的 @D → $ 约定不冲突）。
+     */
+    private fun buildLogGuard(ctx: Context): String = LOG_GUARD_SHELL
+        .replace("__LOG__", File(privateDir(ctx), "boot.log").absolutePath)
+        .replace("__TAIL__", File(privateDir(ctx), BootLog.ROTATED_TAIL).absolutePath)
+        .replace("__STATE__", File(privateDir(ctx), "vm.state").absolutePath)
+        .replace("__STOP__", File(privateDir(ctx), LOG_GUARD_STOP).absolutePath)
+        .replace("__MAX__", LOG_GUARD_MAX.toString())
+        .replace("__KEEP__", LOG_GUARD_KEEP.toString())
+        .replace("@D", "$")
+
+    private val LOG_GUARD_SHELL = """#!/system/bin/sh
+# 日志体积看护 v2.0.22 —— 独立 root 进程，与 crosvm 生命周期解耦。
+#
+# 背景：guest 内核调试串口会持续打印不带换行的 '!'（实测约 164 万个/分钟），
+#       boot.log 裸重定向会无限增长。
+# 铁律：启动判定阶段绝不动文件！boot 脚本的 try_start 用 MARK=wc -c 记录字节偏移，
+#       再用 tail -c +MARK+1 读本次增量判活；此时截断会让判定错位、误杀能启动的组合。
+#       只在 vm.state=running 或日志出现「启动流程到此结束」之后才允许轮转。
+# 前提：APP 以 >> (O_APPEND) 打开 boot.log，:> 截断后写指针自然回到文件头，
+#       不产生稀疏空洞；启动脚本的判定与诊断完全不受影响。
+LOG="__LOG__"
+TAIL="__TAIL__"
+STATE="__STATE__"
+STOP="__STOP__"
+MAX=__MAX__
+KEEP=__KEEP__
+READY=0
+TICKS=0
+
+while :; do
+    sleep 5
+    TICKS=@D((TICKS + 1))
+    [ -f "@DSTOP" ] && exit 0                 # APP 点「停止」后写此标记
+    [ "@DTICKS" -gt 1440 ] && exit 0          # 兜底：最长 2 小时
+    ST=@D(cat "@DSTATE" 2>/dev/null)
+    case "@DST" in failed*|stopped) exit 0 ;; esac
+    [ -f "@DLOG" ] || continue
+
+    if [ "@DREADY" = "0" ]; then
+        case "@DST" in running) READY=1 ;; esac
+        grep -q "启动流程到此结束" "@DLOG" 2>/dev/null && READY=1
+        [ "@DREADY" = "1" ] || continue
+    fi
+
+    # 判定结束之后：VM 不在了就收工，避免残留进程
+    if ! pidof crosvm >/dev/null 2>&1 && ! pidof crosvm-mmio >/dev/null 2>&1; then
+        exit 0
+    fi
+
+    SZ=@D(wc -c < "@DLOG" 2>/dev/null | tr -d ' ')
+    case "@DSZ" in ''|*[!0-9]*) continue ;; esac
+    [ "@DSZ" -gt "@DMAX" ] || continue
+
+    tail -c "@DKEEP" "@DLOG" > "@DTAIL" 2>/dev/null
+    chmod 644 "@DTAIL" 2>/dev/null
+    : > "@DLOG"
+    echo "[log-guard] 日志超过 __MAX__ 字节，已轮转；上一轮尾部保留在 boot.log.tail" >> "@DLOG"
+done
+""".replace("@D", "$")
+
     // ============================ 内核模块 ============================
 
     /** 检测当前内核版本（uname -r），用于匹配 modules.ko 下的版本目录。 */
@@ -3881,13 +3970,33 @@ fi
         }
         val script = buildBootScript(ctx, cfg) ?: return false to "[!!] 未检测到工具链 crosvm，请先下载"
         val log = File(privateDir(ctx), "boot.log")
+        val tail = File(privateDir(ctx), BootLog.ROTATED_TAIL)
+        val guard = File(privateDir(ctx), LOG_GUARD_SCRIPT)
+        val guardStop = File(privateDir(ctx), LOG_GUARD_STOP)
         // 先清空：自动进入显示器的逻辑靠匹配日志里的「VNC 已监听」，
         // 上一次启动留下的这行会让它在新机还没起来时就跳转。
         runCatching { log.writeText("") }
-        // setsid + 后台 + 重定向，使 crosvm 脱离 su 会话常驻，不被 RootShell 超时等待杀掉
-        val cmd = "setsid sh \"${script.absolutePath}\" > \"${log.absolutePath}\" 2>&1 < /dev/null &"
+        runCatching { tail.delete() }
+        runCatching { guardStop.delete() }
+        // 投放日志看护脚本（独立进程，只在启动判定结束后按体积轮转）
+        runCatching {
+            guard.writeText(buildLogGuard(ctx))
+            guard.setExecutable(true, false)
+        }
+        // setsid + 后台 + O_APPEND 重定向：
+        //  ① 脱离 su 会话常驻，不被 RootShell 超时等待杀掉；
+        //  ② >> 带 O_APPEND，日志看护用 :> 截断后写指针自然回到文件头，
+        //     不产生稀疏空洞；启动脚本的 MARK / tail -c +N 判定一字节不受影响。
+        val cmd = "setsid sh \"${script.absolutePath}\" >> \"${log.absolutePath}\" 2>&1 < /dev/null &"
         val r = RootShell.exec(cmd, timeoutMs = 8000)
         if (r.code != 0) return false to "启动指令下发失败（code=${r.code}）：${r.stderr}"
+        // 看护进程与 VM 同时后台常驻；它自己会等「启动流程到此结束」才动手
+        runCatching {
+            RootShell.exec(
+                "setsid sh \"${guard.absolutePath}\" >/dev/null 2>&1 < /dev/null &",
+                timeoutMs = 5000,
+            )
+        }
         // 脚本有单实例锁：上一次启动还在跑时它会直接退出。这里读一下日志确认，
         // 否则用户会以为「启动成功」，实际什么都不会发生。
         Thread.sleep(700)
@@ -3916,6 +4025,8 @@ fi
      */
     fun stop(ctx: Context): Pair<Boolean, String> {
         TouchBridge.stop()
+        // 通知日志看护进程收工（它每 5 秒检查一次该标记）
+        runCatching { File(privateDir(ctx), LOG_GUARD_STOP).createNewFile() }
         val script = buildStopScript(ctx)
         val r = RootShell.exec("sh \"${script.absolutePath}\"", timeoutMs = 32000)
         if (!isVmRunning()) {

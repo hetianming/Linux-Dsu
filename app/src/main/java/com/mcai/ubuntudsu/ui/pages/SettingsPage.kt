@@ -105,12 +105,16 @@ class SettingsPage(
             "worktime" to GridItem("日历工时记", R.drawable.icon_worktime, "#00A98F") { view -> openWorkTime(view) },
             "dnatools" to GridItem("ROM移植", R.drawable.icon_rom_port, "#7C4DFF") { view -> openDnaTools(view) },
             "phonetv" to GridItem("手机电视", R.drawable.icon_phone_tv, "#8E24AA") { view -> openPhoneTv(view) },
-            "gunyahvm" to GridItem("gunyahVM", R.drawable.icon_gunyah_vm, "#00897B") { view -> openGunyahVm(view) },
+            // v2.0.28：入口位置对调 —— gunyahVM 上提为底部第 3 格 tab，
+            // Linux 容器功能从原 tab 下放到这里，作为「多功能」页的一张卡。
+            "linux" to GridItem("Linux", R.drawable.icon_linux_modern, "#E95420") { view -> openLinuxContainer(view) },
         )
         val defaultKeys = keyToItem.keys.toList()
         val orderedKeys: List<String> = if (savedOrder != null) {
-            val parsed = savedOrder.split(",")
-            val valid = parsed.filter { it in keyToItem }
+            // v2.0.28：老版本保存的顺序里是 "gunyahvm"，迁移为 "linux"，
+            // 让 Linux 卡原位继承（不会掉到末尾、也不会丢卡）。
+            val parsed = savedOrder.split(",").map { if (it == "gunyahvm") "linux" else it }
+            val valid = parsed.filter { it in keyToItem }.distinct()
             valid + defaultKeys.filter { it !in valid }
         } else defaultKeys
 
@@ -208,9 +212,10 @@ class SettingsPage(
         launchScaleUp(iconView, com.mcai.ubuntudsu.TvActivity::class.java)
     }
 
-    private fun openGunyahVm(iconView: View) {
-        // gunyahVM：工具链下载 + 启动配置 + 镜像映射 + 内核模块 + 启动/停止（unixnu / iOS 运行）
-        launchScaleUp(iconView, com.mcai.ubuntudsu.GunyahVMActivity::class.java)
+    private fun openLinuxContainer(iconView: View) {
+        // v2.0.28：Linux 容器（容器终端 / 桌面环境 / 文件管理 / 安装 / 卸载 rootfs），
+        // 原 MainActivity 第 3 个 tab 的完整内容，现由此卡进入。
+        launchScaleUp(iconView, com.mcai.ubuntudsu.LinuxContainerActivity::class.java)
     }
 
 

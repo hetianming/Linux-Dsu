@@ -1,5 +1,7 @@
 package com.mcai.ubuntudsu
 
+import com.mcai.ubuntudsu.core.BootLog
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -68,7 +70,7 @@ class GunyahBootActivity : HapticAppCompatActivity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFF07090C.toInt())
+            background = GunTheme.background()
         }
 
         // 顶栏：返回 + 标题 + 计时
@@ -132,7 +134,7 @@ class GunyahBootActivity : HapticAppCompatActivity() {
             text = "正在等待 crosvm 输出…"
             textSize = 9.5f
             typeface = Typeface.MONOSPACE
-            setTextColor(0xFFCBD6E0.toInt())
+            setTextColor(GunTheme.TEXT2)
             setTextIsSelectable(true)
             setLineSpacing(0f, 1.06f)
             setPadding(0, GunTheme.dp(4, d), 0, GunTheme.dp(8, d))
@@ -220,7 +222,7 @@ class GunyahBootActivity : HapticAppCompatActivity() {
             while (alive) {
                 val txt = runCatching {
                     val f = logFile
-                    if (f != null && f.exists()) f.readText() else ""
+                    BootLog.readTail(f)
                 }.getOrDefault("")
                 val st = GunyahManager.vmStatus(this)
 
@@ -230,7 +232,8 @@ class GunyahBootActivity : HapticAppCompatActivity() {
                 // v2.0.19：新增更早期的 uefi 状态 / 日志标记，一检测到 UEFI 帧缓冲就绪
                 // 就立刻跳，不等后面 14 秒判活观察，UEFI 菜单第一帧就能看到并可按 ESC/F2。
                 // 日志标记是唯一新串，不会和历史日志里的「自定义 UEFI 固件」等字样混淆。
-                val earlyUefi = st.kind == "uefi" || txt.contains("检测到 uefi: UEFI 帧缓冲已就绪")
+                val earlyUefi = st.kind == "uefi" ||
+                    BootLog.containsMarker(logFile, "检测到 uefi: UEFI 帧缓冲已就绪")
                 if (DisplayLauncher.wantsNative(c) && c.autoDisplay && !jumped &&
                     (st.kind == "running" || earlyUefi)
                 ) {
@@ -298,7 +301,7 @@ class GunyahBootActivity : HapticAppCompatActivity() {
             return
         }
         // 只保留尾部 220 行：crosvm 的 stderr 会持续刷，全量渲染会越来越卡
-        val lines = raw.lineSequence().toList()
+        val lines = BootLog.clean(raw).lineSequence().toList()
         val tail = if (lines.size > 220) lines.subList(lines.size - 220, lines.size) else lines
         val key = tail.joinToString("\n")
         if (key == lastRendered) return
@@ -325,7 +328,7 @@ class GunyahBootActivity : HapticAppCompatActivity() {
             line.contains("failed") || line.contains("失败") -> GunTheme.DANGER
         line.contains("[!]") || line.contains("未监听") || line.contains("换下一组") -> GunTheme.WARN
         line.contains("[*]") || line.contains("=====") -> GunTheme.TEXT2
-        else -> 0xFFB3BECC.toInt()
+        else -> GunTheme.MUTED
     }
 
     private fun applyState(
@@ -392,7 +395,7 @@ class GunyahBootActivity : HapticAppCompatActivity() {
     private fun copyLog() {
         val txt = runCatching {
             val f = logFile
-            if (f != null && f.exists()) f.readText().takeLast(60000) else ""
+            BootLog.readClean(f, 4 * 1024 * 1024)
         }.getOrDefault("")
         if (txt.isBlank()) {
             Toast.makeText(this, "日志还是空的，稍等一下", Toast.LENGTH_SHORT).show()

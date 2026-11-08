@@ -17,8 +17,8 @@ import androidx.core.view.WindowInsetsCompat
 import com.mcai.ubuntudsu.ui.GunTheme
 
 /**
- * GunyaniOS 子页面基类：统一「暗绿玻璃背景 + 返回顶栏 + 滚动内容」骨架与卡片控件工厂，
- * 与主界面 GunTheme 视觉规范一致（对齐 GunyahiOS 暗绿玻璃主题）。
+ * GunyaniOS 子页面基类：统一「APP 全局主题 + 返回顶栏 + 滚动内容」骨架与卡片控件工厂。
+ * v2.0.30 起 GunTheme 只是全局 Ui 的转发层，与首页 / 多功能 / DSU 同一套配色。
  */
 abstract class GunyahSubActivity : HapticAppCompatActivity() {
     protected val d: Float get() = resources.displayMetrics.density
@@ -103,7 +103,7 @@ abstract class GunyahSubActivity : HapticAppCompatActivity() {
         overridePendingTransition(R.anim.zoom_in, R.anim.zoom_out)
     }
 
-    // ------------------------- 控件工厂（GunTheme 暗绿玻璃） -------------------------
+    // ------------------------- 控件工厂（APP 全局主题） -------------------------
 
     protected fun card(title: String): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
