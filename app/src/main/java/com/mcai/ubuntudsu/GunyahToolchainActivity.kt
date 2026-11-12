@@ -32,13 +32,13 @@ class GunyahToolchainActivity : GunyahSubActivity() {
     private lateinit var hpInstallBtn: TextView
     private lateinit var hpProg: ProgressBar
 
-    override fun pageTitle() = "工具链"
+    override fun pageTitle() = Lang.t("工具链")
 
     override fun buildContent(parent: LinearLayout) {
-        val c = card("① 工具链")
-        c.addView(hintText("crosvm / edk2 固件 / libc++ → APP 私有目录"))
+        val c = card(Lang.t("① 工具链"))
+        c.addView(hintText(Lang.t("crosvm / edk2 固件 / libc++ → APP 私有目录")))
         stateText = TextView(this).apply {
-            text = "状态：检测中…"
+            text = Lang.t("状态：检测中…")
             textSize = 12f
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(GunTheme.TEXT2)
@@ -53,8 +53,8 @@ class GunyahToolchainActivity : GunyahSubActivity() {
         }
         c.addView(progressText)
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        downloadBtn = actionButton("⬇  在线下载", GunTheme.ACCENT) { download() }
-        importBtn = actionButton("📁  本地导入", GunTheme.CHIP) {
+        downloadBtn = actionButton(Lang.t("⬇  在线下载"), GunTheme.ACCENT) { download() }
+        importBtn = actionButton(Lang.t("📁  本地导入"), GunTheme.CHIP) {
             openFilePicker("选择 unixnu-bin.zip") { p -> import(p) }
         }
         row.addView(downloadBtn)
@@ -66,13 +66,13 @@ class GunyahToolchainActivity : GunyahSubActivity() {
         parent.addView(c)
 
         // ---------------- ② 大页内存模块（GH-Hugepage-Reserve） ----------------
-        val hpc = card("② 大页内存模块（GH-Hugepage-Reserve）")
+        val hpc = card(Lang.t("② 大页内存模块（GH-Hugepage-Reserve）"))
         hpc.addView(hintText(
-            "根治 Gunyah 启动「凑不出 2MB 连续页 / MEM_ACCEPT 0x9」：开机即预留 2MB 大页池。\n" +
-            "来自 Droid-VM/gh-hugepage-reserve（GitHub 最新版），安装为 Magisk / KernelSU / APatch 模块。"
+            Lang.t("根治 Gunyah 启动「凑不出 2MB 连续页 / MEM_ACCEPT 0x9」：开机即预留 2MB 大页池。\n") +
+            Lang.t("来自 Droid-VM/gh-hugepage-reserve（GitHub 最新版），安装为 Magisk / KernelSU / APatch 模块。")
         ))
         hpStateText = TextView(this).apply {
-            text = "状态：检测中…"
+            text = Lang.t("状态：检测中…")
             textSize = 12f
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(GunTheme.TEXT2)
@@ -89,7 +89,7 @@ class GunyahToolchainActivity : GunyahSubActivity() {
         }
         hpc.addView(hpProg)
         val hpRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        hpInstallBtn = actionButton("⬇  安装大页池模块", GunTheme.ACCENT) { installHugepageModule() }
+        hpInstallBtn = actionButton(Lang.t("⬇  安装大页池模块"), GunTheme.ACCENT) { installHugepageModule() }
         hpRow.addView(hpInstallBtn)
         hpc.addView(hpRow)
         parent.addView(hpc)
@@ -111,11 +111,11 @@ class GunyahToolchainActivity : GunyahSubActivity() {
             runOnUiThread {
                 if (!::stateText.isInitialized) return@runOnUiThread
                 if (bin != null) {
-                    stateText.text = "已就绪"
+                    stateText.text = Lang.t("已就绪")
                     stateText.setTextColor(GunTheme.ACCENT)
                     progressText.text = bin
                 } else {
-                    stateText.text = "未下载"
+                    stateText.text = Lang.t("未下载")
                     stateText.setTextColor(GunTheme.WARN)
                 }
             }
@@ -132,7 +132,7 @@ class GunyahToolchainActivity : GunyahSubActivity() {
     private fun download() {
         if (!downloadBtn.isEnabled) return
         setBusy(true)
-        progressText.text = "正在并发测速线路…"
+        progressText.text = Lang.t("正在并发测速线路…")
         thread {
             val (ok, msg) = GunyahManager.downloadAndExtract(
                 this,
@@ -159,7 +159,7 @@ class GunyahToolchainActivity : GunyahSubActivity() {
 
     private fun import(path: String) {
         setBusy(true)
-        progressText.text = "正在导入本地 zip…"
+        progressText.text = Lang.t("正在导入本地 zip…")
         thread {
             val (ok, msg) = GunyahManager.importToolchain(this, path)
             runOnUiThread {
@@ -207,10 +207,10 @@ class GunyahToolchainActivity : GunyahSubActivity() {
         setHpBusy(true)
         thread {
             try {
-                setHpStatus("正在查询 GitHub 最新版本…")
+                setHpStatus(Lang.t("正在查询 GitHub 最新版本…"))
                 val release = queryLatestRelease()
                 if (release == null) {
-                    setHpStatus("查询失败：无法连接 GitHub（请检查网络 / 代理）")
+                    setHpStatus(Lang.t("查询失败：无法连接 GitHub（请检查网络 / 代理）"))
                     return@thread
                 }
                 val (tag, apkUrl) = release
@@ -237,15 +237,15 @@ class GunyahToolchainActivity : GunyahSubActivity() {
                 )
                 if (!ok || !target.isFile) {
                     hpProg.progress = 0
-                    setHpStatus("下载失败：所有线路均不可用，请检查网络或稍后重试")
+                    setHpStatus(Lang.t("下载失败：所有线路均不可用，请检查网络或稍后重试"))
                     return@thread
                 }
                 hpProg.progress = 100
-                setHpStatus("下载完成，正在安装模块…")
+                setHpStatus(Lang.t("下载完成，正在安装模块…"))
                 val wasInstalled = isModuleInstalled()
                 val okInstall = installModule(target)
                 if (!okInstall) {
-                    setHpStatus("安装失败：请确认已获取 root 权限")
+                    setHpStatus(Lang.t("安装失败：请确认已获取 root 权限"))
                     return@thread
                 }
                 // 关闭 APP 自带的大页模块自动加载，避免与模块池冲突（APP 的 rmmod 会清掉池子）
@@ -253,7 +253,7 @@ class GunyahToolchainActivity : GunyahSubActivity() {
                 if (!wasInstalled) {
                     runOnUiThread { askReboot() }
                 } else {
-                    setHpStatus("已更新，建议重启手机使模块生效")
+                    setHpStatus(Lang.t("已更新，建议重启手机使模块生效"))
                 }
             } finally {
                 setHpBusy(false)
@@ -331,8 +331,8 @@ class GunyahToolchainActivity : GunyahSubActivity() {
     /** 首次安装需要重启才能生效。 */
     private fun askReboot() {
         AlertDialog.Builder(this)
-            .setTitle("需要重启")
-            .setMessage("首次安装大页内存模块需要重启手机才能生效。\n是否立即重启？")
+            .setTitle(Lang.t("需要重启"))
+            .setMessage(Lang.t("首次安装大页内存模块需要重启手机才能生效。\n是否立即重启？"))
             .setPositiveButton("立即重启") { _, _ ->
                 RootShell.exec("reboot", timeoutMs = 8000)
             }

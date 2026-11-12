@@ -46,7 +46,7 @@ class LinuxContainerActivity : AppCompatActivity() {
         // 不重复标题，LinuxPage 自带「Linux ARM® 架构」标题行。
         root.addView(
             TextView(this).apply {
-                text = "‹  返回"
+                text = Lang.t("‹  返回")
                 textSize = 15f
                 setTextColor(Ui.primaryText(this@LinuxContainerActivity))
                 gravity = Gravity.CENTER_VERTICAL

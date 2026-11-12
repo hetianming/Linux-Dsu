@@ -113,9 +113,9 @@ class VncViewerActivity : AppCompatActivity() {
             setPadding(12, 12, 12, 12)
             setOnClickListener { action() }
         }
-        controls.addView(control("键盘") { showVncKeyboard() })
-        controls.addView(control("触屏") { pointerMode = PointerMode.TOUCH; controls.visibility = View.GONE })
-        controls.addView(control("触控板") {
+        controls.addView(control(Lang.t("键盘")) { showVncKeyboard() })
+        controls.addView(control(Lang.t("触屏")) { pointerMode = PointerMode.TOUCH; controls.visibility = View.GONE })
+        controls.addView(control(Lang.t("触控板")) {
             pointerMode = PointerMode.TRACKPAD
             trackpadPointerInitialized = false
             trackpadRemainderX = 0f
@@ -126,7 +126,7 @@ class VncViewerActivity : AppCompatActivity() {
             setTextColor(Color.WHITE)
             setBackgroundColor(0xaa000000.toInt())
             setPadding(24, 14, 24, 14)
-            text = "正在连接 VNC..."
+            text = Lang.t("正在连接 VNC...")
         }
         root.addView(image, FrameLayout.LayoutParams(-1, -1))
         root.addView(cursorOverlay, FrameLayout.LayoutParams(-1, -1))
@@ -372,15 +372,15 @@ class VncViewerActivity : AppCompatActivity() {
 
     private fun showPasswordDialog() {
         val passwordInput = EditText(this).apply {
-            hint = "VNC 密码"
+            hint = Lang.t("VNC 密码")
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
             setText(intent.getStringExtra(EXTRA_PASSWORD).orEmpty())
             setSelection(length())
         }
         AlertDialog.Builder(this)
-            .setTitle("连接 VNC 桌面")
-            .setMessage("请输入 VNC 服务密码")
+            .setTitle(Lang.t("连接 VNC 桌面"))
+            .setMessage(Lang.t("请输入 VNC 服务密码"))
             .setView(passwordInput)
             .setNegativeButton("取消") { _, _ -> finish() }
             .setPositiveButton("确定") { _, _ -> connect(passwordInput.text.toString()) }
@@ -447,13 +447,13 @@ private class VncProtocol(
             output = DataOutputStream(BufferedOutputStream(socket!!.getOutputStream()))
             val serverVersion = readString(12)
             output!!.write("RFB 003.008\n".toByteArray()); output!!.flush()
-            onStatus("已连接，正在协商认证...")
+            onStatus(Lang.t("已连接，正在协商认证..."))
             val securityCount = input!!.readUnsignedByte()
             val security = ByteArray(securityCount); input!!.readFully(security)
             if (security.contains(2.toByte())) {
                 // 服务端要求密码但调用方没给：不要拿空密码去撞认证，直接回 UI 要密码
                 if (password.isEmpty()) {
-                    onStatus("VNC 服务端需要密码")
+                    onStatus(Lang.t("VNC 服务端需要密码"))
                     onPasswordRequired()
                     runCatching { socket?.close() }
                     return
@@ -468,7 +468,7 @@ private class VncProtocol(
             } else if (security.contains(1.toByte())) {
                 output!!.writeByte(1); output!!.flush()
                 if (input!!.readInt() != 0) throw IllegalStateException("VNC 无密码连接被拒绝")
-            } else throw IllegalStateException("VNC 服务端不支持认证方式")
+            } else throw IllegalStateException(Lang.t("VNC 服务端不支持认证方式"))
             output!!.writeByte(1); output!!.flush()
             input!!.readUnsignedShort().also { width = it }; input!!.readUnsignedShort().also { height = it }
             bitsPerPixel = input!!.readUnsignedByte()
@@ -502,9 +502,9 @@ private class VncProtocol(
             output!!.writeInt(-224)
             output!!.flush()
             output!!.writeByte(3); output!!.writeByte(0); output!!.writeShort(0); output!!.writeShort(0); output!!.writeShort(width); output!!.writeShort(height); output!!.flush()
-            onStatus("已连接，等待桌面画面...")
+            onStatus(Lang.t("已连接，等待桌面画面..."))
             while (socket?.isClosed == false) readUpdate()
-        } catch (e: Exception) { onStatus(e.message ?: "VNC 连接失败") }
+        } catch (e: Exception) { onStatus(e.message ?: Lang.t("VNC 连接失败")) }
     }
 
     private fun readUpdate() {

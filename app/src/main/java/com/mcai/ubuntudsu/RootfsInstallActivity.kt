@@ -81,7 +81,7 @@ class RootfsInstallActivity : AppCompatActivity() {
             setPadding(0, 0, 0, Ui.dp(10, d))
         }
         titleRow.addView(TextView(this).apply {
-            text = "安装 / 备份 rootfs"
+            text = Lang.t("安装 / 备份 rootfs")
             textSize = 16f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Ui.primaryText(this@RootfsInstallActivity))
@@ -99,14 +99,14 @@ class RootfsInstallActivity : AppCompatActivity() {
 
         // 本地安装
         val localCard = card()
-        localCard.addView(sectionTitle("本地安装"))
+        localCard.addView(sectionTitle(Lang.t("本地安装")))
         localCard.addView(TextView(this).apply {
-            text = "从存储中选择 rootfs 压缩包（支持 .tar.gz / .tar.xz）"
+            text = Lang.t("从存储中选择 rootfs 压缩包（支持 .tar.gz / .tar.xz）")
             textSize = 11f
             setTextColor(Ui.secondaryText(this@RootfsInstallActivity))
             setPadding(0, Ui.dp(3, d), 0, 0)
         })
-        localCard.addView(button("选择压缩包") {
+        localCard.addView(button(Lang.t("选择压缩包")) {
             // 内置文件选择器：根目录 /sdcard，支持 tar.gz / tar.xz
             pickArchiveLauncher.launch(
                 android.content.Intent(this, RootfsFilesActivity::class.java).apply {
@@ -120,20 +120,20 @@ class RootfsInstallActivity : AppCompatActivity() {
 
         // 备份
         val backupCard = card()
-        backupCard.addView(sectionTitle("备份 rootfs"))
+        backupCard.addView(sectionTitle(Lang.t("备份 rootfs")))
         backupCard.addView(TextView(this).apply {
-            text = "将已安装的 Ubuntu rootfs 打包为 .tar.gz 文件"
+            text = Lang.t("将已安装的 Ubuntu rootfs 打包为 .tar.gz 文件")
             textSize = 11f
             setTextColor(Ui.secondaryText(this@RootfsInstallActivity))
             setPadding(0, Ui.dp(3, d), 0, 0)
         })
-        backupButton = button("选择位置并备份") { createBackupLauncher.launch("ubuntu-rootfs.tar.gz") }
+        backupButton = button(Lang.t("选择位置并备份")) { createBackupLauncher.launch("ubuntu-rootfs.tar.gz") }
         backupCard.addView(backupButton)
         page.addView(backupCard)
 
         // 云端下载安装
         val cloudCard = card()
-        cloudCard.addView(sectionTitle("云端下载安装"))
+        cloudCard.addView(sectionTitle(Lang.t("云端下载安装")))
         val spinner = Spinner(this).apply {
             adapter = ArrayAdapter(
                 this@RootfsInstallActivity,
@@ -147,7 +147,7 @@ class RootfsInstallActivity : AppCompatActivity() {
         }
         cloudCard.addView(spinner)
         urlInput = EditText(this).apply {
-            hint = "或输入自定义镜像 URL"
+            hint = Lang.t("或输入自定义镜像 URL")
             textSize = 12f
             setSingleLine(true)
             layoutParams = LinearLayout.LayoutParams(
@@ -156,7 +156,7 @@ class RootfsInstallActivity : AppCompatActivity() {
             ).apply { topMargin = Ui.dp(6, d) }
         }
         cloudCard.addView(urlInput)
-        cloudCard.addView(button("开始下载并安装") {
+        cloudCard.addView(button(Lang.t("开始下载并安装")) {
             val url = urlInput.text.toString().trim().ifEmpty {
                 RootfsInstaller.mirrorPresets[spinner.selectedItemPosition].second
             }
@@ -167,7 +167,7 @@ class RootfsInstallActivity : AppCompatActivity() {
         // 进度
         progressCard = card().also { it.visibility = View.GONE }
         progressText = TextView(this).apply {
-            text = "空闲"
+            text = Lang.t("空闲")
             textSize = 11f
             setTextColor(Ui.secondaryText(this@RootfsInstallActivity))
         }
@@ -257,10 +257,10 @@ class RootfsInstallActivity : AppCompatActivity() {
             val result = RootfsInstaller.installFromLocal(this, uri) { progress -> updateProgress(progress) }
             runOnUiThread {
                 if (result.isSuccess) {
-                    showPercent(10000, "安装完成")
-                    Toast.makeText(this, "安装完成", Toast.LENGTH_SHORT).show()
+                    showPercent(10000, Lang.t("安装完成"))
+                    Toast.makeText(this, Lang.t("安装完成"), Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(this, "安装失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, Lang.t("安装失败"), Toast.LENGTH_SHORT).show()
                 }
                 setBusy(false)
             }
@@ -273,10 +273,10 @@ class RootfsInstallActivity : AppCompatActivity() {
             val result = RootfsInstaller.downloadAndInstall(this, url) { progress -> updateProgress(progress) }
             runOnUiThread {
                 if (result.isSuccess) {
-                    showPercent(10000, "安装完成")
-                    Toast.makeText(this, "安装完成", Toast.LENGTH_SHORT).show()
+                    showPercent(10000, Lang.t("安装完成"))
+                    Toast.makeText(this, Lang.t("安装完成"), Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(this, "下载/安装失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, Lang.t("下载/安装失败"), Toast.LENGTH_SHORT).show()
                 }
                 setBusy(false)
             }
@@ -290,8 +290,8 @@ class RootfsInstallActivity : AppCompatActivity() {
             val result = RootfsInstaller.backup(this, uri) { progress -> updateProgress(progress) }
             runOnUiThread {
                 if (result.isSuccess) {
-                    showPercent(10000, "备份完成")
-                    Toast.makeText(this, "备份完成", Toast.LENGTH_SHORT).show()
+                    showPercent(10000, Lang.t("备份完成"))
+                    Toast.makeText(this, Lang.t("备份完成"), Toast.LENGTH_SHORT).show()
                 } else {
                     val error = result.exceptionOrNull()
                     Toast.makeText(this, "备份失败: ${error?.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
@@ -319,7 +319,7 @@ class RootfsInstallActivity : AppCompatActivity() {
             progressBar.isIndeterminate = false
             progressBar.progress = 0
             percentText.text = "0 %"
-            progressText.text = "处理中..."
+            progressText.text = Lang.t("处理中...")
         }
     }
 

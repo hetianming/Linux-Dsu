@@ -94,7 +94,7 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
         // 以尖端 (0,0) 为锚整体缩放：小 0.58 / 中 0.75 / 大 0.92（约 15 / 19 / 24 dp 高）。
         // 长按「指针」循环，持久化；默认「小」。
         private val CURSOR_SCALES = floatArrayOf(0.58f, 0.75f, 0.92f)
-        private val CURSOR_SIZE_NAMES = arrayOf("小", "中", "大")
+        private val CURSOR_SIZE_NAMES = arrayOf(Lang.t("小"), Lang.t("中"), Lang.t("大"))
         private const val CURSOR_SIZE_DEFAULT = 0
         // v2.0.24 触摸板手势参数
         private const val TP_TAP_SLOP_DP = 10f       // 位移小于它判「轻点」
@@ -130,7 +130,8 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
     private lateinit var ball: TextView
     // v2.0.18：键盘入口形态。dockEdge=0 是 44dp 浮球；1/2/3/4 是贴左/右/上/下的
     // 半透明模糊细杠条。同一个 View 切形态，避免两个入口并存互相抢显隐。
-    private var dockEdge = 0
+    // v2.0.40：默认贴右边收纳（2），不再默认浮球；点细条出键盘，向屏内拖还原浮球。
+    private var dockEdge = 2
     private var dockPos = 0.45f      // 细条中心在所贴边上的比例
     private var ballRx = 0.93f       // 浮球中心相对屏幕宽/高的比例（还原位置）
     private var ballRy = 0.44f
@@ -217,12 +218,12 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
     private var cursorKey = SP_TP_CURSOR_PROFILE + "default"   // 当前启动盘组合对应的记忆键
     private var cursorSizeIdx = CURSOR_SIZE_DEFAULT   // v2.0.26：默认「小」
     // v2.0.3：把链路每一步的结果直接显示在状态栏，不用 logcat 也能一次定位
-    @Volatile private var diag = "初始化…"
+    @Volatile private var diag = Lang.t("初始化…")
 
     private val rootConn = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             rootService = INativeDisplayService.Stub.asInterface(service)
-            diag = "root✓ 服务…"
+            diag = Lang.t("root✓ 服务…")
             Log.i(TAG, "root service connected; diag=${runCatching { rootService?.diagnostics(SERVICE_NAME) }.getOrNull()}")
             Thread({ attachDisplay() }, "native-attach").apply { isDaemon = true }.start()
         }
@@ -343,7 +344,15 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
         // v2.0.15：状态卡片与每秒轮询均已移除。
         ui.postDelayed({
             if (!isFinishing && !isDestroyed) {
-                Toast.makeText(this, "触摸板模式（像笔记本）：单指滑动移光标 / 轻点单击 / 长按拖动 / 双指滚动 / 双指轻点右键。工具条「模式」点按切 触摸板→直接点按→多点触控，长按调光标速度；「指针」默认关（用系统自带指针，不再出现两个箭头），没有指针的固件/GRUB 界面点按打开即可、且按当前启动盘记住，长按切箭头大小 小/中/大。默认已上锁 🔒（软件锁）：拦返回键与左右侧滑返回防误退；屏幕底部不占用，Windows 任务栏 / Linux 开始菜单可直接点。点 🔓 解锁后返回键恢复。点 ⌨ 出全键盘，按住工具条可拖动；「旋转」切 0/90/180/270°；长按 ⌨ 看诊断", Toast.LENGTH_LONG).show()
+                // v2.0.39：启动引导提示卡贴顶部居中（带顶部留白，避开顶部工具条），
+                // 不再压在屏幕底部与「默认键盘布局」重叠。
+                Toast.makeText(this, Lang.t("触摸板模式（像笔记本）：单指滑动移光标 / 轻点单击 / 长按拖动 / 双指滚动 / 双指轻点右键。工具条「模式」点按切 触摸板→直接点按→多点触控，长按调光标速度；「指针」默认关（用系统自带指针，不再出现两个箭头），没有指针的固件/GRUB 界面点按打开即可、且按当前启动盘记住，长按切箭头大小 小/中/大。默认已上锁 🔒（软件锁）：拦返回键与左右侧滑返回防误退；屏幕底部不占用，Windows 任务栏 / Linux 开始菜单可直接点。点 🔓 解锁后返回键恢复。点 ⌨ 出全键盘，按住工具条可拖动；「旋转」切 0/90/180/270°；长按 ⌨ 看诊断"), Toast.LENGTH_LONG).apply {
+                    setGravity(
+                        Gravity.TOP or Gravity.CENTER_HORIZONTAL,
+                        0,
+                        (resources.displayMetrics.density * 56f).toInt()
+                    )
+                }.show()
             }
         }, 1200)
     }
@@ -494,7 +503,7 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
             RootService.bind(Intent(this, NativeDisplayRootService::class.java), rootConn)
         } catch (t: Throwable) {
             Log.e(TAG, "bind root failed", t)
-            scheduleFallback("root 服务绑定失败")
+            scheduleFallback(Lang.t("root 服务绑定失败"))
         }
     }
 
@@ -503,11 +512,11 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
         val binder = runCatching { rootService?.waitForDisplayBinder(SERVICE_NAME) }.getOrNull()
         if (binder == null) {
             Log.w(TAG, "display binder not found")
-            diag = "root✓ 服务✗（无 crosvm_display）"
-            ui.post { scheduleFallback("未找到 crosvm_display 服务") }
+            diag = Lang.t("root✓ 服务✗（无 crosvm_display）")
+            ui.post { scheduleFallback(Lang.t("未找到 crosvm_display 服务")) }
             return
         }
-        diag = "root✓ 服务✓ 设置…"
+        diag = Lang.t("root✓ 服务✓ 设置…")
         val svc = ICrosvmAndroidDisplayService.Stub.asInterface(binder)
         // v2.0.4 黑屏根因：旧版在这里轮询 40 次反复调 setSurface，surfaceCreated /
         // surfaceChanged 又各调一次。参考实现明确记录 crosvm 每个 surface 生命周期
@@ -1011,7 +1020,7 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
     }.getOrDefault(SP_TP_CURSOR_PROFILE + "default")
 
     /** 工具条「指针」按钮文字直接带状态，一眼能看出当前画不画。 */
-    private fun cursorLabel(): String = if (cursorVisible) "指针 开" else "指针 关"
+    private fun cursorLabel(): String = if (cursorVisible) Lang.t("指针 开") else Lang.t("指针 关")
 
     /** v2.0.27 工具条「指针」点按：开/关软件箭头，按当前启动盘组合分别记忆。 */
     private fun toggleCursor() {
@@ -1028,9 +1037,9 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
         Toast.makeText(
             this,
             if (cursorVisible)
-                "软件箭头：开（仅当前这套启动盘记住；没指针的固件/GRUB 界面用）"
+                Lang.t("软件箭头：开（仅当前这套启动盘记住；没指针的固件/GRUB 界面用）")
             else
-                "软件箭头：关（用系统自带指针，不再出现两个箭头）",
+                Lang.t("软件箭头：关（用系统自带指针，不再出现两个箭头）"),
             Toast.LENGTH_SHORT
         ).show()
     }
@@ -1043,7 +1052,7 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
                 .putInt(SP_TP_CURSOR_SIZE, cursorSizeIdx).apply()
         }
         updateCursorOverlay()
-        val tail = if (cursorVisible) "" else "（箭头当前为关，点按「指针」打开后可见）"
+        val tail = if (cursorVisible) "" else Lang.t("（箭头当前为关，点按「指针」打开后可见）")
         Toast.makeText(
             this,
             "软件光标大小：${CURSOR_SIZE_NAMES[cursorSizeIdx]}（×${CURSOR_SCALES[cursorSizeIdx]}）$tail",
@@ -1201,7 +1210,7 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
                             saveEntry()
                             Toast.makeText(
                                 this@NativeDisplayActivity,
-                                "已还原浮球，拖到屏幕边缘可再次收纳", Toast.LENGTH_SHORT
+                                Lang.t("已还原浮球，拖到屏幕边缘可再次收纳"), Toast.LENGTH_SHORT
                             ).show()
                         } else if (undocked) {
                             lp.leftMargin = (ox + dx).roundToInt()
@@ -1410,7 +1419,7 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
             sp.edit().putBoolean(SP_DOCK_TIP, true).apply()
             Toast.makeText(
                 this,
-                "已贴边收纳：点细条出键盘，沿边滑动换位置，向屏内拖动可还原 ⌨",
+                Lang.t("已贴边收纳：点细条出键盘，沿边滑动换位置，向屏内拖动可还原 ⌨"),
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -1532,7 +1541,7 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
         }
         numBtn = nb
         bar.addView(nb)
-        val rb = this@NativeDisplayActivity.barButton("旋转 0°") {
+        val rb = this@NativeDisplayActivity.barButton(Lang.t("旋转 0°")) {
             this@NativeDisplayActivity.rotateKeyboard()
         }
         rotateBtn = rb
@@ -1556,7 +1565,7 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
         this@NativeDisplayActivity.cursorBtn = cb
         bar.addView(cb)
         bar.addView(this@NativeDisplayActivity.barButton("ⓘ", 0.6f) { this@NativeDisplayActivity.showDiagnostics() })
-        bar.addView(this@NativeDisplayActivity.barButton("收起 ×", 0.9f) {
+        bar.addView(this@NativeDisplayActivity.barButton(Lang.t("收起 ×"), 0.9f) {
             this@NativeDisplayActivity.hideKeyPreview()
             this@NativeDisplayActivity.stopRepeatDelete()
             this@NativeDisplayActivity.panel.visibility = View.GONE
@@ -1740,9 +1749,9 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
         Toast.makeText(
             this,
             if (displayLocked)
-                "🔒 已上锁（软件锁）：拦返回键 / 左右侧滑返回，屏幕底部照常可点任务栏与开始菜单"
+                Lang.t("🔒 已上锁（软件锁）：拦返回键 / 左右侧滑返回，屏幕底部照常可点任务栏与开始菜单")
             else
-                "🔓 已解锁：返回键与左右侧滑返回恢复正常",
+                Lang.t("🔓 已解锁：返回键与左右侧滑返回恢复正常"),
             Toast.LENGTH_LONG
         ).show()
     }
@@ -1821,7 +1830,7 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
     private fun showLockToast() {
         lockToast?.cancel()
         lockToast = Toast.makeText(
-            this, "🔒 已上锁（防误退）：点工具条 🔓 解锁后返回键才生效；屏幕底部仍可正常点", Toast.LENGTH_SHORT
+            this, Lang.t("🔒 已上锁（防误退）：点工具条 🔓 解锁后返回键才生效；屏幕底部仍可正常点"), Toast.LENGTH_SHORT
         )
         lockToast?.show()
     }
@@ -2069,27 +2078,27 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
     private fun showDiagnostics() {
         val r = NativeInputBridge.channelsReady
         val msg = buildString {
-            append("画面 ").append(if (surfaceSet) "✓" else "✗")
-                .append(" 服务 ").append(if (NativeInputBridge.connected) "✓" else "✗")
-                .append(" 写入✓").append(NativeInputBridge.writeOk)
+            append(Lang.t("画面 ")).append(if (surfaceSet) "✓" else "✗")
+                .append(Lang.t(" 服务 ")).append(if (NativeInputBridge.connected) "✓" else "✗")
+                .append(Lang.t(" 写入✓")).append(NativeInputBridge.writeOk)
                 .append(" ✗").append(NativeInputBridge.writeFail)
-            append("\n").append(if (absPointer) "usb-tablet " else "相对mouse(降级) ")
+            append("\n").append(if (absPointer) "usb-tablet " else Lang.t("相对mouse(降级) "))
                 .append(if (inputW > 0) "${inputW}x${inputH}" else "?")
                 .append(" / 画面 ${guestW}x${guestH}")
             append("\n").append(modeLabel())
             if (inputMode == MODE_TOUCHPAD) {
                 append(" 速度×${TP_GAINS[tpGainIdx.coerceIn(0, TP_GAINS.size - 1)]}")
-                append(" 箭头").append(
+                append(Lang.t(" 箭头")).append(
                     if (cursorVisible) CURSOR_SIZE_NAMES[cursorSizeIdx.coerceIn(0, CURSOR_SCALES.size - 1)]
-                    else "关"
+                    else Lang.t("关")
                 )
             }
             // v2.0.27：显示当前这套启动盘的记忆键尾，确认「按盘记忆」确实分了档。
-            append("\n").append("软件箭头按盘记忆: ")
+            append("\n").append(Lang.t("软件箭头按盘记忆: "))
                 .append(cursorKey.removePrefix(SP_TP_CURSOR_PROFILE))
-                .append(" / ").append(if (cursorVisible) "开" else "关（默认）")
+                .append(" / ").append(if (cursorVisible) Lang.t("开") else Lang.t("关（默认）"))
             append("\n").append(NativeInputBridge.inputDiagnostics.replace(" | ", "\n"))
-            append("\n通道 触摸/键盘/鼠标/开关: ")
+            append(Lang.t("\n通道 触摸/键盘/鼠标/开关: "))
                 .append(if (r.getOrNull(0) == true) "✓" else "✗")
                 .append(if (r.getOrNull(1) == true) "✓" else "✗")
                 .append(if (r.getOrNull(2) == true) "✓" else "✗")
@@ -2136,7 +2145,7 @@ class NativeDisplayActivity : Activity(), SurfaceHolder.Callback {
             getSharedPreferences(SP_NAME, MODE_PRIVATE).edit()
                 .putInt(SP_TP_GAIN, tpGainIdx).apply()
         }
-        val names = arrayOf("慢", "中", "快")
+        val names = arrayOf(Lang.t("慢"), Lang.t("中"), Lang.t("快"))
         Toast.makeText(
             this, "触摸板光标速度：${names[tpGainIdx]}（×${TP_GAINS[tpGainIdx]}）", Toast.LENGTH_SHORT
         ).show()

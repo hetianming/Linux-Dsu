@@ -39,9 +39,9 @@ data class RomDevice(
 )
 
 /**
- * 欧加固件条目（rom.yule.ink /api/ota/catalog 数据源）
+ * 多品牌固件条目（公开 OTA Catalog 数据源）
  * device 字段前缀即品牌：OP=OnePlus, OPPO, REALME=Realme, MEIZU=魅族
- * source_url 是占位值，需经 POST /api/ota/resolve 换取带有效期的真实下载链接
+ * source_url 可能是 .zip 直链，也可能是 downloadCheck 动态链接（需带官方头取 302 Location）
  */
 data class YuleRomEntry(
     val releaseId: String,
@@ -107,14 +107,20 @@ object RomApi {
     private const val DEVICES_JSON_CDN_URL = "https://cdn.jsdelivr.net/gh/HegeKen/HyperData@main/devices.json"
     private const val DEVICES_JSON_FASTLY_URL = "https://fastly.jsdelivr.net/gh/HegeKen/HyperData@main/devices.json"
 
-    // 欧加固件数据源（OPPO / OnePlus / Realme）
-    private const val YULE_BASE_URL = "https://rom.yule.ink"
-    private const val YULE_CATALOG_URL = "$YULE_BASE_URL/api/ota/catalog"
-    private const val YULE_RESOLVE_URL = "$YULE_BASE_URL/api/ota/resolve"
-
-    // 欧加接口走 Cloudflare 防护，必须用浏览器 UA，否则会被机器人拦截返回 HTML
-    private const val YULE_USER_AGENT =
+    // 多品牌固件目录数据源。
+    // 原 rom.yule.ink 随 .ink 顶级域被注销而永久下线（DNS 落到 expired.hichina.com），
+    // 现改用 Daniel Springer 的公开只读 OTA Catalog：覆盖 OnePlus / OPPO / Realme / Xiaomi 等。
+    // 双域名互为备份，任一可达即可；网络不可用时由 RomCache 的内置离线快照兜底。
+    private val OTA_CATALOG_URLS = listOf(
+        "https://roms.danielspringer.at/api/ota.php",
+        "https://danielspringer.at/api/ota.php",
+    )
+    private const val OTA_CATALOG_REFERER = "https://roms.danielspringer.at/"
+    private const val OTA_CATALOG_UA =
         "Mozilla/5.0 (Linux; Android 15; PMA120) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+
+    // OPlus 官方 OTA 协议：解析 downloadCheck 动态链接只需这两个静态请求头
+    private const val OPLUS_USER_ID = "oplus-ota|00000001"
 
     /**
      * 获取设备列表（优先本地缓存由 RomCache 负责，这里只处理网络）
@@ -158,7 +164,7 @@ object RomApi {
 
     /**
      * 获取欧加固件列表（OPPO / OnePlus / Realme / Meizu）
-     * 数据源：rom.yule.ink /api/ota/catalog
+     * 数据源：Daniel Springer OTA Catalog（多域名轮询）
      * 返回结构：{ releases: [{id, device, version, region, size, md5, build_timestamp, source_url}], cached_at }
      */
     suspend fun fetchYuleRomList(): YuleRomResult = withContext(Dispatchers.IO) {
@@ -169,70 +175,82 @@ object RomApi {
 
     /** 拉取欧加目录原始 JSON（1.1MB / 1600+ 条），并保留错误信息供界面提示 */
     internal suspend fun fetchYuleBody(): Pair<String?, String?> = withContext(Dispatchers.IO) {
-        try {
-            val conn = URL(YULE_CATALOG_URL).openConnection() as HttpURLConnection
-            conn.requestMethod = "GET"
-            conn.connectTimeout = 15000
-            conn.readTimeout = 20000
-            conn.setRequestProperty("User-Agent", YULE_USER_AGENT)
-            conn.setRequestProperty("Accept", "application/json, text/plain, */*")
-            conn.setRequestProperty("Accept-Encoding", "gzip")
-            conn.setRequestProperty("Referer", "https://rom.yule.ink/")
+        val errors = mutableListOf<String>()
+        for (url in OTA_CATALOG_URLS) {
+            try {
+                val host = URL(url).host
+                val conn = URL(url).openConnection() as HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.connectTimeout = 12000
+                conn.readTimeout = 20000
+                conn.setRequestProperty("User-Agent", OTA_CATALOG_UA)
+                conn.setRequestProperty("Accept", "application/json, text/plain, */*")
+                conn.setRequestProperty("Accept-Encoding", "gzip")
+                conn.setRequestProperty("Referer", OTA_CATALOG_REFERER)
 
-            val code = conn.responseCode
-            if (code !in 200..299) {
+                val code = conn.responseCode
+                if (code !in 200..299) {
+                    errors.add("HTTP " + code + "@" + host)
+                    conn.disconnect()
+                    continue
+                }
+                val raw = conn.inputStream
+                val stream = if (conn.contentEncoding?.contains("gzip", true) == true) {
+                    java.util.zip.GZIPInputStream(raw)
+                } else raw
+                val body = stream.bufferedReader().use { it.readText() }
                 conn.disconnect()
-                return@withContext null to "HTTP $code（可能被站点防护拦截）"
+                if (body.trimStart().startsWith("<")) {
+                    errors.add("返回HTML@" + host)
+                    continue
+                }
+                // 校验目录结构，避免把错误页/空响应当成成功（旧版因此永远卡「加载中」）
+                val count = runCatching { JSONObject(body).optJSONArray("releases")?.length() ?: 0 }.getOrDefault(0)
+                if (count <= 0) {
+                    errors.add("空目录@" + host)
+                    continue
+                }
+                return@withContext body to null
+            } catch (e: Exception) {
+                errors.add(e.javaClass.simpleName + "@" + URL(url).host)
             }
-            // 服务端可能返回 gzip，HttpURLConnection 不会自动解压
-            val raw = conn.inputStream
-            val stream = if (conn.contentEncoding?.contains("gzip", true) == true) {
-                java.util.zip.GZIPInputStream(raw)
-            } else raw
-            val body = stream.bufferedReader().use { it.readText() }
-            conn.disconnect()
-            if (body.trimStart().startsWith("<")) {
-                return@withContext null to "接口返回HTML（被防护拦截或接口路径变更）"
-            }
-            body to null
-        } catch (e: Exception) {
-            null to "${e.javaClass.simpleName}: ${e.message ?: "网络异常"}"
         }
+        null to "在线目录不可达（" + errors.joinToString("、") + "）"
     }
 
     /**
-     * 用 release_id 换取带有效期的真实下载链接
-     * POST /api/ota/resolve {release_id, device, source_url} -> {url, expires_at}
+     * 取得可下载的真实链接。原 /api/ota/resolve 服务随 .ink 域名一起下线，
+     * 现改为客户端内置解析：
+     *  - .zip 直链：直接返回；
+     *  - downloadCheck 动态链接：带 OPlus 官方静态头请求，读 302 的 Location
+     *    （Location 是带 Expires 签名的 OSS 直链，交给 aria2c 下载即可）。
      */
     suspend fun resolveYuleDownload(entry: YuleRomEntry): YuleResolvedUrl? = withContext(Dispatchers.IO) {
+        val src = entry.sourceUrl
+        if (src.isBlank()) return@withContext null
+        if (!src.contains("downloadCheck", ignoreCase = true)) {
+            return@withContext YuleResolvedUrl(src, "")
+        }
         try {
-            val conn = URL(YULE_RESOLVE_URL).openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.connectTimeout = 20000
-            conn.readTimeout = 20000
-            conn.doOutput = true
-            conn.setRequestProperty("User-Agent", YULE_USER_AGENT)
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.setRequestProperty("Accept", "application/json, text/plain, */*")
-            conn.setRequestProperty("Referer", "https://rom.yule.ink/")
-
-            val reqBody = JSONObject().apply {
-                put("release_id", entry.releaseId)
-                put("device", entry.device)
-                put("source_url", entry.sourceUrl)
-            }.toString()
-            conn.outputStream.use { it.write(reqBody.toByteArray()) }
-
+            val conn = URL(src).openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.instanceFollowRedirects = false   // 必须关闭自动跟随，才能读到 Location
+            conn.connectTimeout = 15000
+            conn.readTimeout = 15000
+            conn.setRequestProperty("User-Agent", OTA_CATALOG_UA)
+            conn.setRequestProperty("userId", OPLUS_USER_ID)
+            conn.setRequestProperty("Range", "bytes=0-")
             val code = conn.responseCode
-            if (code !in 200..299) {
-                conn.disconnect()
-                return@withContext null
-            }
-            val resp = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+            val location = conn.getHeaderField("Location")
             conn.disconnect()
-            val url = resp.optString("url", "")
-            if (url.isBlank()) return@withContext null
-            YuleResolvedUrl(url, resp.optString("expires_at", ""))
+            if (code !in 301..308 || location.isNullOrBlank()) return@withContext null
+            val expires = runCatching {
+                val ts = Regex("(?:Expires|x-oss-expires)=(\\d+)")
+                    .find(URL(location).query.orEmpty())?.groupValues?.get(1)?.toLongOrNull()
+                if (ts != null) java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                    .format(java.util.Date(ts * 1000L)) else ""
+            }.getOrDefault("")
+            YuleResolvedUrl(location, expires)
         } catch (e: Exception) {
             null
         }

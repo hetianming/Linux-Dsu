@@ -56,7 +56,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
             var deviceName: String = "",
             var progress: Int = 0,
             var speed: String = "",
-            var status: String = "等待中",
+            var status: String = Lang.t("等待中"),
             var state: Int = 0,
             var savedPath: String = "",
             var startTime: Long = 0,
@@ -74,7 +74,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
     }
 
     // 标签
-    private enum class Tab(val label: String) { ALL("全部"), DOWNLOADING("下载中"), DONE("已完成"), PAUSED("已暂停") }
+    private enum class Tab(val label: String) { ALL(Lang.t("全部")), DOWNLOADING(Lang.t("下载中")), DONE(Lang.t("已完成")), PAUSED(Lang.t("已暂停")) }
 
     private lateinit var taskContainer: LinearLayout
     private lateinit var emptyView: LinearLayout
@@ -111,7 +111,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
             setPadding(0, 0, 0, Ui.dp(12, d))
         }
         titleRow.addView(TextView(this).apply {
-            text = "‹ 返回"
+            text = Lang.t("‹ 返回")
             textSize = 13f
             setTextColor(Ui.buttonText(this@DownloadsActivity))
             background = Ui.glassButton(this@DownloadsActivity, Ui.buttonSuccess(this@DownloadsActivity))
@@ -128,7 +128,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
             )
         })
         titleRow.addView(TextView(this).apply {
-            text = "下载管理"
+            text = Lang.t("下载管理")
             textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(this@DownloadsActivity))
@@ -140,7 +140,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
             )
         })
         titleRow.addView(TextView(this).apply {
-            text = "新建下载"
+            text = Lang.t("新建下载")
             textSize = 12f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
@@ -339,7 +339,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
                 gravity = Gravity.CENTER
             })
             addView(TextView(this@DownloadsActivity).apply {
-                text = "暂无下载任务"
+                text = Lang.t("暂无下载任务")
                 textSize = 17f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(Ui.primaryText(this@DownloadsActivity))
@@ -347,7 +347,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
                 setPadding(0, Ui.dp(12, d), 0, 0)
             })
             addView(TextView(this@DownloadsActivity).apply {
-                text = "去浏览 ROM 商店或新建下载任务"
+                text = Lang.t("去浏览 ROM 商店或新建下载任务")
                 textSize = 12f
                 setTextColor(Ui.secondaryText(this@DownloadsActivity))
                 gravity = Gravity.CENTER
@@ -360,7 +360,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
                 gravity = Gravity.CENTER
             }
             btnRow.addView(TextView(this@DownloadsActivity).apply {
-                text = "去浏览 ROM 商店"
+                text = Lang.t("去浏览 ROM 商店")
                 textSize = 13f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(Color.WHITE)
@@ -373,7 +373,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
                 }
             })
             btnRow.addView(TextView(this@DownloadsActivity).apply {
-                text = "新建下载"
+                text = Lang.t("新建下载")
                 textSize = 13f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(Color.WHITE)
@@ -417,7 +417,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
             visibility = View.GONE
 
             selectedCountText = TextView(this@DownloadsActivity).apply {
-                text = "已选 0 项"
+                text = Lang.t("已选 0 项")
                 textSize = 12f
                 setTextColor(Ui.primaryText(this@DownloadsActivity))
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
@@ -425,7 +425,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
             addView(selectedCountText)
 
             val btnStart = TextView(this@DownloadsActivity).apply {
-                text = "全部开始"
+                text = Lang.t("全部开始")
                 textSize = 12f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(Color.WHITE)
@@ -438,7 +438,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
                 }
             }
             val btnPause = TextView(this@DownloadsActivity).apply {
-                text = "全部暂停"
+                text = Lang.t("全部暂停")
                 textSize = 12f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(Color.WHITE)
@@ -455,7 +455,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
                 }
             }
             val btnDelete = TextView(this@DownloadsActivity).apply {
-                text = "删除所选"
+                text = Lang.t("删除所选")
                 textSize = 12f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(Color.WHITE)
@@ -482,14 +482,14 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
     private fun batchAction(action: BatchAction) {
         val selected = tasks.values.filter { it.selected }
         if (selected.isEmpty()) {
-            Toast.makeText(this, "未选择任务", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, Lang.t("未选择任务"), Toast.LENGTH_SHORT).show()
             return
         }
         when (action) {
             BatchAction.START -> {
                 selected.filter { it.state == 5 }.forEach { task ->
                     task.state = 1
-                    task.status = "下载中"
+                    task.status = Lang.t("下载中")
                     sendBroadcast(Intent(ACTION_RESUME).apply {
                         setPackage(packageName)
                         putExtra(DownloadService.EXTRA_TASK_ID, task.id)
@@ -500,7 +500,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
             BatchAction.PAUSE -> {
                 selected.filter { it.state == 1 }.forEach { task ->
                     task.state = 5
-                    task.status = "已暂停"
+                    task.status = Lang.t("已暂停")
                     sendBroadcast(Intent(ACTION_PAUSE).apply {
                         setPackage(packageName)
                         putExtra(DownloadService.EXTRA_TASK_ID, task.id)
@@ -510,7 +510,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
             }
             BatchAction.DELETE -> {
                 AlertDialog.Builder(this)
-                    .setTitle("删除所选")
+                    .setTitle(Lang.t("删除所选"))
                     .setMessage("确定删除选中的 ${selected.size} 个下载任务？已下载的文件不会被删除。")
                     .setPositiveButton("删除") { _, _ ->
                         selected.forEach { task ->
@@ -524,9 +524,9 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
                             tasks.remove(task.id)
                         }
                         exitSelectionMode()
-                        Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, Lang.t("已删除"), Toast.LENGTH_SHORT).show()
                     }
-                    .setNegativeButton("取消", null)
+                    .setNegativeButton(Lang.t("取消"), null)
                     .show()
                 return
             }
@@ -599,7 +599,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
                         // 本地已暂停（state=5）时忽略在途的下载进度广播（state=1），
                         // 否则按钮会被翻回「暂停」，造成"要双击才暂停"的错觉
                         if (state == 1 && task.state == 5) {
-                            task.status = "已暂停"
+                            task.status = Lang.t("已暂停")
                         } else {
                             task.status = status
                             task.state = state
@@ -701,7 +701,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
     private fun showNewDownloadDialog() {
         val d = resources.displayMetrics.density
         val input = EditText(this).apply {
-            hint = "请输入下载链接 (http/https)"
+            hint = Lang.t("请输入下载链接 (http/https)")
             textSize = 13f
             setTextColor(Ui.primaryText(this@DownloadsActivity))
             setHintTextColor(Ui.secondaryText(this@DownloadsActivity))
@@ -714,20 +714,20 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
             setPadding(Ui.dp(20, d), Ui.dp(8, d), Ui.dp(20, d), Ui.dp(4, d))
             addView(input)
             addView(TextView(this@DownloadsActivity).apply {
-                text = "调用内置 aria2c 多线程引擎 · 保存到 /sdcard/Downloads\n支持断点续传，可与 ROM 下载并行"
+                text = Lang.t("调用内置 aria2c 多线程引擎 · 保存到 /sdcard/Downloads\n支持断点续传，可与 ROM 下载并行")
                 textSize = 10f
                 setTextColor(Ui.secondaryText(this@DownloadsActivity))
                 setPadding(0, Ui.dp(6, d), 0, 0)
             })
         }
         AlertDialog.Builder(this)
-            .setTitle("新建下载")
+            .setTitle(Lang.t("新建下载"))
             .setView(container)
-            .setNegativeButton("取消", null)
+            .setNegativeButton(Lang.t("取消"), null)
             .setPositiveButton("开始下载") { _, _ ->
                 val url = input.text.toString().trim()
                 if (url.isBlank()) {
-                    Toast.makeText(this, "链接不能为空", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, Lang.t("链接不能为空"), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 startUrlDownload(url)
@@ -763,13 +763,13 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
         addTask(DownloadTask(
             id = filename,
             fileName = filename,
-            deviceName = "自定义下载",
-            status = "准备下载",
+            deviceName = Lang.t("自定义下载"),
+            status = Lang.t("准备下载"),
             state = 0,
             url = url,
             startTime = System.currentTimeMillis(),
         ))
-        Toast.makeText(this, "已添加到下载队列", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, Lang.t("已添加到下载队列"), Toast.LENGTH_SHORT).show()
         refreshTaskList()
     }
 
@@ -789,7 +789,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
                 type = "*/*"
                 addCategory(Intent.CATEGORY_OPENABLE)
             }
-            runCatching { startActivity(Intent.createChooser(fallback, "浏览文件")) }
+            runCatching { startActivity(Intent.createChooser(fallback, Lang.t("浏览文件"))) }
         }
     }
 
@@ -956,7 +956,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
                 }
             }
             deleteBtn = TextView(ctx).apply {
-                text = "删除"
+                text = Lang.t("删除")
                 textSize = 12f
                 setTypeface(typeface, Typeface.BOLD)
                 gravity = Gravity.CENTER
@@ -967,7 +967,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
                 }
             }
             openBtn = TextView(ctx).apply {
-                text = "打开"
+                text = Lang.t("打开")
                 textSize = 12f
                 setTypeface(typeface, Typeface.BOLD)
                 gravity = Gravity.CENTER
@@ -1081,14 +1081,14 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
                 setStroke(Ui.dp(1, d), Color.argb(180, Color.red(accent), Color.green(accent), Color.blue(accent)))
             }
 
-            fileNameText.text = task.fileName.ifBlank { "未知文件" }
+            fileNameText.text = task.fileName.ifBlank { Lang.t("未知文件") }
 
             // 大小
             val sizeStr = if (task.totalSize > 0) {
                 "${formatBytes(task.downloadedBytes)} / ${formatBytes(task.totalSize)}"
             } else if (task.state == 2 && task.savedPath.isNotBlank()) {
                 val f = File(task.savedPath)
-                if (f.exists()) formatBytes(f.length()) else "已完成"
+                if (f.exists()) formatBytes(f.length()) else Lang.t("已完成")
             } else {
                 "—"
             }
@@ -1139,7 +1139,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
             // 操作按钮
             when (task.state) {
                 1 -> { // 下载中
-                    pauseBtn.text = "暂停"
+                    pauseBtn.text = Lang.t("暂停")
                     pauseBtn.setTextColor(Color.parseColor("#D97706"))
                     pauseBtn.background = outlineButtonBg(Color.parseColor("#F59E0B"))
                     pauseBtn.visibility = View.VISIBLE
@@ -1149,7 +1149,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
                     deleteBtn.background = outlineButtonBg(Color.parseColor("#EF4444"))
                 }
                 5 -> { // 已暂停
-                    pauseBtn.text = "继续"
+                    pauseBtn.text = Lang.t("继续")
                     pauseBtn.setTextColor(Color.parseColor("#16A34A"))
                     pauseBtn.background = outlineButtonBg(Color.parseColor("#22C55E"))
                     pauseBtn.visibility = View.VISIBLE
@@ -1182,7 +1182,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
             when (task.state) {
                 1 -> {
                     task.state = 5
-                    task.status = "已暂停"
+                    task.status = Lang.t("已暂停")
                     sendBroadcast(Intent(ACTION_PAUSE).apply {
                         setPackage(packageName)
                         putExtra(DownloadService.EXTRA_TASK_ID, taskId)
@@ -1190,7 +1190,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
                 }
                 5 -> {
                     task.state = 1
-                    task.status = "下载中"
+                    task.status = Lang.t("下载中")
                     sendBroadcast(Intent(ACTION_RESUME).apply {
                         setPackage(packageName)
                         putExtra(DownloadService.EXTRA_TASK_ID, taskId)
@@ -1203,7 +1203,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
         private fun doDelete() {
             val task = tasks[taskId] ?: return
             AlertDialog.Builder(ctx)
-                .setTitle("删除下载任务")
+                .setTitle(Lang.t("删除下载任务"))
                 .setMessage("确定删除「${task.fileName.ifBlank { "未知文件" }}」？\n已下载的文件不会被删除。")
                 .setPositiveButton("删除") { _, _ ->
                     // 下载中/暂停中的任务删除时同步取消服务端任务，避免幽灵任务重新出现
@@ -1216,9 +1216,9 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
                     tasks.remove(taskId)
                     taskViews.remove(taskId)
                     refreshTaskList()
-                    Toast.makeText(ctx, "已删除", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, Lang.t("已删除"), Toast.LENGTH_SHORT).show()
                 }
-                .setNegativeButton("取消", null)
+                .setNegativeButton(Lang.t("取消"), null)
                 .show()
         }
 
@@ -1229,7 +1229,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
             }
             val file = File(path)
             if (!file.exists()) {
-                Toast.makeText(ctx, "文件不存在", Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx, Lang.t("文件不存在"), Toast.LENGTH_SHORT).show()
                 return
             }
             val mime = android.webkit.MimeTypeMap.getSingleton()
@@ -1241,7 +1241,7 @@ class DownloadsActivity : androidx.appcompat.app.AppCompatActivity() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             runCatching { ctx.startActivity(intent) }.onFailure {
-                Toast.makeText(ctx, "无法打开此文件类型", Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx, Lang.t("无法打开此文件类型"), Toast.LENGTH_SHORT).show()
             }
         }
     }

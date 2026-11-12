@@ -22,6 +22,7 @@ import android.os.Build
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import com.mcai.ubuntudsu.Lang
 
 /**
  * 全局设计系统：拟态方案（Neumorphism）+ 液态玻璃（Liquid Glass）渲染架构
@@ -468,7 +469,7 @@ object Ui {
             }
         })
         val cancelBtn = TextView(activity).apply {
-            text = "取消"
+            text = Lang.t("取消")
             textSize = 12f
             setTypeface(typeface, Typeface.BOLD)
             gravity = Gravity.CENTER
@@ -837,7 +838,7 @@ object Ui {
 
         // 关于信息置顶：用主色绿显示标题与核心信息，避免默认蓝字与界面不协调
         aboutPanel.addView(TextView(activity).apply {
-            text = "关于信息"
+            text = Lang.t("关于信息")
             textSize = 14f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(buttonSuccess(activity))
@@ -861,26 +862,26 @@ object Ui {
         })
 
         aboutPanel.addView(TextView(activity).apply {
-            text = "功能简介"
+            text = Lang.t("功能简介")
             textSize = 12f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(buttonSuccess(activity))
             setPadding(0, 0, 0, dp(4, density))
         })
         aboutPanel.addView(TextView(activity).apply {
-            text = "· DSU 管理：ROOT 调用 dynamic_system 服务安装 GSI 镜像，自定义 userdata 容量、清理旧缓存、一键重启进入\n" +
-                "· Linux ARM® 架构：Chroot 安装运行 Ubuntu rootfs（本地 / 云端镜像），root 权限直通，可卸载还原\n" +
-                "· 容器终端：Termux 风格 Chroot 终端，支持 apt 安装软件包\n" +
-                "· 远程桌面：XFCE / KDE 桌面 + VNC 远程连接，音频桥接、分辨率自选、触控 / 轨迹板双指针模式\n" +
-                "· ROM 固件：HyperOS 与 ColorOS / FlymeOS / realme UI 固件双源，设备品牌 / 机型筛选，版本号新到旧排序，内置 aria2c 下载与复制链接\n" +
-                "· ROM 移植：DNA 工具箱分解 / 合成 SUPER、payload 提取、镜像格式互转，一站式移植开发\n" +
-                "· 下载管理：多任务并行下载，断点续传，全部 / 下载中 / 已完成 / 已暂停分类\n" +
-                "· 文件管理：内置 rootfs 文件浏览器，编辑 / 重命名 / 新建删除\n" +
-                "· 进程管理：/proc 双点采样实测 CPU / 内存 / 后台耗电，后台应用一览\n" +
-                "· OTG 刷机助手：检测 USB 设备 ADB / Fastboot 状态，刷机日志实时输出\n" +
-                "· U 盘启动：本地制作 U 盘 IMG 镜像并虚拟 U 盘暴露给电脑\n" +
-                "· 日历工时记：上下班打卡、日历月视图、工时与工资统计，支持补录与修改每天工时\n" +
-                "· 检查更新：GitHub Release 在线检测，国内代理 API 兜底，下载线路测速切换并校验文件完整性"
+            text = Lang.t("· DSU 管理：ROOT 调用 dynamic_system 服务安装 GSI 镜像，自定义 userdata 容量、清理旧缓存、一键重启进入\n") +
+                Lang.t("· Linux ARM® 架构：Chroot 安装运行 Ubuntu rootfs（本地 / 云端镜像），root 权限直通，可卸载还原\n") +
+                Lang.t("· 容器终端：Termux 风格 Chroot 终端，支持 apt 安装软件包\n") +
+                Lang.t("· 远程桌面：XFCE / KDE 桌面 + VNC 远程连接，音频桥接、分辨率自选、触控 / 轨迹板双指针模式\n") +
+                Lang.t("· ROM 固件：HyperOS 与 ColorOS / FlymeOS / realme UI 固件双源，设备品牌 / 机型筛选，版本号新到旧排序，内置 aria2c 下载与复制链接\n") +
+                Lang.t("· ROM 移植：DNA 工具箱分解 / 合成 SUPER、payload 提取、镜像格式互转，一站式移植开发\n") +
+                Lang.t("· 下载管理：多任务并行下载，断点续传，全部 / 下载中 / 已完成 / 已暂停分类\n") +
+                Lang.t("· 文件管理：内置 rootfs 文件浏览器，编辑 / 重命名 / 新建删除\n") +
+                Lang.t("· 进程管理：/proc 双点采样实测 CPU / 内存 / 后台耗电，后台应用一览\n") +
+                Lang.t("· OTG 刷机助手：检测 USB 设备 ADB / Fastboot 状态，刷机日志实时输出\n") +
+                Lang.t("· U 盘启动：本地制作 U 盘 IMG 镜像并虚拟 U 盘暴露给电脑\n") +
+                Lang.t("· 日历工时记：上下班打卡、日历月视图、工时与工资统计，支持补录与修改每天工时\n") +
+                Lang.t("· 检查更新：GitHub Release 在线检测，国内代理 API 兜底，下载线路测速切换并校验文件完整性")
             textSize = 11f
             setTextColor(secondaryText(activity))
             setLineSpacing(dp(3, density).toFloat(), 1f)
@@ -892,13 +893,13 @@ object Ui {
         }
         val builder = androidx.appcompat.app.AlertDialog.Builder(activity)
             .setView(scroll)
-            .setPositiveButton("关闭", null)
+            .setPositiveButton(Lang.t("关闭"), null)
         val dialog = builder.create()
         dialog.show()
         // 弹窗标题「关于信息」改为主色（替代默认蓝字）：取标题 TextView 重设颜色
         runCatching {
             val titleTv = dialog.findViewById<TextView>(androidx.appcompat.R.id.alertTitle)
-            titleTv?.text = "关于信息"
+            titleTv?.text = Lang.t("关于信息")
             titleTv?.setTextColor(buttonSuccess(activity))
             titleTv?.setTextSize(16f)
             titleTv?.setTypeface(titleTv.typeface, Typeface.BOLD)
@@ -926,8 +927,9 @@ object Ui {
      * 全局触摸分发器：在 Activity 的 dispatchTouchEvent 中调用
      * 自动对可点击 View 在 ACTION_UP 时触发震动反馈
      */
-    fun dispatchHaptic(root: View?, event: MotionEvent) {
-        Haptics.onTouch(root, event)
+    @kotlin.jvm.JvmOverloads
+    fun dispatchHaptic(root: View?, event: MotionEvent, fallbackOnMiss: Boolean = false) {
+        Haptics.onTouch(root, event, fallbackOnMiss)
     }
 
     fun dp(value: Int, density: Float): Int = (value * density).toInt()

@@ -12,6 +12,7 @@ import android.widget.TextView
 import com.mcai.ubuntudsu.GunyahVMActivity
 import com.mcai.ubuntudsu.R
 import com.mcai.ubuntudsu.ui.Ui
+import com.mcai.ubuntudsu.Lang
 
 /**
  * v2.0.28：底部第 3 格「gunyahVM」tab 的兜底页面。
@@ -51,7 +52,7 @@ class VmEntryPage(private val activity: Activity) {
             setTextColor(Ui.primaryText(activity))
         })
         card.addView(TextView(activity).apply {
-            text = "工具链 · 启动配置 · 镜像映射 · 内核模块 · 启动与停止"
+            text = Lang.t("工具链 · 启动配置 · 镜像映射 · 内核模块 · 启动与停止")
             textSize = 12f
             gravity = Gravity.CENTER
             setTextColor(Ui.secondaryText(activity))
@@ -61,7 +62,7 @@ class VmEntryPage(private val activity: Activity) {
             ).apply { topMargin = Ui.dp(10, d); bottomMargin = Ui.dp(22, d) }
         })
         card.addView(TextView(activity).apply {
-            text = "进入 gunyahVM"
+            text = Lang.t("进入 gunyahVM")
             textSize = 15f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             gravity = Gravity.CENTER
@@ -77,7 +78,7 @@ class VmEntryPage(private val activity: Activity) {
             Ui.pressAnimation(this)
         })
         card.addView(TextView(activity).apply {
-            text = "也可直接点底部「gunyahVM」标签进入"
+            text = Lang.t("也可直接点底部「gunyahVM」标签进入")
             textSize = 11f
             setTextColor(Ui.secondaryText(activity))
             layoutParams = LinearLayout.LayoutParams(

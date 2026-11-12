@@ -30,6 +30,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import com.mcai.ubuntudsu.Lang
 
 /**
  * 「在线提取」：远程固件包 → 分区 img，**全程不下载整包**。
@@ -92,8 +93,8 @@ class PayloadOnlinePage(
 
     init {
         val intent = activity.intent
-        title = intent.getStringExtra(PayloadOnlineActivity.EXTRA_TITLE) ?: "在线提取"
-        fileName = intent.getStringExtra(PayloadOnlineActivity.EXTRA_FILENAME) ?: "固件包"
+        title = intent.getStringExtra(PayloadOnlineActivity.EXTRA_TITLE) ?: Lang.t("在线提取")
+        fileName = intent.getStringExtra(PayloadOnlineActivity.EXTRA_FILENAME) ?: Lang.t("固件包")
         url = intent.getStringExtra(PayloadOnlineActivity.EXTRA_URL) ?: ""
         // 机型目录：优先取显式传入的设备名，兜底从「设备 · 版本」标题里截取
         device = run {
@@ -136,7 +137,7 @@ class PayloadOnlinePage(
     private fun buildTitleRow(): View = FrameLayout(activity).apply {
         setPadding(0, 0, 0, Ui.dp(10, d))
         addView(TextView(activity).apply {
-            text = "在线提取"
+            text = Lang.t("在线提取")
             textSize = 22f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
@@ -148,7 +149,7 @@ class PayloadOnlinePage(
             )
         })
         addView(TextView(activity).apply {
-            text = "‹ 返回"
+            text = Lang.t("‹ 返回")
             textSize = 13f
             setTextColor(Ui.primaryText(activity))
             Ui.pressAnimation(this)
@@ -167,7 +168,7 @@ class PayloadOnlinePage(
             ).apply { bottomMargin = Ui.dp(10, d) }
         }
         card.addView(TextView(activity).apply {
-            text = "卡刷包"
+            text = Lang.t("卡刷包")
             textSize = 11f
             setTextColor(Ui.secondaryText(activity))
         })
@@ -181,7 +182,7 @@ class PayloadOnlinePage(
         }
         card.addView(sourceText)
         estimateText = TextView(activity).apply {
-            text = "远程直读：只读取所选分区的数据，不下载整个卡刷包"
+            text = Lang.t("远程直读：只读取所选分区的数据，不下载整个卡刷包")
             textSize = 10.5f
             setTextColor(Ui.secondaryText(activity))
             setPadding(0, Ui.dp(6, d), 0, 0)
@@ -219,7 +220,7 @@ class PayloadOnlinePage(
         }
         card.addView(statsText)
         statusText = TextView(activity).apply {
-            text = "准备中…"
+            text = Lang.t("准备中…")
             textSize = 11.5f
             setTextColor(Ui.secondaryText(activity))
             setPadding(0, Ui.dp(4, d), 0, 0)
@@ -250,9 +251,9 @@ class PayloadOnlinePage(
             gravity = Gravity.CENTER_VERTICAL
             visibility = View.GONE
         }
-        selectAllBtn = smallButton("全选") { toggleAll(true) }
-        clearBtn = smallButton("取消全选") { toggleAll(false) }
-        invertBtn = smallButton("反选") { invertSelection() }
+        selectAllBtn = smallButton(Lang.t("全选")) { toggleAll(true) }
+        clearBtn = smallButton(Lang.t("取消全选")) { toggleAll(false) }
+        invertBtn = smallButton(Lang.t("反选")) { invertSelection() }
         selectRow.addView(
             selectAllBtn,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
@@ -285,7 +286,7 @@ class PayloadOnlinePage(
             setPadding(0, Ui.dp(8, d), 0, 0)
         }
         startBtn = TextView(activity).apply {
-            text = "开始提取"
+            text = Lang.t("开始提取")
             textSize = 13f
             gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
@@ -302,7 +303,7 @@ class PayloadOnlinePage(
             )
         }
         actionRow.addView(startBtn)
-        cancelTaskBtn = smallButton("取消任务") { cancelFlag.set(true) }.apply {
+        cancelTaskBtn = smallButton(Lang.t("取消任务")) { cancelFlag.set(true) }.apply {
             visibility = View.GONE
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -311,7 +312,7 @@ class PayloadOnlinePage(
         }
         actionRow.addView(cancelTaskBtn)
         openDirBtn = TextView(activity).apply {
-            text = "打开目录"
+            text = Lang.t("打开目录")
             textSize = 12.5f
             gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
@@ -390,14 +391,14 @@ class PayloadOnlinePage(
 
     private fun start() {
         if (url.isBlank()) {
-            setStatus("没有可用的固件直链")
-            percentText.text = "无链接"
+            setStatus(Lang.t("没有可用的固件直链"))
+            percentText.text = Lang.t("无链接")
             return
         }
         if (!hasStoragePermission()) {
-            setStatus("需要「所有文件访问权限」才能把 img 保存到 /sdcard/Linux-Dsu/ROM")
+            setStatus(Lang.t("需要「所有文件访问权限」才能把 img 保存到 /sdcard/Linux-Dsu/ROM"))
             AlertDialog.Builder(activity)
-                .setTitle("需要存储权限")
+                .setTitle(Lang.t("需要存储权限"))
                 .setMessage("提取出的 img 会保存到 /sdcard/Linux-Dsu/ROM/$device，需要「所有文件访问权限」。")
                 .setPositiveButton("去授权") { _, _ -> requestStoragePermission() }
                 .setNegativeButton("返回") { _, _ -> onBack() }
@@ -428,8 +429,8 @@ class PayloadOnlinePage(
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     progress.isIndeterminate = false
-                    percentText.text = "解析失败"
-                    setStatus(e.message ?: "读取固件包失败")
+                    percentText.text = Lang.t("解析失败")
+                    setStatus(e.message ?: Lang.t("读取固件包失败"))
                     log("✗ ${e.message}")
                 }
             }
@@ -451,7 +452,7 @@ class PayloadOnlinePage(
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 })
             }.onFailure {
-                Toast.makeText(activity, "请手动在系统设置中开启存储权限", Toast.LENGTH_LONG).show()
+                Toast.makeText(activity, Lang.t("请手动在系统设置中开启存储权限"), Toast.LENGTH_LONG).show()
             }
         } else {
             activity.requestPermissions(
@@ -502,10 +503,10 @@ class PayloadOnlinePage(
             })
             textCol.addView(TextView(activity).apply {
                 text = buildString {
-                    append(if (p.size > 0) fmt(p.size) else "大小未知")
-                    append("　↓ 需下载 ")
+                    append(if (p.size > 0) fmt(p.size) else Lang.t("大小未知"))
+                    append(Lang.t("　↓ 需下载 "))
                     append(fmt(p.downloadBytes))
-                    if (!p.supported) append("　⚠ 不支持在线提取")
+                    if (!p.supported) append(Lang.t("　⚠ 不支持在线提取"))
                 }
                 textSize = 10.5f
                 setTextColor(if (p.supported) Ui.secondaryText(activity) else Ui.buttonWarning(activity))
@@ -565,7 +566,7 @@ class PayloadOnlinePage(
         val p = pkg ?: return
         val ordered = partitions.filter { it.name in selected && it.supported }
         if (ordered.isEmpty()) {
-            Toast.makeText(activity, "请至少勾选一个分区", Toast.LENGTH_SHORT).show()
+            Toast.makeText(activity, Lang.t("请至少勾选一个分区"), Toast.LENGTH_SHORT).show()
             return
         }
         // 输出目录：/sdcard/Linux-Dsu/ROM/<机型目录>/（机型目录按传入设备名自动生成）
@@ -614,7 +615,7 @@ class PayloadOnlinePage(
                     }
                     log("✓ ${part.name}.img（${fmt(out.length())}）$note")
                 } catch (e: CancelledException) {
-                    log("… 已取消")
+                    log(Lang.t("… 已取消"))
                     break
                 } catch (e: Exception) {
                     failed.add(part.name)
@@ -650,7 +651,7 @@ class PayloadOnlinePage(
         openDirBtn.visibility = View.VISIBLE
         fillRow(openDirBtn)
         if (cancelFlag.get()) {
-            percentText.text = "任务已取消"
+            percentText.text = Lang.t("任务已取消")
             setStatus("已完成 ${ok.size} / $total；${failed.size} 个失败或未完成")
             return
         }

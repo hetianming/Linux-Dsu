@@ -36,68 +36,68 @@ class ThanksActivity : AppCompatActivity() {
         private val CREDITS = listOf(
             Credit(
                 R.drawable.credit_icon_author,
-                "项目作者",
-                "酷安@菜鸟_曾经的天明\nhttps://github.com/hetianming/Linux-Dsu",
+                Lang.t("项目作者"),
+                Lang.t("酷安@菜鸟_曾经的天明\nhttps://github.com/hetianming/Linux-Dsu"),
                 "https://www.coolapk.com/u/2705572",
             ),
             Credit(
                 R.drawable.credit_icon_dna_port,
-                "DNA移植源码",
-                "DNA 移植源码作者：小你可兰\nDsu-Manager 项目开发",
+                Lang.t("DNA移植源码"),
+                Lang.t("DNA 移植源码作者：小你可兰\nDsu-Manager 项目开发"),
                 "https://www.coolapk.com/u/3347561",
             ),
             Credit(
                 R.drawable.credit_icon_tik,
-                "TIK工具箱",
-                "部分代码来自于TIK2源码，在此感谢",
+                Lang.t("TIK工具箱"),
+                Lang.t("部分代码来自于TIK2源码，在此感谢"),
                 "https://gitee.com/yeliqin666/TIK",
             ),
             Credit(
                 R.drawable.credit_icon_magiskboot,
                 "magiskboot",
-                "镜像解包/打包核心工具",
+                Lang.t("镜像解包/打包核心工具"),
                 "https://github.com/topjohnwu/Magisk",
             ),
             Credit(
                 R.drawable.credit_icon_sdat,
                 "sdat2img and img2sdat",
-                "transfer.list 数据转换工具",
+                Lang.t("transfer.list 数据转换工具"),
                 "https://github.com/xpirt",
             ),
             Credit(
                 R.drawable.credit_icon_erofs,
                 "erofs-extract",
-                "EROFS 镜像提取工具",
+                Lang.t("EROFS 镜像提取工具"),
                 "https://github.com/sekaiacg/erofs-extract",
             ),
             Credit(
                 R.drawable.credit_icon_dna,
                 "DNA",
-                "使用了@温柔的慈悲大佬的DNA工具箱名字，向大佬致敬！",
+                Lang.t("使用了@温柔的慈悲大佬的DNA工具箱名字，向大佬致敬！"),
                 "https://gitee.com/sharpeter/DNA",
             ),
             Credit(
                 R.drawable.credit_icon_dna_maintainer,
-                "酷安：@相见即是缘",
-                "感谢大佬一直维护的 DNA 工具，DNA 打包功能移植自其 20260530 版本",
+                Lang.t("酷安：@相见即是缘"),
+                Lang.t("感谢大佬一直维护的 DNA 工具，DNA 打包功能移植自其 20260530 版本"),
                 "https://www.coolapk.com/u/1614257",
             ),
             Credit(
                 R.drawable.credit_icon_gjj,
-                "搞机助手",
-                "搞机助手原作者@情非得已c，提取了搞机助手部分代码文件使用！",
+                Lang.t("搞机助手"),
+                Lang.t("搞机助手原作者@情非得已c，提取了搞机助手部分代码文件使用！"),
                 "",
             ),
             Credit(
                 R.drawable.credit_icon_ffix,
                 "affggh",
-                "改用@affggh大佬的fspatch.py修补权限文件以及github开源的工具",
+                Lang.t("改用@affggh大佬的fspatch.py修补权限文件以及github开源的工具"),
                 "https://github.com/affggh/fspatch",
             ),
             Credit(
                 R.drawable.icon_dsu_modern,
                 "DSU-Sideloader",
-                "本应用的 GSI 安装流程参考并使用了 DSU-Sideloader 项目的相关方案",
+                Lang.t("本应用的 GSI 安装流程参考并使用了 DSU-Sideloader 项目的相关方案"),
                 "https://github.com/VegaBobo/DSU-Sideloader",
             ),
         )
@@ -144,7 +144,7 @@ class ThanksActivity : AppCompatActivity() {
             setPadding(0, 0, 0, Ui.dp(16, d))
         }
         titleRow.addView(TextView(this).apply {
-            text = "‹ 返回"
+            text = Lang.t("‹ 返回")
             textSize = 13f
             setTextColor(Ui.buttonText(this@ThanksActivity))
             background = Ui.glassButton(this@ThanksActivity, Ui.buttonPrimary(this@ThanksActivity))
@@ -161,7 +161,7 @@ class ThanksActivity : AppCompatActivity() {
             )
         })
         titleRow.addView(TextView(this).apply {
-            text = "特别鸣谢"
+            text = Lang.t("特别鸣谢")
             textSize = 20f
             setTextColor(Ui.primaryText(this@ThanksActivity))
             setTypeface(typeface, android.graphics.Typeface.BOLD)
@@ -182,19 +182,19 @@ class ThanksActivity : AppCompatActivity() {
             setPadding(Ui.dp(18, d), Ui.dp(18, d), Ui.dp(18, d), Ui.dp(16, d))
         }
         headCard.addView(TextView(this).apply {
-            text = "特别鸣谢"
+            text = Lang.t("特别鸣谢")
             textSize = 24f
             setTextColor(Color.WHITE)
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         })
         headCard.addView(TextView(this).apply {
-            text = "不分先后，如有遗忘望提醒"
+            text = Lang.t("不分先后，如有遗忘望提醒")
             textSize = 13f
             setTextColor(android.graphics.Color.argb(210, 255, 255, 255))
             setPadding(0, Ui.dp(5, d), 0, 0)
         })
         headCard.addView(TextView(this).apply {
-            text = "本软件的诞生离不开这些开源项目与开发者们的贡献"
+            text = Lang.t("本软件的诞生离不开这些开源项目与开发者们的贡献")
             textSize = 11f
             setTextColor(android.graphics.Color.argb(180, 255, 255, 255))
             setPadding(0, Ui.dp(4, d), 0, 0)
@@ -206,7 +206,7 @@ class ThanksActivity : AppCompatActivity() {
         }
 
         page.addView(TextView(this).apply {
-            text = "开源让世界更美好\n谨向所有为中文搞机社区贡献过代码、教程与时间的人们致敬"
+            text = Lang.t("开源让世界更美好\n谨向所有为中文搞机社区贡献过代码、教程与时间的人们致敬")
             textSize = 12f
             setTextColor(Ui.secondaryText(this@ThanksActivity))
             gravity = Gravity.CENTER
@@ -286,7 +286,7 @@ class ThanksActivity : AppCompatActivity() {
         runCatching {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         }.onFailure {
-            Toast.makeText(this, "无应用可打开链接", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, Lang.t("无应用可打开链接"), Toast.LENGTH_SHORT).show()
         }
     }
 

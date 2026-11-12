@@ -27,10 +27,10 @@ class MainActivity : AppCompatActivity() {
     private val lifecycleStopHooks = mutableListOf<Runnable>()
     fun addLifecycleStopHook(hook: Runnable) { lifecycleStopHooks.add(hook) }
     private val executor = Executors.newSingleThreadExecutor()
-    // v2.0.29：第 3 格「VMiOS」= 内嵌虚拟机主界面（VmPage），像 DSU 一样点/滑直达，
+    // v2.0.29：第 3 格「TmVM」= 内嵌虚拟机主界面（VmPage），像 DSU 一样点/滑直达，
     // 不再有 VmEntryPage 二次入口，也不再弹独立 Activity；简称短标题避免 tab 过长显大。
-    private val tabs = listOf("首页", "多功能", "VMiOS", "DSU")
-    private val vmTab = tabs.indexOf("VMiOS")
+    private val tabs = listOf(Lang.t("首页"), Lang.t("多功能"), "TmVM", "DSU")
+    private val vmTab = tabs.indexOf("TmVM")
     private var currentTab = 0
     private lateinit var pageHost: FrameLayout
     private lateinit var pageStrip: android.widget.HorizontalScrollView
@@ -68,9 +68,9 @@ class MainActivity : AppCompatActivity() {
                     if (!islandShown) {
                         island.show(
                             com.mcai.ubuntudsu.ui.DynamicIsland.Kind.INSTALL,
-                            "GSI 安装",
+                            Lang.t("GSI 安装"),
                             install.fileName,
-                            "取消安装",
+                            Lang.t("取消安装"),
                         )
                         islandShown = true
                     }
@@ -78,14 +78,14 @@ class MainActivity : AppCompatActivity() {
                 }
                 install.phase == com.mcai.ubuntudsu.core.DsuInstallState.Phase.SUCCESS && phaseChanged -> {
                     if (islandShown) {
-                        island.setStatus("安装完成")
+                        island.setStatus(Lang.t("安装完成"))
                         island.update(100, "")
                         rootLayout.postDelayed({ if (!isDownloading()) collapseIsland() }, 2600)
                     }
                 }
                 install.phase == com.mcai.ubuntudsu.core.DsuInstallState.Phase.FAILED && phaseChanged -> {
                     if (islandShown) {
-                        island.setStatus("安装失败")
+                        island.setStatus(Lang.t("安装失败"))
                         rootLayout.postDelayed({ if (!isDownloading()) collapseIsland() }, 3600)
                     }
                 }
@@ -93,9 +93,9 @@ class MainActivity : AppCompatActivity() {
                     if (!islandShown) {
                         island.show(
                             com.mcai.ubuntudsu.ui.DynamicIsland.Kind.DOWNLOAD,
-                            "下载中",
+                            Lang.t("下载中"),
                             download.fileName,
-                            "下载管理",
+                            Lang.t("下载管理"),
                         )
                         islandShown = true
                     }
@@ -145,7 +145,7 @@ class MainActivity : AppCompatActivity() {
         // 同时接受图片和视频：选图走静态背景，选 mp4 走视频动态背景
         runCatching { pickHeroImageLauncher.launch(arrayOf("image/*", "video/*")) }
             .onFailure {
-                android.widget.Toast.makeText(this, "无法打开背景选择器", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(this, Lang.t("无法打开背景选择器"), android.widget.Toast.LENGTH_SHORT).show()
             }
     }
 
@@ -200,10 +200,10 @@ class MainActivity : AppCompatActivity() {
                         .putExtra(com.mcai.ubuntudsu.service.UpdateService.EXTRA_NAME, info.name)
                         .let { androidx.core.content.ContextCompat.startForegroundService(this, it) }
                     android.widget.Toast.makeText(
-                        this, "已开始后台下载，完成后提示安装", android.widget.Toast.LENGTH_SHORT,
+                        this, Lang.t("已开始后台下载，完成后提示安装"), android.widget.Toast.LENGTH_SHORT,
                     ).show()                }
             }
-            .setNegativeButton("暂不", null)
+            .setNegativeButton(Lang.t("暂不"), null)
             .show()
             .let { Ui.styleDialog(this, it) }
     }
@@ -212,20 +212,20 @@ class MainActivity : AppCompatActivity() {
     private fun showFluidCloudGuide() {
         com.mcai.ubuntudsu.core.FluidCloudGuide.markAsked(this)
         val v = com.mcai.ubuntudsu.core.FluidCloudGuide.vendor(this)
-        val system = v?.system ?: "系统"
-        val feature = v?.feature ?: "灵动岛 / 实时活动"
-        val path = v?.path ?: "设置 → 通知 → 本应用"
+        val system = v?.system ?: Lang.t("系统")
+        val feature = v?.feature ?: Lang.t("灵动岛 / 实时活动")
+        val path = v?.path ?: Lang.t("设置 → 通知 → 本应用")
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("开启$system 灵动岛")
             .setMessage(
-                "安装 / 下载 / 分区任务可在摄像头区域显示灵动岛胶囊，离开 APP 也能实时看到进度。\n\n" +
+                Lang.t("安装 / 下载 / 分区任务可在摄像头区域显示灵动岛胶囊，离开 APP 也能实时看到进度。\n\n") +
                     "$system 需要手动开启「$feature」开关，入口：$path。\n" +
-                    "点击「去设置」直接打开本应用的通知设置页。",
+                    Lang.t("点击「去设置」直接打开本应用的通知设置页。"),
             )
             .setPositiveButton("去设置") { _, _ ->
                 com.mcai.ubuntudsu.core.FluidCloudGuide.openSettings(this)
             }
-            .setNegativeButton("暂不", null)
+            .setNegativeButton(Lang.t("暂不"), null)
             .show()
             .let { Ui.styleDialog(this, it) }
     }
@@ -254,7 +254,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         homePage?.refreshStatus()
-        // v2.0.29：从显示器/启动控制台等独立 Activity 返回且停留在 VMiOS tab 时恢复状态轮询
+        // v2.0.29：从显示器/启动控制台等独立 Activity 返回且停留在 TmVM tab 时恢复状态轮询
         if (currentTab == vmTab) vmPage?.onResume()
     }
 
@@ -275,9 +275,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        if (event.actionMasked == MotionEvent.ACTION_UP) {
-            Ui.dispatchHaptic(window.decorView, event)
-        }
+        // v2.0.32：内嵌 tab 页（含 VM 页）所有功能按钮的点击震动。
+        // 原来只在 ACTION_UP 调一次 Haptics.onTouch，但它需要完整 DOWN/MOVE/UP 序列
+        // 才能判定「点一下」—— 只喂 UP 时 downView 恒为 null，等于从不震动（独立
+        // Activity 因继承 HapticAppCompatActivity 是全序列接入，所以那些页面有震）。
+        // 改为全序列接入，与 HapticAppCompatActivity / DownloadsActivity 一致；
+        // 滑动不震、180ms 防抖、ROM 触感关闭时回退振动器，全部由 Haptics 统一处理。
+        // 横滑切页：MOVE 超 slop 会被标记 moved，UP 不震，不会「滑一次震一次」。
+        Ui.dispatchHaptic(window.decorView, event, fallbackOnMiss = true)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 swipeDownX = event.x
@@ -541,7 +546,7 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * v2.0.29：底部导航「点击」统一入口 —— 只切页。
-     * 第 3 格「VMiOS」本身就是内嵌的虚拟机主界面（VmPage），点击和横滑一样直接停在这页，
+     * 第 3 格「TmVM」本身就是内嵌的虚拟机主界面（VmPage），点击和横滑一样直接停在这页，
      * 没有 VmEntryPage 二次入口，也不会再弹独立 GunyahVMActivity。
      */
     private fun onTabActivate(tab: Int) {
@@ -637,7 +642,7 @@ class MainActivity : AppCompatActivity() {
         when (tab) {
             0 -> homePage?.refreshStatus()
         }
-        // v2.0.29：切到 VMiOS tab 开始 3s 状态轮询，切离立即停（避免后台空跑）
+        // v2.0.29：切到 TmVM tab 开始 3s 状态轮询，切离立即停（避免后台空跑）
         if (previousTab == vmTab && tab != vmTab) vmPage?.onPause()
         if (tab == vmTab) vmPage?.onResume()
     }

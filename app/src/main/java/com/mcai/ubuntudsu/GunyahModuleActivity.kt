@@ -29,44 +29,44 @@ class GunyahModuleActivity : GunyahSubActivity() {
     private var cfg = GunyahManager.Config()
     private var busy = false
 
-    override fun pageTitle() = "内核模块"
+    override fun pageTitle() = Lang.t("内核模块")
 
     override fun buildContent(parent: LinearLayout) {
         cfg = GunyahManager.loadConfig(this)
 
         // ---------------- ④ 大页内存模块管理（原 Droid-VM APP 设置里的模块管理） ----------------
-        hpCard = card("④ 大页内存模块（gh-hugepage-reserve）管理")
+        hpCard = card(Lang.t("④ 大页内存模块（gh-hugepage-reserve）管理"))
         hpCard.addView(hintText(
-            "来自 Droid-VM/gh-hugepage-reserve 的 Magisk 模块：开机即预留 2MB 大页池，" +
-                "根治 Gunyah 启动「凑不出 2MB 连续页 / MEM_ACCEPT 0x9」。以下管理与 Droid-VM APP 设置等价。"
+            Lang.t("来自 Droid-VM/gh-hugepage-reserve 的 Magisk 模块：开机即预留 2MB 大页池，") +
+                Lang.t("根治 Gunyah 启动「凑不出 2MB 连续页 / MEM_ACCEPT 0x9」。以下管理与 Droid-VM APP 设置等价。")
         ))
         hpBody = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         hpCard.addView(hpBody)
         parent.addView(hpCard)
 
         // ---------------- ⑤ 模块清单 ----------------
-        val c = card("⑤ 模块清单")
+        val c = card(Lang.t("⑤ 模块清单"))
         kernelText = TextView(this).apply {
-            text = "内核版本：检测中…"
+            text = Lang.t("内核版本：检测中…")
             textSize = 11f
             setTextColor(GunTheme.TEXT2)
             setPadding(0, 0, 0, GunTheme.dp(8, d))
         }
         c.addView(kernelText)
         c.addView(hintText(
-            "Gunyah 依赖的内核模块（gunyah-host-share / gh-unmovable / nproc-guard / udmabuf 等），" +
-                "按本机内核 KMI 分组；非本机内核的 .ko 一律禁用（强行加载会内核崩溃）。\n" +
-                "2MB 大页池（gh_hugepage_reserve）已交由④卡管理，不在此清单内。",
+            Lang.t("Gunyah 依赖的内核模块（gunyah-host-share / gh-unmovable / nproc-guard / udmabuf 等），") +
+                Lang.t("按本机内核 KMI 分组；非本机内核的 .ko 一律禁用（强行加载会内核崩溃）。\n") +
+                Lang.t("2MB 大页池（gh_hugepage_reserve）已交由④卡管理，不在此清单内。"),
         ))
         listWrap = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         c.addView(listWrap)
 
         // 内存不足时自动降档：与「工具链」无关，是启动时的内存兜底，保留其开关。
-        c.addView(toggleRow("内存不足时自动降档启动内存", cfg.memAutoFit) {
+        c.addView(toggleRow(Lang.t("内存不足时自动降档启动内存"), cfg.memAutoFit) {
             cfg.memAutoFit = it
             GunyahManager.saveConfig(this, cfg)
         })
-        c.addView(hintText("开启后启动前先看可用内存：不够就回收缓存 + 压实，仍不够则把本次 VM 内存降到可用额度（不小于 1024 MB）。关掉则严格按设定值启动，内存紧时可能 MEM_ACCEPT 0x9"))
+        c.addView(hintText(Lang.t("开启后启动前先看可用内存：不够就回收缓存 + 压实，仍不够则把本次 VM 内存降到可用额度（不小于 1024 MB）。关掉则严格按设定值启动，内存紧时可能 MEM_ACCEPT 0x9")))
 
         parent.addView(c)
     }
@@ -93,10 +93,10 @@ class GunyahModuleActivity : GunyahSubActivity() {
         hpBody.removeAllViews()
         if (!info.installed) {
             hpBody.addView(hintText(
-                "尚未安装大页内存模块。虚拟机需要 2MB 连续页才能启动，未安装时极易因" +
-                    "「凑不出 2MB 连续页 / MEM_ACCEPT 0x9」而启动失败。建议先到「工具链」页一键安装。"
+                Lang.t("尚未安装大页内存模块。虚拟机需要 2MB 连续页才能启动，未安装时极易因") +
+                    Lang.t("「凑不出 2MB 连续页 / MEM_ACCEPT 0x9」而启动失败。建议先到「工具链」页一键安装。")
             ))
-            hpBody.addView(primaryButton("前往「工具链」安装大页池模块") {
+            hpBody.addView(primaryButton(Lang.t("前往「工具链」安装大页池模块")) {
                 runCatching { startActivity(Intent(this, GunyahToolchainActivity::class.java)) }
             })
             return
@@ -108,9 +108,9 @@ class GunyahModuleActivity : GunyahSubActivity() {
         val vm = stat["active_vms"]?.toIntOrNull() ?: 0
         val status = buildString {
             append("版本 v${info.version.ifBlank { "?" }} · ")
-            append(if (info.enabled) "已启用" else "已停用")
+            append(if (info.enabled) Lang.t("已启用") else Lang.t("已停用"))
             append(" · ")
-            append(if (info.loaded) "已加载 ✓" else "未加载")
+            append(if (info.loaded) Lang.t("已加载 ✓") else Lang.t("未加载"))
             append("\n模块 .ko：${info.koKmi.ifBlank { "-" }}")
             append("　当前池 ${if (info.poolAvailMB >= 0) info.poolAvailMB.toString() else "-"} MB / 目标 ${info.poolWantMB} MB")
             if (info.loaded) {
@@ -118,7 +118,7 @@ class GunyahModuleActivity : GunyahSubActivity() {
                 val stop = stat["acquire_stop_reason"].orEmpty()
                 if (stop.isNotBlank()) append(" · 上次停止：$stop")
             }
-            if (running) append("\n⚠ 虚拟机正在运行：改池容量/重新加载会清掉大页池，请先停止 VM")
+            if (running) append(Lang.t("\n⚠ 虚拟机正在运行：改池容量/重新加载会清掉大页池，请先停止 VM"))
         }
         hpBody.addView(TextView(this).apply {
             text = status
@@ -139,10 +139,10 @@ class GunyahModuleActivity : GunyahSubActivity() {
                 }
             }
         })
-        hpBody.addView(hintText("停用 = 建 disable 文件并卸载模块（立即清空大页池）；启用 = 删 disable 文件并重新加载（立即生效）。"))
+        hpBody.addView(hintText(Lang.t("停用 = 建 disable 文件并卸载模块（立即清空大页池）；启用 = 删 disable 文件并重新加载（立即生效）。")))
 
         // ---- 大页池容量（pool_want，MB） ----
-        hpBody.addView(hintText("大页池容量（MB）：模块开机为 VM 预留的 2MB 大页总量，过小会 MEM_ACCEPT 0x9。"))
+        hpBody.addView(hintText(Lang.t("大页池容量（MB）：模块开机为 VM 预留的 2MB 大页总量，过小会 MEM_ACCEPT 0x9。")))
         val poolRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -163,7 +163,7 @@ class GunyahModuleActivity : GunyahSubActivity() {
         }
         poolRow.addView(poolEdit)
         poolRow.addView(TextView(this).apply {
-            text = "应用"
+            text = Lang.t("应用")
             textSize = 12f
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(GunTheme.ON_ACCENT)
@@ -175,7 +175,7 @@ class GunyahModuleActivity : GunyahSubActivity() {
             ).apply { marginStart = GunTheme.dp(6, d) }
             setOnClickListener {
                 val mb = poolEdit.text.toString().toIntOrNull() ?: 0
-                if (mb < 256) { toast("容量过小，建议 ≥ 256 MB"); return@setOnClickListener }
+                if (mb < 256) { toast(Lang.t("容量过小，建议 ≥ 256 MB")); return@setOnClickListener }
                 hpSetBusy(true)
                 thread {
                     val (ok, err) = GunyahManager.writeHpSetting("pool_want", mb.toString())
@@ -193,7 +193,7 @@ class GunyahModuleActivity : GunyahSubActivity() {
             }
         })
         hpBody.addView(poolRow)
-        hpBody.addView(hintText("应用时会写回 settings.prop；若当前没有 VM 在跑会立即重新加载生效，否则需重启手机生效。"))
+        hpBody.addView(hintText(Lang.t("应用时会写回 settings.prop；若当前没有 VM 在跑会立即重新加载生效，否则需重启手机生效。")))
 
         // ---- CMA 蓄水池（pool_want_with_cma） ----
         hpBody.addView(toggleRow("开启 CMA 蓄水池（pool_want_with_cma）", info.cmaWith) { on ->
@@ -212,16 +212,16 @@ class GunyahModuleActivity : GunyahSubActivity() {
                 }
             }
         })
-        hpBody.addView(hintText("在普通内存与 CMA 间动态挪页补充大页；内存紧张机型作用明显。需重新加载或重启生效。"))
+        hpBody.addView(hintText(Lang.t("在普通内存与 CMA 间动态挪页补充大页；内存紧张机型作用明显。需重新加载或重启生效。")))
 
         // ---- 开机自动采集（boot_acquire 0-3） ----
         selectorRow(
-            "开机自动采集",
+            Lang.t("开机自动采集"),
             listOf(
-                "关闭" to "0",
-                "轻量（仅连续块）" to "1",
-                "标准（扫描+回收）" to "2",
-                "彻底（扫描+逐窗驱逐）" to "3",
+                Lang.t("关闭") to "0",
+                Lang.t("轻量（仅连续块）") to "1",
+                Lang.t("标准（扫描+回收）") to "2",
+                Lang.t("彻底（扫描+逐窗驱逐）") to "3",
             ),
             info.bootAcquire.toString(),
             { v ->
@@ -236,7 +236,7 @@ class GunyahModuleActivity : GunyahSubActivity() {
             },
             hpBody,
         )
-        hpBody.addView(hintText("开机时按档位自动为大页池加压补齐，0 = 关闭。下次重启生效。"))
+        hpBody.addView(hintText(Lang.t("开机时按档位自动为大页池加压补齐，0 = 关闭。下次重启生效。")))
 
         // ---- 操作按钮：重新加载 / 采集大页 / 卸载 ----
         val btnRow = LinearLayout(this).apply {
@@ -245,8 +245,8 @@ class GunyahModuleActivity : GunyahSubActivity() {
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply { topMargin = GunTheme.dp(8, d) }
         }
-        btnRow.addView(actionButton("重新加载", GunTheme.CHIP) {
-            if (running) { toast("虚拟机正在运行，请先停止再重新加载"); return@actionButton }
+        btnRow.addView(actionButton(Lang.t("重新加载"), GunTheme.CHIP) {
+            if (running) { toast(Lang.t("虚拟机正在运行，请先停止再重新加载")); return@actionButton }
             hpSetBusy(true)
             thread {
                 val (ok, msg) = GunyahManager.hpModuleReload(forceReinsmod = true)
@@ -254,8 +254,8 @@ class GunyahModuleActivity : GunyahSubActivity() {
             }
         })
         btnRow.addView(LinearLayout(this).apply { layoutParams = LinearLayout.LayoutParams(GunTheme.dp(8, d), 1) })
-        btnRow.addView(actionButton("采集大页", GunTheme.ACCENT) {
-            if (!info.loaded) { toast("模块未加载，无法采集"); return@actionButton }
+        btnRow.addView(actionButton(Lang.t("采集大页"), GunTheme.ACCENT) {
+            if (!info.loaded) { toast(Lang.t("模块未加载，无法采集")); return@actionButton }
             hpSetBusy(true)
             thread {
                 val (ok, msg) = GunyahManager.hugepageAcquire(mode = 3, waitSec = 90)
@@ -270,10 +270,10 @@ class GunyahModuleActivity : GunyahSubActivity() {
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply { topMargin = GunTheme.dp(8, d) }
         }
-        btnRow2.addView(actionButton("卸载模块", GunTheme.DANGER) {
+        btnRow2.addView(actionButton(Lang.t("卸载模块"), GunTheme.DANGER) {
             AlertDialog.Builder(this)
-                .setTitle("卸载大页内存模块")
-                .setMessage("将删除 /data/adb/modules/gh-hugepage-reserve。卸载后虚拟机将失去 2MB 大页池，可能再次启动失败。\n确定卸载？")
+                .setTitle(Lang.t("卸载大页内存模块"))
+                .setMessage(Lang.t("将删除 /data/adb/modules/gh-hugepage-reserve。卸载后虚拟机将失去 2MB 大页池，可能再次启动失败。\n确定卸载？"))
                 .setPositiveButton("卸载") { _, _ ->
                     hpSetBusy(true)
                     thread {
@@ -285,7 +285,7 @@ class GunyahModuleActivity : GunyahSubActivity() {
                         }
                     }
                 }
-                .setNegativeButton("取消", null)
+                .setNegativeButton(Lang.t("取消"), null)
                 .show()
         })
         hpBody.addView(btnRow2)
@@ -312,7 +312,7 @@ class GunyahModuleActivity : GunyahSubActivity() {
 
     private fun refresh() {
         cfg = GunyahManager.loadConfig(this)
-        kernelText.text = "内核版本：检测中…"
+        kernelText.text = Lang.t("内核版本：检测中…")
         thread {
             val modules = GunyahManager.scanModules(this).filterNot { isHugepage(it) }
             val loaded = GunyahManager.loadedModules()
@@ -334,7 +334,7 @@ class GunyahModuleActivity : GunyahSubActivity() {
             "　本机模块 $nativeLoaded/${native.size}"
         listWrap.removeAllViews()
         if (modules.isEmpty()) {
-            listWrap.addView(muted("未检测到 modules.ko，请先在「工具链」页下载内核模块包"))
+            listWrap.addView(muted(Lang.t("未检测到 modules.ko，请先在「工具链」页下载内核模块包")))
             return
         }
         val (matched, others) = modules.partition { GunyahManager.isNativeModule(it, kernel) }
@@ -352,14 +352,14 @@ class GunyahModuleActivity : GunyahSubActivity() {
         }
         if (others.isNotEmpty()) {
             listWrap.addView(TextView(this).apply {
-                text = "▸ 其他内核版本（不适用 · 不能加载）"
+                text = Lang.t("▸ 其他内核版本（不适用 · 不能加载）")
                 textSize = 12f
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 setTextColor(GunTheme.MUTED)
                 setPadding(0, GunTheme.dp(10, d), 0, GunTheme.dp(2, d))
             })
             listWrap.addView(muted("这些是给 android12 / 14 / 16 等别的内核编译的，本机是 $kmi。" +
-                "不同内核的模块 ABI 不兼容，强行加载会直接内核崩溃（蓝屏重启），所以这里禁用了加载按钮。"))
+                Lang.t("不同内核的模块 ABI 不兼容，强行加载会直接内核崩溃（蓝屏重启），所以这里禁用了加载按钮。")))
             others.groupBy { it.versionFolder }.forEach { (folder, list) ->
                 listWrap.addView(TextView(this).apply {
                     text = "· $folder"

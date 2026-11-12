@@ -30,7 +30,8 @@ object Haptics {
      *
      * 早先的实现是一按下就震，用户的原话是「滑一次震动一次」。
      */
-    fun onTouch(root: View?, event: MotionEvent) {
+    @kotlin.jvm.JvmOverloads
+    fun onTouch(root: View?, event: MotionEvent, fallbackOnMiss: Boolean = false) {
         if (root == null) return
         if (slop == 0) {
             slop = android.view.ViewConfiguration.get(root.context).scaledTouchSlop
@@ -54,7 +55,12 @@ object Haptics {
             MotionEvent.ACTION_UP -> {
                 val v = downView
                 val held = android.os.SystemClock.uptimeMillis() - downAt
-                if (v != null && !moved && held <= 700L) perform(v)
+                if (!moved && held <= 700L) {
+                    if (v != null) perform(v)
+                    // 内嵌 tab 页含横向 pageStrip + 纵向 ScrollView，命中偶尔落空时
+                    // 用根 View 兜底，保证「点一下」一定有反馈。仅 MainActivity 开启。
+                    else if (fallbackOnMiss) perform(root)
+                }
                 downView = null
                 moved = false
             }
@@ -121,12 +127,18 @@ object Haptics {
         if (!view.isShown || x < 0 || y < 0 || x > view.width || y > view.height) return null
 
         if (view is ViewGroup) {
+            // 子 View 的 left/top 属于「内容坐标系」，传入的 x/y 属于「可见区域坐标系」。
+            // 容器一旦滚动，两者相差 scrollX/scrollY：MainActivity 的 pageStrip 靠
+            // scrollX = tab * 屏宽 定位，第 2/3/4 页不补偿就会把手指算到别的页，
+            // downView 恒为 null —— 内嵌 tab 页按钮点了不震的真正原因。translation 同理。
+            val sx = view.scrollX.toFloat()
+            val sy = view.scrollY.toFloat()
             for (i in view.childCount - 1 downTo 0) {
                 val child = view.getChildAt(i)
                 val target = findClickable(
                     child,
-                    x - child.left,
-                    y - child.top,
+                    x - child.left + sx - child.translationX,
+                    y - child.top + sy - child.translationY,
                 )
                 if (target != null) return target
             }

@@ -9,7 +9,7 @@ import com.mcai.ubuntudsu.ui.Ui
  * v2.0.29：GunyaniOS 主页的独立 Activity 薄壳。
  *
  * 界面、状态刷新、3s 轮询、启动/停止动作全部在 [VmPage]（MainActivity 第 3 格
- * 「VMiOS」内嵌复用同一个类），这里不再重复实现任何 UI，只负责窗口级 insets 与生命周期转发。
+ * 「TmVM」内嵌复用同一个类），这里不再重复实现任何 UI，只负责窗口级 insets 与生命周期转发。
  *
  * 保留本 Activity 的原因：子页面 GunyahSubActivity.saveAndGoHome() 用 CLEAR_TOP 回主页，
  * 以及 Manifest 里 Theme.App.Gunyah 的入口都指向它，删掉会破坏返回栈。

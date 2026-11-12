@@ -74,6 +74,17 @@ object RomCache {
         return list
     }
 
+    /**
+     * APK 内置离线目录快照：首次安装、磁盘缓存为空、或在线源不可达时兜底，
+     * 保证「多品牌固件」页永远有数据可显示，而不是一直卡在「加载中...」。
+     */
+    fun assetYule(context: Context): List<YuleRomEntry>? {
+        return runCatching {
+            val body = context.assets.open("rom_catalog.json").bufferedReader().use { it.readText() }
+            RomApi.parseYuleBody(body).takeIf { it.isNotEmpty() }
+        }.getOrNull()
+    }
+
     fun yuleFresh(context: Context): Boolean {
         if (memYule == null) return false
         val at = if (memYuleAt > 0) memYuleAt else 0L

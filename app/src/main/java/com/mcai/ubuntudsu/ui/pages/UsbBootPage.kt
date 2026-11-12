@@ -16,6 +16,7 @@ import com.mcai.ubuntudsu.core.RootShell
 import com.mcai.ubuntudsu.ui.Haptics
 import com.mcai.ubuntudsu.ui.Ui
 import java.io.File
+import com.mcai.ubuntudsu.Lang
 
 /**
  * U盘启动页：把手机当 U 盘 / 安装盘使用。
@@ -92,7 +93,7 @@ class UsbBootPage(
             setPadding(0, Ui.dp(4, d), 0, Ui.dp(10, d))
         }
         TextView(activity).apply {
-            text = "U盘启动"
+            text = Lang.t("U盘启动")
             textSize = 18f
             setTypeface(Ui.typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
@@ -118,14 +119,14 @@ class UsbBootPage(
             }
         }
         card.addView(TextView(activity).apply {
-            text = "环境检测"
+            text = Lang.t("环境检测")
             textSize = 13f
             setTypeface(Ui.typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
         })
 
         selinuxText = TextView(activity).apply {
-            text = "正在检测..."
+            text = Lang.t("正在检测...")
             textSize = 11f
             setTextColor(Ui.secondaryText(activity))
             setPadding(0, Ui.dp(4, d), 0, 0)
@@ -148,13 +149,13 @@ class UsbBootPage(
         }
 
         card.addView(TextView(activity).apply {
-            text = "制作 U 盘 IMG 镜像"
+            text = Lang.t("制作 U 盘 IMG 镜像")
             textSize = 13f
             setTypeface(Ui.typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
         })
         card.addView(TextView(activity).apply {
-            text = "本地生成 U 盘格式 IMG，再经虚拟 U 盘暴露给电脑"
+            text = Lang.t("本地生成 U 盘格式 IMG，再经虚拟 U 盘暴露给电脑")
             textSize = 11f
             setTextColor(Ui.secondaryText(activity))
             setPadding(0, Ui.dp(2, d), 0, Ui.dp(6, d))
@@ -162,7 +163,7 @@ class UsbBootPage(
 
         // 镜像大小
         card.addView(TextView(activity).apply {
-            text = "镜像大小"
+            text = Lang.t("镜像大小")
             textSize = 12f
             setTypeface(Ui.typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
@@ -200,7 +201,7 @@ class UsbBootPage(
 
         // 文件系统
         card.addView(TextView(activity).apply {
-            text = "文件系统"
+            text = Lang.t("文件系统")
             textSize = 12f
             setTypeface(Ui.typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
@@ -237,7 +238,7 @@ class UsbBootPage(
 
         // 生成状态（单行，默认隐藏）
         imgStatusText = TextView(activity).apply {
-            text = "未生成"
+            text = Lang.t("未生成")
             textSize = 11f
             setTextColor(Ui.secondaryText(activity))
             setPadding(0, Ui.dp(8, d), 0, 0)
@@ -249,10 +250,10 @@ class UsbBootPage(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        btnRow.addView(makePillButton("制作 IMG", Ui.buttonPrimary(activity)) { createImg() },
+        btnRow.addView(makePillButton(Lang.t("制作 IMG"), Ui.buttonPrimary(activity)) { createImg() },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         btnRow.addView(View(activity).apply { layoutParams = LinearLayout.LayoutParams(Ui.dp(8, d), 0) })
-        btnRow.addView(makePillButton("选已有 IMG", Ui.buttonSecondary(activity)) { pickIsoFile() },
+        btnRow.addView(makePillButton(Lang.t("选已有 IMG"), Ui.buttonSecondary(activity)) { pickIsoFile() },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         card.addView(btnRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = Ui.dp(6, d)
@@ -274,13 +275,13 @@ class UsbBootPage(
         }
 
         card.addView(TextView(activity).apply {
-            text = "虚拟 U 盘启动"
+            text = Lang.t("虚拟 U 盘启动")
             textSize = 13f
             setTypeface(Ui.typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
         })
         card.addView(TextView(activity).apply {
-            text = "把 ISO 通过 USB Gadget 暴露给电脑"
+            text = Lang.t("把 ISO 通过 USB Gadget 暴露给电脑")
             textSize = 11f
             setTextColor(Ui.secondaryText(activity))
             setPadding(0, Ui.dp(2, d), 0, 0)
@@ -328,7 +329,7 @@ class UsbBootPage(
 
         // 当前 ISO 选择
         card.addView(TextView(activity).apply {
-            text = "ISO 源文件"
+            text = Lang.t("ISO 源文件")
             textSize = 12f
             setTypeface(Ui.typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
@@ -340,18 +341,18 @@ class UsbBootPage(
             gravity = Gravity.CENTER_VERTICAL
         }
         isoPickRow.addView(TextView(activity).apply {
-            text = "自动选择已下载的 ISO"
+            text = Lang.t("自动选择已下载的 ISO")
             textSize = 11f
             setTextColor(Ui.secondaryText(activity))
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
-        isoPickRow.addView(makePillButton("浏览 ISO/IMG...", Ui.buttonPrimary(activity)) { pickIsoFile() },
+        isoPickRow.addView(makePillButton(Lang.t("浏览 ISO/IMG..."), Ui.buttonPrimary(activity)) { pickIsoFile() },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         card.addView(isoPickRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         // VUD 状态
         vudStatusText = TextView(activity).apply {
-            text = "未启动"
+            text = Lang.t("未启动")
             textSize = 11f
             setTextColor(Ui.secondaryText(activity))
             setPadding(0, Ui.dp(6, d), 0, 0)
@@ -371,8 +372,8 @@ class UsbBootPage(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        startVudBtn = makePillButton("启动虚拟 U 盘", Ui.buttonSuccess(activity)) { startVud() }
-        stopVudBtn = makePillButton("停止", Ui.buttonDanger(activity)) { stopVud() }
+        startVudBtn = makePillButton(Lang.t("启动虚拟 U 盘"), Ui.buttonSuccess(activity)) { startVud() }
+        stopVudBtn = makePillButton(Lang.t("停止"), Ui.buttonDanger(activity)) { stopVud() }
         vudBtnRow.addView(startVudBtn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         vudBtnRow.addView(View(activity).apply { layoutParams = LinearLayout.LayoutParams(Ui.dp(8, d), 0) })
         vudBtnRow.addView(stopVudBtn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -396,16 +397,16 @@ class UsbBootPage(
         }
 
         card.addView(TextView(activity).apply {
-            text = "使用说明"
+            text = Lang.t("使用说明")
             textSize = 13f
             setTypeface(Ui.typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
         })
-        card.addView(makeHelpLine("① 连接手机到电脑，开启 USB 调试 / MTP 模式"))
-        card.addView(makeHelpLine("② 制作 U 盘 IMG 镜像（本地 truncate + 格式化）"))
-        card.addView(makeHelpLine("③ 启动虚拟 U 盘（root 下 USB Gadget 框架）"))
-        card.addView(makeHelpLine("④ 电脑 BIOS 里选 U 盘 / 光盘启动，按提示安装"))
-        card.addView(makeHelpLine("也可浏览选择已有 ISO/IMG 作为启动源"))
+        card.addView(makeHelpLine(Lang.t("① 连接手机到电脑，开启 USB 调试 / MTP 模式")))
+        card.addView(makeHelpLine(Lang.t("② 制作 U 盘 IMG 镜像（本地 truncate + 格式化）")))
+        card.addView(makeHelpLine(Lang.t("③ 启动虚拟 U 盘（root 下 USB Gadget 框架）")))
+        card.addView(makeHelpLine(Lang.t("④ 电脑 BIOS 里选 U 盘 / 光盘启动，按提示安装")))
+        card.addView(makeHelpLine(Lang.t("也可浏览选择已有 ISO/IMG 作为启动源")))
 
         return card
     }
@@ -462,7 +463,7 @@ class UsbBootPage(
             val img = findLatestImg()
             activity.runOnUiThread {
                 selinuxText?.text = se
-                vudStatusText?.text = if (vudRunning) "正在运行" else "未启动"
+                vudStatusText?.text = if (vudRunning) Lang.t("正在运行") else Lang.t("未启动")
                 vudTypeText?.text = img?.let { "IMG 源文件：${it.name}" } ?: ""
                 imgStatusText?.text = img?.let { "已生成：${it.name}" } ?: "未生成"
                 startVudBtn?.isEnabled = gadgetSupport
@@ -504,9 +505,9 @@ class UsbBootPage(
         val source = pickIsoForVud()
         if (source == null) {
             AlertDialog.Builder(activity)
-                .setTitle("未找到可用的 ISO/IMG")
-                .setMessage("请先制作 U 盘 IMG 镜像，或手动浏览选择 ISO/IMG 文件。")
-                .setPositiveButton("关闭", null)
+                .setTitle(Lang.t("未找到可用的 ISO/IMG"))
+                .setMessage(Lang.t("请先制作 U 盘 IMG 镜像，或手动浏览选择 ISO/IMG 文件。"))
+                .setPositiveButton(Lang.t("关闭"), null)
                 .show()
             return
         }
@@ -568,7 +569,7 @@ class UsbBootPage(
             }
             RootShell.exec(script, 15000)
             activity.runOnUiThread {
-                vudStatusText?.text = "已停止"
+                vudStatusText?.text = Lang.t("已停止")
                 vudTypeText?.text = ""
             }
         }.start()
@@ -622,9 +623,9 @@ class UsbBootPage(
         imgStatusText?.text = "正在制作 ${selectedImgGb}GB ${selectedFs} IMG..."
 
         imgMakeThread = Thread {
-            var lastError = "未开始"
+            var lastError = Lang.t("未开始")
             if (imgCancel.get()) {
-                lastError = "已取消"
+                lastError = Lang.t("已取消")
             } else {
                 val bytes = selectedImgGb * 1024L * 1024L * 1024L
                 val script = buildString {
@@ -647,7 +648,7 @@ class UsbBootPage(
             imgMaking.set(false)
             activity.runOnUiThread {
                 if (imgCancel.get() && lastError == "已取消") {
-                    imgStatusText?.text = "已取消"
+                    imgStatusText?.text = Lang.t("已取消")
                 } else if (lastError == "成功") {
                     imgStatusText?.text = "已生成：${target.name}（$saveDir）"
                 } else {

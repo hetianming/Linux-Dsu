@@ -87,7 +87,7 @@ class GunyahBootActivity : HapticAppCompatActivity() {
             setOnClickListener { finish() }
         })
         bar.addView(TextView(this).apply {
-            text = "启动控制台"; textSize = 16f; setTypeface(null, Typeface.BOLD)
+            text = Lang.t("启动控制台"); textSize = 16f; setTypeface(null, Typeface.BOLD)
             includeFontPadding = false
             setTextColor(GunTheme.TEXT)
         })
@@ -108,13 +108,13 @@ class GunyahBootActivity : HapticAppCompatActivity() {
             setPadding(GunTheme.dp(12, d), GunTheme.dp(2, d), GunTheme.dp(12, d), GunTheme.dp(6, d))
         }
         stateView = TextView(this).apply {
-            text = "● 准备中"; textSize = 11f; setTypeface(null, Typeface.BOLD)
+            text = Lang.t("● 准备中"); textSize = 11f; setTypeface(null, Typeface.BOLD)
             setTextColor(GunTheme.WARN)
             background = GunTheme.pill(d, 0x26E0A458)
             setPadding(GunTheme.dp(10, d), GunTheme.dp(5, d), GunTheme.dp(10, d), GunTheme.dp(5, d))
         }
         portView = TextView(this).apply {
-            text = "端口检测中"; textSize = 10f
+            text = Lang.t("端口检测中"); textSize = 10f
             setTextColor(GunTheme.TEXT2)
             setPadding(GunTheme.dp(8, d), 0, 0, 0)
         }
@@ -131,7 +131,7 @@ class GunyahBootActivity : HapticAppCompatActivity() {
             }
         }
         logView = TextView(this).apply {
-            text = "正在等待 crosvm 输出…"
+            text = Lang.t("正在等待 crosvm 输出…")
             textSize = 9.5f
             typeface = Typeface.MONOSPACE
             setTextColor(GunTheme.TEXT2)
@@ -157,11 +157,11 @@ class GunyahBootActivity : HapticAppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(GunTheme.dp(10, d), GunTheme.dp(8, d), GunTheme.dp(10, d), GunTheme.dp(12, d))
         }
-        dock.addView(btn("复制日志") { copyLog() })
+        dock.addView(btn(Lang.t("复制日志")) { copyLog() })
         dock.addView(space())
-        dock.addView(btn("直接进画面", primary = true) { jumpVnc(force = true) })
+        dock.addView(btn(Lang.t("直接进画面"), primary = true) { jumpVnc(force = true) })
         dock.addView(space())
-        dock.addView(btn("停止虚拟机", danger = true) { stopVm() })
+        dock.addView(btn(Lang.t("停止虚拟机"), danger = true) { stopVm() })
         root.addView(dock)
 
         setContentView(root)
@@ -240,10 +240,10 @@ class GunyahBootActivity : HapticAppCompatActivity() {
                     jumped = true
                     runOnUiThread {
                         if (!isFinishing && !isDestroyed) {
-                            stateView.text = if (earlyUefi) "● 检测到 UEFI · 正在进显示器" else "● 原生显示已就绪"
+                            stateView.text = if (earlyUefi) Lang.t("● 检测到 UEFI · 正在进显示器") else Lang.t("● 原生显示已就绪")
                             stateView.setTextColor(GunTheme.ON_ACCENT)
                             stateView.background = GunTheme.pill(d, GunTheme.ACCENT)
-                            portView.text = "内置原生显示 · 输入四通道"
+                            portView.text = Lang.t("内置原生显示 · 输入四通道")
                         }
                     }
                     Thread.sleep(if (earlyUefi) 150 else 600)
@@ -259,7 +259,7 @@ class GunyahBootActivity : HapticAppCompatActivity() {
                         jumped = true
                         runOnUiThread {
                             if (!isFinishing && !isDestroyed) {
-                                stateView.text = "● 画面已就绪"
+                                stateView.text = Lang.t("● 画面已就绪")
                                 stateView.setTextColor(GunTheme.ON_ACCENT)
                                 stateView.background = GunTheme.pill(d, GunTheme.ACCENT)
                                 portView.text = "$host:$activePort 已连接"
@@ -295,7 +295,7 @@ class GunyahBootActivity : HapticAppCompatActivity() {
     private fun renderLog(raw: String) {
         if (raw.isEmpty()) {
             if (lastRendered.isEmpty()) {
-                logView.text = "正在等待 crosvm 输出…\n\n（若长时间没有内容，脚本可能在抢启动锁或加载内核模块）"
+                logView.text = Lang.t("正在等待 crosvm 输出…\n\n（若长时间没有内容，脚本可能在抢启动锁或加载内核模块）")
                 lastRendered = ""
             }
             return
@@ -338,9 +338,9 @@ class GunyahBootActivity : HapticAppCompatActivity() {
         c: GunyahManager.Config,
     ) {
         if (DisplayLauncher.wantsNative(c)) {
-            portView.text = "内置原生显示 · 无需 VNC"
+            portView.text = Lang.t("内置原生显示 · 无需 VNC")
         } else if (!c.vnc) {
-            portView.text = "VNC 已关闭 · 仅显示日志"
+            portView.text = Lang.t("VNC 已关闭 · 仅显示日志")
         } else {
             val p = portNow(c)
             portView.text = if (portOk) "$host:$p 可连接" else "$host:$p 等待监听"
@@ -349,23 +349,23 @@ class GunyahBootActivity : HapticAppCompatActivity() {
 
         when {
             st.kind == "failed" -> {
-                stateView.text = "● 启动失败"
+                stateView.text = Lang.t("● 启动失败")
                 stateView.setTextColor(GunTheme.ON_ACCENT)
                 stateView.background = GunTheme.pill(d, GunTheme.DANGER)
                 hintView.visibility = View.VISIBLE
                 hintView.setTextColor(GunTheme.DANGER)
-                hintView.text = "原因：" + st.reason.ifBlank { "见上方日志最后几行" } +
-                        "\n可以点「复制日志」把完整内容发出来，或改启动配置后重新启动。"
+                hintView.text = Lang.t("原因：") + st.reason.ifBlank { Lang.t("见上方日志最后几行") } +
+                        Lang.t("\n可以点「复制日志」把完整内容发出来，或改启动配置后重新启动。")
             }
             // v2.0.19：UEFI 帧缓冲刚就绪、正在自动进显示器的短暂状态。
             st.kind == "uefi" -> {
-                stateView.text = "● 检测到 UEFI · 正在进显示器"
+                stateView.text = Lang.t("● 检测到 UEFI · 正在进显示器")
                 stateView.setTextColor(GunTheme.ON_ACCENT)
                 stateView.background = GunTheme.pill(d, GunTheme.ACCENT)
                 hintView.visibility = View.GONE
             }
             st.kind == "running" -> {
-                stateView.text = "● 运行中"
+                stateView.text = Lang.t("● 运行中")
                 stateView.setTextColor(GunTheme.ON_ACCENT)
                 stateView.background = GunTheme.pill(d, GunTheme.ACCENT)
                 hintView.visibility = View.GONE
@@ -380,10 +380,10 @@ class GunyahBootActivity : HapticAppCompatActivity() {
                 hintView.visibility = View.VISIBLE
                 hintView.setTextColor(GunTheme.TEXT2)
                 hintView.text = "正在尝试第 ${st.idx} 种启动配置（共 ${st.total} 种）：保护模式 × 显示方式 × 声音 × 网络\n" +
-                    "不同固件支持度不同，脚本按优先级依次试，成功就停 —— 不是在反复重启。"
+                    Lang.t("不同固件支持度不同，脚本按优先级依次试，成功就停 —— 不是在反复重启。")
             }
             else -> {
-                stateView.text = "● 未运行"
+                stateView.text = Lang.t("● 未运行")
                 stateView.setTextColor(GunTheme.MUTED)
                 stateView.background = GunTheme.pill(d, GunTheme.CHIP)
             }
@@ -398,7 +398,7 @@ class GunyahBootActivity : HapticAppCompatActivity() {
             BootLog.readClean(f, 4 * 1024 * 1024)
         }.getOrDefault("")
         if (txt.isBlank()) {
-            Toast.makeText(this, "日志还是空的，稍等一下", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, Lang.t("日志还是空的，稍等一下"), Toast.LENGTH_SHORT).show()
             return
         }
         runCatching {
@@ -418,7 +418,7 @@ class GunyahBootActivity : HapticAppCompatActivity() {
             return
         }
         if (!c.vnc) {
-            Toast.makeText(this, "启动配置里 VNC 是关闭的", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, Lang.t("启动配置里 VNC 是关闭的"), Toast.LENGTH_SHORT).show()
             return
         }
         val host = c.vncHost.ifBlank { "127.0.0.1" }
@@ -435,7 +435,7 @@ class GunyahBootActivity : HapticAppCompatActivity() {
                     putExtra(VncViewerActivity.EXTRA_HOST, host)
                     putExtra(VncViewerActivity.EXTRA_PORT, port)
                 })
-            }.onFailure { Toast.makeText(this, "内置查看器启动失败", Toast.LENGTH_SHORT).show() }
+            }.onFailure { Toast.makeText(this, Lang.t("内置查看器启动失败"), Toast.LENGTH_SHORT).show() }
         }
         finish()
     }
@@ -444,7 +444,7 @@ class GunyahBootActivity : HapticAppCompatActivity() {
         thread {
             GunyahManager.stop(this)
             runOnUiThread {
-                Toast.makeText(this, "已发送停止指令", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, Lang.t("已发送停止指令"), Toast.LENGTH_SHORT).show()
                 finish()
             }
         }

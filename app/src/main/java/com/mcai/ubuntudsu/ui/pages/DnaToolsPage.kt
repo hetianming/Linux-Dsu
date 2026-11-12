@@ -25,6 +25,7 @@ import com.mcai.ubuntudsu.ui.Haptics
 import com.mcai.ubuntudsu.ui.Ui
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import com.mcai.ubuntudsu.Lang
 
 /**
  * DNA 工具箱首页（对齐参考 Dsu-Manager 首页 DNA 工具布局，UbuntuDSU 拟态玻璃本地化）：
@@ -106,7 +107,7 @@ class DnaToolsPage(private val activity: Activity) {
             )
         }
         row.addView(TextView(activity).apply {
-            text = "Android®天明 移植开发"
+            text = Lang.t("Android®天明 移植开发")
             textSize = 16f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.WHITE)
@@ -139,7 +140,7 @@ class DnaToolsPage(private val activity: Activity) {
             gravity = Gravity.CENTER_VERTICAL
         }
         titleRow.addView(TextView(activity).apply {
-            text = "工具链状态"
+            text = Lang.t("工具链状态")
             textSize = 13f
             setTextColor(Ui.secondaryText(activity))
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
@@ -178,7 +179,7 @@ class DnaToolsPage(private val activity: Activity) {
             ).apply { topMargin = dp(12) }
         }
         val checkBtn = TextView(activity).apply {
-            text = "检测"
+            text = Lang.t("检测")
             textSize = 13f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Ui.buttonText(activity))
@@ -227,7 +228,7 @@ class DnaToolsPage(private val activity: Activity) {
             gravity = Gravity.CENTER_VERTICAL
         }
         currentRow.addView(TextView(activity).apply {
-            text = "当前工程"
+            text = Lang.t("当前工程")
             textSize = 12f
             setTextColor(Ui.secondaryText(activity))
         })
@@ -242,7 +243,7 @@ class DnaToolsPage(private val activity: Activity) {
         }
         currentRow.addView(projectText!!)
         currentRow.addView(TextView(activity).apply {
-            text = "切换工程"
+            text = Lang.t("切换工程")
             textSize = 12.5f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Ui.buttonText(activity))
@@ -270,7 +271,7 @@ class DnaToolsPage(private val activity: Activity) {
             ).apply { topMargin = dp(10) }
         }
         val icons = arrayOf("＋", "🗑", "📦", "🧩")
-        val labels = arrayOf("新建", "删除", "解压ROM", "插件")
+        val labels = arrayOf(Lang.t("新建"), Lang.t("删除"), Lang.t("解压ROM"), Lang.t("插件"))
         for (i in icons.indices) {
             val op = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
@@ -309,7 +310,7 @@ class DnaToolsPage(private val activity: Activity) {
     // ==================== 四组功能入口（横排两列按钮卡片） ====================
 
     private fun buildFunctionSections(body: LinearLayout) {
-        sectionTitle(body, "分解与提取", Color.parseColor("#35A8C4"))
+        sectionTitle(body, Lang.t("分解与提取"), Color.parseColor("#35A8C4"))
         buildTwoColRow(body, listOf(
             item("🧬", "分解 bin") { anchor -> launchScaleUp(anchor, com.mcai.ubuntudsu.core.dna.DnaBinActivity::class.java) },
             item("⚡", "分解增量包") { anchor -> launchScaleUp(anchor, com.mcai.ubuntudsu.core.dna.DnaIncrementalActivity::class.java) },
@@ -319,13 +320,13 @@ class DnaToolsPage(private val activity: Activity) {
             item("🗂", "分解 super") { anchor -> openSuper() },
         ))
 
-        sectionTitle(body, "合成与打包", Color.parseColor("#11998E"))
+        sectionTitle(body, Lang.t("合成与打包"), Color.parseColor("#11998E"))
         buildTwoColRow(body, listOf(
             item("📦", "合成 img-dat-br") { anchor -> openMode("repack", null) },
             item("🧱", "合成 super.img") { anchor -> openMode("superP", null) },
         ))
 
-        sectionTitle(body, "格式转换", Color.parseColor("#E07B39"))
+        sectionTitle(body, Lang.t("格式转换"), Color.parseColor("#E07B39"))
         buildTwoColRow(body, listOf(
             item("🔁", "img-simg 互转") { anchor -> openMode("sparse", null) },
             item("🧾", "img-dat-br 转换") { anchor -> openMode("convert", null) },
@@ -333,7 +334,7 @@ class DnaToolsPage(private val activity: Activity) {
             item("🧩", "合并 Sparse 分段") { anchor -> openMode("chunk", null) },
         ))
 
-        sectionTitle(body, "其他功能", Color.parseColor("#8E6FD8"))
+        sectionTitle(body, Lang.t("其他功能"), Color.parseColor("#8E6FD8"))
         buildTwoColRow(body, listOf(
             item("🧬", "合并 my_ 分区") { anchor -> openMode("mergeMy", null) },
             item("🗂", "合并分段 super") { anchor -> openMode("mergeSuper", null) },
@@ -342,7 +343,7 @@ class DnaToolsPage(private val activity: Activity) {
             item("🔒", "禁用 AVB / dm-verity") { anchor -> launchScaleUp(anchor, com.mcai.ubuntudsu.core.dna.DnaVbmetaActivity::class.java) },
         ))
 
-        sectionTitle(body, "本机分区", Color.parseColor("#C77DFF"))
+        sectionTitle(body, Lang.t("本机分区"), Color.parseColor("#C77DFF"))
         buildTwoColRow(body, listOf(
             item("📤", "提取本机分区") { anchor ->
                 val i = Intent(activity, com.mcai.ubuntudsu.core.dna.DnaPartitionActivity::class.java)
@@ -528,11 +529,11 @@ class DnaToolsPage(private val activity: Activity) {
     private fun openSuper() {
         val cur = DnaTools.currentProject(activity)
         if (cur == null) {
-            toast("请先选择工程（需包含 super.img）")
+            toast(Lang.t("请先选择工程（需包含 super.img）"))
             showProjectManager()
             return
         }
-        toast("正在检测 super.img ...")
+        toast(Lang.t("正在检测 super.img ..."))
         Thread {
             val path = "${DnaTools.WORK_ROOT}/$cur/super.img"
             val has = RootShell.exec(
@@ -545,7 +546,7 @@ class DnaToolsPage(private val activity: Activity) {
                     si.putExtra(com.mcai.ubuntudsu.core.dna.DnaSuperActivity.EXTRA_SUPER, path)
                     activity.startActivity(si)
                 } else {
-                    toast("当前工程未检测到 super.img，请先解压 ROM 或导入 super.img")
+                    toast(Lang.t("当前工程未检测到 super.img，请先解压 ROM 或导入 super.img"))
                 }
             }
         }.start()
@@ -559,9 +560,9 @@ class DnaToolsPage(private val activity: Activity) {
 
     private fun refreshStatus() {
         val text = statusText ?: return
-        text.text = "检测中 …"
+        text.text = Lang.t("检测中 …")
         text.setTextColor(Ui.secondaryText(activity))
-        downloadBtn?.text = "下载工具包"
+        downloadBtn?.text = Lang.t("下载工具包")
         downloadBtn?.visibility = View.VISIBLE
         Thread {
             val ready = DnaTools.isReady(activity)
@@ -569,16 +570,16 @@ class DnaToolsPage(private val activity: Activity) {
             handler.post {
                 if (activity.isFinishing) return@post
                 val ok = ready && root
-                text.text = if (ok) "✓ 就绪（ROOT 可用）" else if (ready) "工具已就绪（需 ROOT 授权）" else "未就绪（需下载并授权 ROOT）"
+                text.text = if (ok) Lang.t("✓ 就绪（ROOT 可用）") else if (ready) Lang.t("工具已就绪（需 ROOT 授权）") else Lang.t("未就绪（需下载并授权 ROOT）")
                 text.setTextColor(if (ok) readyGreen() else notReadyRed())
-                downloadBtn?.text = if (ready) "重新下载" else "下载并解压"
+                downloadBtn?.text = if (ready) Lang.t("重新下载") else Lang.t("下载并解压")
             }
         }.start()
     }
 
     private fun refreshProject() {
         val cur = DnaTools.currentProject(activity)
-        projectText?.text = cur ?: "未选择"
+        projectText?.text = cur ?: Lang.t("未选择")
         projectText?.setTextColor(
             if (cur != null) Ui.primaryText(activity) else notReadyRed()
         )
@@ -592,7 +593,7 @@ class DnaToolsPage(private val activity: Activity) {
             it.isIndeterminate = false
         }
         logText?.visibility = View.VISIBLE
-        logText?.text = "开始下载…"
+        logText?.text = Lang.t("开始下载…")
         downloadBtn?.isEnabled = false
         downloadBtn?.alpha = 0.6f
         val onProgress: (Int) -> Unit = { p -> handler.post { progressBar?.progress = p } }
@@ -600,7 +601,7 @@ class DnaToolsPage(private val activity: Activity) {
             handler.post {
                 val cur = logText?.text ?: ""
                 logText?.text = if (cur.isBlank()) line else "$cur\n$line"
-                statusText?.text = "下载中"
+                statusText?.text = Lang.t("下载中")
             }
         }
         Thread {
@@ -615,17 +616,17 @@ class DnaToolsPage(private val activity: Activity) {
                         val ready = DnaTools.isReady(activity)
                         val root = RootShell.available()
                         val okReady = ready && root
-                        statusText?.text = if (okReady) "✓ 就绪（ROOT 可用）"
-                            else if (ready) "工具已就绪（需 ROOT 授权）"
-                            else "未就绪（需授权 ROOT）"
+                        statusText?.text = if (okReady) Lang.t("✓ 就绪（ROOT 可用）")
+                            else if (ready) Lang.t("工具已就绪（需 ROOT 授权）")
+                            else Lang.t("未就绪（需授权 ROOT）")
                         statusText?.setTextColor(
                             if (okReady) readyGreen() else notReadyRed()
                         )
-                        downloadBtn?.text = if (ready) "重新下载" else "下载并解压"
+                        downloadBtn?.text = if (ready) Lang.t("重新下载") else Lang.t("下载并解压")
                         val cur = logText?.text ?: ""
                         logText?.text = if (cur.isBlank()) "工具就绪" else "$cur\n工具就绪"
                     } else if (!cancelled.get()) {
-                        statusText?.text = "下载失败"
+                        statusText?.text = Lang.t("下载失败")
                         val cur = logText?.text ?: ""
                         logText?.text = "$cur\n所有线路失败，请稍后重试。"
                     }
@@ -642,28 +643,28 @@ class DnaToolsPage(private val activity: Activity) {
         val items = projects.toTypedArray()
         if (items.isEmpty()) {
             AlertDialog.Builder(activity)
-                .setTitle("选择工程")
-                .setMessage("暂无工程，请先「新建」。")
+                .setTitle(Lang.t("选择工程"))
+                .setMessage(Lang.t("暂无工程，请先「新建」。"))
                 .setPositiveButton("新建") { _, _ -> showCreateProject() }
-                .setNegativeButton("关闭", null)
+                .setNegativeButton(Lang.t("关闭"), null)
                 .show()
             return
         }
         val labels = items.map { (if (it == current) "● " else "○ ") + it }.toTypedArray()
         AlertDialog.Builder(activity)
-            .setTitle("选择工程")
+            .setTitle(Lang.t("选择工程"))
             .setItems(labels) { _, which ->
                 DnaTools.setCurrentProject(activity, items[which])
                 refreshProject()
                 toast("已切换工程：${items[which]}")
             }
-            .setNegativeButton("关闭", null)
+            .setNegativeButton(Lang.t("关闭"), null)
             .show()
     }
 
     private fun showCreateProject() {
         val input = EditText(activity).apply {
-            hint = "例如：MyROM"
+            hint = Lang.t("例如：MyROM")
             textSize = 15f
             isSingleLine = true
         }
@@ -673,12 +674,12 @@ class DnaToolsPage(private val activity: Activity) {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ))
         AlertDialog.Builder(activity)
-            .setTitle("新建工程")
-            .setMessage("工程名将添加 PDNA_ 前缀，创建于 /sdcard/Linux-Dsu/PDNA/ 与 /data/Linux-Dsu/PDNA/")
+            .setTitle(Lang.t("新建工程"))
+            .setMessage(Lang.t("工程名将添加 PDNA_ 前缀，创建于 /sdcard/Linux-Dsu/PDNA/ 与 /data/Linux-Dsu/PDNA/"))
             .setView(wrap)
             .setPositiveButton("创建并使用") { _, _ ->
                 val name = input.text?.toString()?.trim() ?: ""
-                if (name.isEmpty()) { toast("请输入工程名"); return@setPositiveButton }
+                if (name.isEmpty()) { toast(Lang.t("请输入工程名")); return@setPositiveButton }
                 Thread {
                     val (created, error) = DnaTools.createProject(name)
                     handler.post {
@@ -692,20 +693,20 @@ class DnaToolsPage(private val activity: Activity) {
                     }
                 }.start()
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(Lang.t("取消"), null)
             .show()
     }
 
     private fun showDeleteProject() {
         val projects = DnaTools.listProjects()
-        if (projects.isEmpty()) { toast("暂无工程可删除"); return }
+        if (projects.isEmpty()) { toast(Lang.t("暂无工程可删除")); return }
         val items = projects.toTypedArray()
         AlertDialog.Builder(activity)
-            .setTitle("删除工程")
+            .setTitle(Lang.t("删除工程"))
             .setItems(items) { _, which ->
                 val name = items[which]
                 AlertDialog.Builder(activity)
-                    .setTitle("确认删除")
+                    .setTitle(Lang.t("确认删除"))
                     .setMessage("将删除工程 $name（/sdcard/Linux-Dsu/PDNA 与 /data/Linux-Dsu/PDNA 下的目录），不可恢复。")
                     .setPositiveButton("删除") { _, _ ->
                         Thread {
@@ -719,10 +720,10 @@ class DnaToolsPage(private val activity: Activity) {
                             }
                         }.start()
                     }
-                    .setNegativeButton("取消", null)
+                    .setNegativeButton(Lang.t("取消"), null)
                     .show()
             }
-            .setNegativeButton("关闭", null)
+            .setNegativeButton(Lang.t("关闭"), null)
             .show()
     }
 }

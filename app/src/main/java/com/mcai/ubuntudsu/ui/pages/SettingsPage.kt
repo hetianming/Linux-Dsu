@@ -11,6 +11,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import com.mcai.ubuntudsu.ProcessManagerActivity
+import com.mcai.ubuntudsu.Lang
+import com.mcai.ubuntudsu.MainActivity
 import com.mcai.ubuntudsu.R
 import com.mcai.ubuntudsu.ui.Ui
 
@@ -83,7 +85,7 @@ class SettingsPage(
         // 标题（壁纸同步时隐藏，图标上移替代）
         if (!wallpaperSync) {
             page.addView(TextView(activity).apply {
-                text = "阿明®有趣小程序"
+                text = Lang.t("阿明®有趣小程序")
                 textSize = 22f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(Ui.primaryText(activity))
@@ -97,6 +99,8 @@ class SettingsPage(
         val savedOrder = gridPrefs.getString("icon_order", null)
         val keyToItem = mapOf(
             "theme" to GridItem("设置", R.drawable.icon_settings, "#5B6CFF") { view -> openSettings(view) },
+            // v2.0.38：语言直达卡（老版本保存的 icon_order 里没有 lang，会自动追加到末尾）
+            "lang" to GridItem(Lang.t("语言"), R.drawable.ic_tools, "#00897B") { view -> openLanguageDialog(view) },
             "process" to GridItem("进程管理", R.drawable.icon_process_manager, "#E53935") { view -> openProcessManager(view) },
             "rom" to GridItem("ROM固件", R.drawable.icon_rom_firmware, "#FF6B35") { view -> openRomFirmware(view) },
             "otg" to GridItem("OTG助手", R.drawable.icon_otg, "#00897B") { view -> openOtgAssistant(view) },
@@ -104,7 +108,6 @@ class SettingsPage(
             "usbboot" to GridItem("U盘启动", R.drawable.icon_usb_boot, "#E65100") { view -> openUsbBoot(view) },
             "worktime" to GridItem("日历工时记", R.drawable.icon_worktime, "#00A98F") { view -> openWorkTime(view) },
             "dnatools" to GridItem("ROM移植", R.drawable.icon_rom_port, "#7C4DFF") { view -> openDnaTools(view) },
-            "phonetv" to GridItem("手机电视", R.drawable.icon_phone_tv, "#8E24AA") { view -> openPhoneTv(view) },
             // v2.0.28：入口位置对调 —— gunyahVM 上提为底部第 3 格 tab，
             // Linux 容器功能从原 tab 下放到这里，作为「多功能」页的一张卡。
             "linux" to GridItem("Linux", R.drawable.icon_linux_modern, "#E95420") { view -> openLinuxContainer(view) },
@@ -171,7 +174,28 @@ class SettingsPage(
             item.onClick,
         )
 
-    /** 打开全屏设置页（个性主题 + 关于信息） */
+    /** v2.0.38：语言三选一直达；切换后重启任务栈，强制重建所有已缓存页面。 */
+    private fun openLanguageDialog(iconView: View) {
+        val opts = arrayOf(Lang.optFollow(), Lang.optChinese(), Lang.optEnglish())
+        val modes = arrayOf(Lang.AUTO, Lang.ZH, Lang.EN)
+        val prefs = activity.getSharedPreferences(Lang.PREF, Activity.MODE_PRIVATE)
+        val cur = prefs.getString(Lang.KEY_MODE, Lang.AUTO) ?: Lang.AUTO
+        AlertDialog.Builder(activity)
+            .setTitle(Lang.title())
+            .setMessage(Lang.hint())
+            .setSingleChoiceItems(opts, modes.indexOf(cur).coerceAtLeast(0)) { dlg, which ->
+                Lang.setMode(activity, modes[which])
+                dlg.dismiss()
+                activity.startActivity(Intent(activity, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                })
+                activity.finish()
+            }
+            .setNegativeButton(Lang.t("取消")) { dlg, _ -> dlg.dismiss() }
+            .show()
+    }
+
+    /** 打开全屏设置页（个性主题 + 语言 + 关于信息） */
     private fun openSettings(iconView: View) {
         launchScaleUp(iconView, com.mcai.ubuntudsu.SettingsActivity::class.java)
     }
@@ -207,11 +231,6 @@ class SettingsPage(
         launchScaleUp(iconView, com.mcai.ubuntudsu.DnaToolsActivity::class.java)
     }
 
-    private fun openPhoneTv(iconView: View) {
-        // 手机电视：IPTV 直播浏览 + 播放（TVBox 订阅 / m3u 源）
-        launchScaleUp(iconView, com.mcai.ubuntudsu.TvActivity::class.java)
-    }
-
     private fun openLinuxContainer(iconView: View) {
         // v2.0.28：Linux 容器（容器终端 / 桌面环境 / 文件管理 / 安装 / 卸载 rootfs），
         // 原 MainActivity 第 3 个 tab 的完整内容，现由此卡进入。
@@ -223,8 +242,8 @@ class SettingsPage(
     private fun checkUpdate() {
         val d = activity.resources.displayMetrics.density
         val checking = android.app.AlertDialog.Builder(activity)
-            .setTitle("检查更新")
-            .setMessage("正在检测新版本...")
+            .setTitle(Lang.t("检查更新"))
+            .setMessage(Lang.t("正在检测新版本..."))
             .setCancelable(false)
             .show()
         Thread {
@@ -236,24 +255,24 @@ class SettingsPage(
                     runCatching { checking.dismiss() }
                     when {
                         info == null -> AlertDialog.Builder(activity)
-                            .setTitle("检查更新")
-                            .setMessage("未能获取更新信息（无 Release 或网络异常），请稍后重试。")
-                            .setPositiveButton("关闭", null)
+                            .setTitle(Lang.t("检查更新"))
+                            .setMessage(Lang.t("未能获取更新信息（无 Release 或网络异常），请稍后重试。"))
+                            .setPositiveButton(Lang.t("关闭"), null)
                             .show()
                         !com.mcai.ubuntudsu.core.AppUpdater.isNewer(local, info.version) ->
                             AlertDialog.Builder(activity)
-                                .setTitle("检查更新")
+                                .setTitle(Lang.t("检查更新"))
                                 .setMessage("当前已是最新版本（v$local）。")
-                                .setPositiveButton("关闭", null)
+                                .setPositiveButton(Lang.t("关闭"), null)
                                 .show()
                         else -> AlertDialog.Builder(activity)
                             .setTitle("发现新版本 v${info.version}")
                             .setMessage(
                                 (if (info.notes.isBlank()) "" else "${info.notes}\n\n") +
-                                    "下载并安装新版本？",
+                                    Lang.t("下载并安装新版本？"),
                             )
                             .setPositiveButton("下载并安装") { _, _ -> downloadAndInstall(info) }
-                            .setNegativeButton("取消", null)
+                            .setNegativeButton(Lang.t("取消"), null)
                             .show()
                     }
                 }
@@ -262,9 +281,9 @@ class SettingsPage(
                     if (activity.isFinishing) return@runOnUiThread
                     runCatching { checking.dismiss() }
                     AlertDialog.Builder(activity)
-                        .setTitle("检查更新")
-                        .setMessage("检测过程出现异常，请稍后重试。")
-                        .setPositiveButton("关闭", null)
+                        .setTitle(Lang.t("检查更新"))
+                        .setMessage(Lang.t("检测过程出现异常，请稍后重试。"))
+                        .setPositiveButton(Lang.t("关闭"), null)
                         .show()
                 }
             }
@@ -295,7 +314,7 @@ class SettingsPage(
             .setCancelable(false)
             .setNegativeButton("取消") { _, _ -> cancelled.set(true) }
             .show()
-        percentText.text = "连接中…"
+        percentText.text = Lang.t("连接中…")
         Thread {
             try {
                 var shownPercent = 0
@@ -356,12 +375,12 @@ class SettingsPage(
                         runCatching { dialog.dismiss() }
                         if (cancelled.get()) return@runOnUiThread
                         AlertDialog.Builder(activity)
-                            .setTitle("下载失败")
+                            .setTitle(Lang.t("下载失败"))
                             .setMessage(
                                 if (lastReason.isNotBlank()) "所有线路均下载失败：\n$lastReason"
-                                else "所有线路均下载失败，请稍后重试。"
+                                else Lang.t("所有线路均下载失败，请稍后重试。")
                             )
-                            .setPositiveButton("关闭", null)
+                            .setPositiveButton(Lang.t("关闭"), null)
                             .show()
                     }
                     return@Thread
@@ -370,7 +389,7 @@ class SettingsPage(
                     if (activity.isFinishing) return@runOnUiThread
                     dialog.setTitle("正在安装 v${info.version}")
                     runCatching { progress.isIndeterminate = true }
-                    percentText.text = "后台安装中，请稍候…"
+                    percentText.text = Lang.t("后台安装中，请稍候…")
                 }
                 val install = com.mcai.ubuntudsu.core.AppUpdater.silentInstall(target)
                 activity.runOnUiThread {
@@ -378,7 +397,7 @@ class SettingsPage(
                     runCatching { dialog.dismiss() }
                     if (install.success) {
                         AlertDialog.Builder(activity)
-                            .setTitle("安装完成")
+                            .setTitle(Lang.t("安装完成"))
                             .setMessage("v${info.version} 已安装成功，重启应用后生效。")
                             .setCancelable(false)
                             .setPositiveButton("重启应用") { _, _ ->
@@ -392,12 +411,12 @@ class SettingsPage(
                             .show()
                     } else {
                         AlertDialog.Builder(activity)
-                            .setTitle("需手动安装")
+                            .setTitle(Lang.t("需手动安装"))
                             .setMessage("已下载 v${info.version}。\n\n自动安装未成功：${install.message}")
                             .setPositiveButton("调用系统安装") { _, _ ->
                                 runCatching { com.mcai.ubuntudsu.core.AppUpdater.install(activity, target) }
                             }
-                            .setNegativeButton("取消", null)
+                            .setNegativeButton(Lang.t("取消"), null)
                             .show()
                     }
                 }
@@ -406,9 +425,9 @@ class SettingsPage(
                     if (activity.isFinishing) return@runOnUiThread
                     runCatching { dialog.dismiss() }
                     AlertDialog.Builder(activity)
-                        .setTitle("下载失败")
-                        .setMessage("新版本下载出现异常，请稍后重试。")
-                        .setPositiveButton("关闭", null)
+                        .setTitle(Lang.t("下载失败"))
+                        .setMessage(Lang.t("新版本下载出现异常，请稍后重试。"))
+                        .setPositiveButton(Lang.t("关闭"), null)
                         .show()
                 }
             }

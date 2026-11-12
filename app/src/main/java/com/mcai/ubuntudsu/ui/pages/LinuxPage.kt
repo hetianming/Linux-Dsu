@@ -19,6 +19,7 @@ import com.mcai.ubuntudsu.core.TerminalSessionStore
 import com.mcai.ubuntudsu.ui.Ui
 import androidx.appcompat.app.AlertDialog
 import java.util.concurrent.Executor
+import com.mcai.ubuntudsu.Lang
 
 class LinuxPage(
     private val activity: android.app.Activity,
@@ -34,7 +35,7 @@ class LinuxPage(
         }
         // 标题行：左侧"Linux ARM® 架构"（设置入口仅在首页）
         page.addView(TextView(activity).apply {
-            text = "Linux ARM® 架构"
+            text = Lang.t("Linux ARM® 架构")
             textSize = 22f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
@@ -70,10 +71,10 @@ class LinuxPage(
         page.addView(spacer(10))
         // 功能区：2×2 卡片网格（与「多功能」页同一套卡片语言），四入口对称
         val features = listOf(
-            Feature(R.drawable.icon_terminal_runner, "#2D64AA", "容器终端") {
+            Feature(R.drawable.icon_terminal_runner, "#2D64AA", Lang.t("容器终端")) {
                 requireRootfs { activity.startActivity(Intent(activity, TerminalActivity::class.java)) }
             },
-            Feature(R.drawable.icon_linux_modern, "#E95420", "桌面环境") {
+            Feature(R.drawable.icon_linux_modern, "#E95420", Lang.t("桌面环境")) {
                 requireRootfs {
                     activity.startActivity(
                         Intent(activity, TerminalActivity::class.java).apply {
@@ -82,10 +83,10 @@ class LinuxPage(
                     )
                 }
             },
-            Feature(R.drawable.ic_folder_manager, "#6C4AC2", "文件管理") {
+            Feature(R.drawable.ic_folder_manager, "#6C4AC2", Lang.t("文件管理")) {
                 requireRootfs { activity.startActivity(Intent(activity, RootfsFilesActivity::class.java)) }
             },
-            Feature(R.drawable.icon_install_rootfs, "#11998E", "安装 rootfs") {
+            Feature(R.drawable.icon_install_rootfs, "#11998E", Lang.t("安装 rootfs")) {
                 activity.startActivity(Intent(activity, RootfsInstallActivity::class.java))
             },
         )
@@ -110,7 +111,7 @@ class LinuxPage(
 
         // 危险操作下沉：低调红色描边按钮（点击后仍有二次确认弹窗）
         page.addView(TextView(activity).apply {
-            text = "卸载 rootfs 系统"
+            text = Lang.t("卸载 rootfs 系统")
             textSize = 13f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             gravity = Gravity.CENTER
@@ -141,7 +142,7 @@ class LinuxPage(
         if (Env.ubuntuInstalled(activity)) {
             action()
         } else {
-            Toast.makeText(activity, "Ubuntu rootfs 尚未安装，请先完成安装", Toast.LENGTH_SHORT).show()
+            Toast.makeText(activity, Lang.t("Ubuntu rootfs 尚未安装，请先完成安装"), Toast.LENGTH_SHORT).show()
             activity.startActivity(Intent(activity, RootfsInstallActivity::class.java))
         }
     }
@@ -151,7 +152,7 @@ class LinuxPage(
         infoText.text = if (installed) {
             "${prettyVersion() ?: "Linux 容器"} · 已安装"
         } else {
-            "Linux 容器 · 未安装"
+            Lang.t("Linux 容器 · 未安装")
         }
     }
 
@@ -170,34 +171,34 @@ class LinuxPage(
 
     private fun rootfsVersion(): String {
         val rootfs = Env.rootfs(activity)
-        val candidates = listOf("etc/版本信息", "etc/version", "etc/ubuntu_version", "etc/os-release")
+        val candidates = listOf(Lang.t("etc/版本信息"), "etc/version", "etc/ubuntu_version", "etc/os-release")
         val file = candidates.asSequence().map { java.io.File(rootfs, it) }.firstOrNull { it.isFile }
         return runCatching { file?.readText(Charsets.UTF_8)?.take(2000)?.trim() }.getOrNull()
-            ?.ifBlank { "未找到版本信息文件" } ?: "未找到版本信息文件"
+            ?.ifBlank { Lang.t("未找到版本信息文件") } ?: Lang.t("未找到版本信息文件")
     }
 
     private fun confirmUninstall() {
         if (!Env.ubuntuInstalled(activity)) {
-            Toast.makeText(activity, "当前没有已安装的 Linux rootfs", Toast.LENGTH_SHORT).show()
+            Toast.makeText(activity, Lang.t("当前没有已安装的 Linux rootfs"), Toast.LENGTH_SHORT).show()
             return
         }
         val running = TerminalSessionStore.takeRunning()
         if (running != null) {
             val runningDialog = AlertDialog.Builder(activity)
-                .setTitle("终端正在运行")
-                .setMessage("请先结束终端进程并卸载挂载点，再删除 rootfs。")
+                .setTitle(Lang.t("终端正在运行"))
+                .setMessage(Lang.t("请先结束终端进程并卸载挂载点，再删除 rootfs。"))
                 .setPositiveButton("关闭终端") { _, _ ->
                     running.finishIfRunning()
-                    Toast.makeText(activity, "终端已请求关闭，请稍后再卸载", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(activity, Lang.t("终端已请求关闭，请稍后再卸载"), Toast.LENGTH_SHORT).show()
                 }
-                .setNegativeButton("取消", null)
+                .setNegativeButton(Lang.t("取消"), null)
                 .show()
             Ui.styleDialog(activity, runningDialog)
             return
         }
         val uninstallDialog = AlertDialog.Builder(activity)
-            .setTitle("卸载 Linux")
-            .setMessage("将删除 rootfs 目录及全部数据，此操作不可恢复。确定继续？")
+            .setTitle(Lang.t("卸载 Linux"))
+            .setMessage(Lang.t("将删除 rootfs 目录及全部数据，此操作不可恢复。确定继续？"))
             .setPositiveButton("卸载") { _, _ ->
                 executor.execute {
                     val rootfs = Env.rootfs(activity)
@@ -219,15 +220,15 @@ sleep 1""".trimIndent()
                     val gone = result.stdout.contains("__GONE__") && !result.stdout.contains("__REMAIN__")
                     activity.runOnUiThread {
                         if (gone) {
-                            Toast.makeText(activity, "已卸载 rootfs 系统", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(activity, Lang.t("已卸载 rootfs 系统"), Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(activity, "卸载失败：目录仍存在，请关闭终端后重试", Toast.LENGTH_LONG).show()
+                            Toast.makeText(activity, Lang.t("卸载失败：目录仍存在，请关闭终端后重试"), Toast.LENGTH_LONG).show()
                         }
                         refreshInfo()
                     }
                 }
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(Lang.t("取消"), null)
             .show()
         Ui.styleDialog(activity, uninstallDialog)
     }

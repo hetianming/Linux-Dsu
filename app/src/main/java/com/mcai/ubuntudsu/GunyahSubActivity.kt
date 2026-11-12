@@ -289,7 +289,7 @@ abstract class GunyahSubActivity : HapticAppCompatActivity() {
                     value.text = options[which].first
                     dlg.dismiss()
                 }
-                .setNegativeButton("取消", null)
+                .setNegativeButton(Lang.t("取消"), null)
                 .show()
         }
         row.addView(value)
@@ -331,7 +331,7 @@ abstract class GunyahSubActivity : HapticAppCompatActivity() {
         }
         row.addView(edit)
         row.addView(TextView(this).apply {
-            text = "选择"; textSize = 12f
+            text = Lang.t("选择"); textSize = 12f
             setTypeface(null, Typeface.BOLD)
             setTextColor(GunTheme.ON_ACCENT)
             gravity = Gravity.CENTER

@@ -54,7 +54,7 @@ class GunyahDisplayActivity : HapticAppCompatActivity() {
             setOnClickListener { finish() }
         })
         bar.addView(TextView(this).apply {
-            text = "显示器"; textSize = 18f; setTypeface(null, Typeface.BOLD)
+            text = Lang.t("显示器"); textSize = 18f; setTypeface(null, Typeface.BOLD)
             setTextColor(GunTheme.TEXT)
         })
         root.addView(bar)
@@ -70,7 +70,7 @@ class GunyahDisplayActivity : HapticAppCompatActivity() {
         val port = GunyahManager.actualVncPort(this) ?: cfg.vncPort
         statusChip = chip(chips, "$host:$port")
         screenChip = chip(chips, "simplefb")
-        liveChip = chip(chips, "● 检测中", GunTheme.CHIP)
+        liveChip = chip(chips, Lang.t("● 检测中"), GunTheme.CHIP)
         (liveChip.layoutParams as LinearLayout.LayoutParams).marginStart = GunTheme.dp(6, d)
         (screenChip.layoutParams as LinearLayout.LayoutParams).marginStart = GunTheme.dp(6, d)
         root.addView(chips)
@@ -90,7 +90,7 @@ class GunyahDisplayActivity : HapticAppCompatActivity() {
             setTextColor(GunTheme.MUTED)
         })
         enterBtn = TextView(this).apply {
-            text = "进入桌面"
+            text = Lang.t("进入桌面")
             textSize = 15f; setTypeface(null, Typeface.BOLD)
             setTextColor(GunTheme.ON_ACCENT)
             gravity = Gravity.CENTER
@@ -104,7 +104,7 @@ class GunyahDisplayActivity : HapticAppCompatActivity() {
         }
         frame.addView(enterBtn)
         frame.addView(TextView(this).apply {
-            text = "使用 APP 内置 AVNC 查看器 · 失败自动重连"
+            text = Lang.t("使用 APP 内置 AVNC 查看器 · 失败自动重连")
             textSize = 10f; gravity = Gravity.CENTER
             setTextColor(GunTheme.MUTED)
             setPadding(0, GunTheme.dp(10, d), 0, 0)
@@ -117,15 +117,15 @@ class GunyahDisplayActivity : HapticAppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(GunTheme.dp(12, d), GunTheme.dp(10, d), GunTheme.dp(12, d), GunTheme.dp(14, d))
         }
-        toolbar.addView(toolButton("⟳", "旋转") { toggleOrientation() })
+        toolbar.addView(toolButton("⟳", Lang.t("旋转")) { toggleOrientation() })
         toolbar.addView(toolSpace())
-        toolbar.addView(toolButton("👆", "触控") { enterDisplay() })
+        toolbar.addView(toolButton("👆", Lang.t("触控")) { enterDisplay() })
         toolbar.addView(toolSpace())
-        toolbar.addView(toolButton("⌨", "键盘") { enterDisplay() })
+        toolbar.addView(toolButton("⌨", Lang.t("键盘")) { enterDisplay() })
         toolbar.addView(toolSpace())
-        toolbar.addView(toolButton("⛶", "全屏") { enterDisplay() })
+        toolbar.addView(toolButton("⛶", Lang.t("全屏")) { enterDisplay() })
         toolbar.addView(toolSpace())
-        toolbar.addView(toolButton("⏏", "断开", danger = true) { doStopVm() })
+        toolbar.addView(toolButton("⏏", Lang.t("断开"), danger = true) { doStopVm() })
         root.addView(toolbar)
         setContentView(root)
 
@@ -185,7 +185,7 @@ class GunyahDisplayActivity : HapticAppCompatActivity() {
         thread {
             val (ok, _) = GunyahManager.stop(this)
             runOnUiThread {
-                Toast.makeText(this, if (ok) "已发送停止指令" else "停止失败", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, if (ok) Lang.t("已发送停止指令") else Lang.t("停止失败"), Toast.LENGTH_SHORT).show()
                 refreshStatus()
             }
         }
@@ -211,26 +211,26 @@ class GunyahDisplayActivity : HapticAppCompatActivity() {
                     liveChip.setTextColor(GunTheme.ACCENT)
                     liveChip.background = GunTheme.pill(d, 0x263DDC84)
                     enterBtn.alpha = 1f
-                    enterBtn.text = "进入桌面"
+                    enterBtn.text = Lang.t("进入桌面")
                 } else if (st.isBooting) {
                     liveChip.text = if (st.total > 0) "● 兼容 ${st.idx}/${st.total}" else "● 启动中…"
                     liveChip.setTextColor(GunTheme.WARN)
                     liveChip.background = GunTheme.pill(d, 0x26E0A458)
-                    enterBtn.text = "查看启动日志"
+                    enterBtn.text = Lang.t("查看启动日志")
                 } else if (running) {
-                    liveChip.text = "● 启动中…"
+                    liveChip.text = Lang.t("● 启动中…")
                     liveChip.setTextColor(GunTheme.WARN)
                     liveChip.background = GunTheme.pill(d, 0x26E0A458)
                 } else if (st.kind == "failed") {
-                    liveChip.text = "● 启动失败"
+                    liveChip.text = Lang.t("● 启动失败")
                     liveChip.setTextColor(GunTheme.DANGER)
                     liveChip.background = GunTheme.pill(d, GunTheme.CHIP)
-                    enterBtn.text = "进入桌面"
+                    enterBtn.text = Lang.t("进入桌面")
                 } else {
-                    liveChip.text = "○ 未运行"
+                    liveChip.text = Lang.t("○ 未运行")
                     liveChip.setTextColor(GunTheme.MUTED)
                     liveChip.background = GunTheme.pill(d, GunTheme.CHIP)
-                    enterBtn.text = "进入桌面"
+                    enterBtn.text = Lang.t("进入桌面")
                 }
             }
         }

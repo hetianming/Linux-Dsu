@@ -27,6 +27,7 @@ import com.mcai.ubuntudsu.core.SystemStats
 import com.mcai.ubuntudsu.ui.Ui
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import com.mcai.ubuntudsu.Lang
 
 class ProcessManagerPage(
     private val activity: Activity,
@@ -53,7 +54,7 @@ class ProcessManagerPage(
     /** 任务栏（最近任务）后台应用：包名 → 最近活跃时间 */
     private var recentPackages: Map<String, Long> = emptyMap()
 
-    private val tabTitles = listOf("后台运行", "CPU 占用", "内存占用", "后台耗电")
+    private val tabTitles = listOf(Lang.t("后台运行"), Lang.t("CPU 占用"), Lang.t("内存占用"), Lang.t("后台耗电"))
 
     // 应用图标缓存
     private val iconCache = object : LruCache<String, Drawable>(80) {
@@ -84,7 +85,7 @@ class ProcessManagerPage(
             setPadding(0, 0, 0, Ui.dp(12, d))
         }
         titleRow.addView(TextView(activity).apply {
-            text = "进程管理"
+            text = Lang.t("进程管理")
             textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
@@ -120,14 +121,14 @@ class ProcessManagerPage(
             gravity = Gravity.CENTER_VERTICAL
         }
         overviewTitleRow.addView(TextView(activity).apply {
-            text = "系统概览"
+            text = Lang.t("系统概览")
             textSize = 14f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
         sourceBadge = TextView(activity).apply {
-            text = "采样中"
+            text = Lang.t("采样中")
             textSize = 9f
             setTextColor(Ui.secondaryText(activity))
             setPadding(Ui.dp(8, d), Ui.dp(2, d), Ui.dp(8, d), Ui.dp(2, d))
@@ -143,8 +144,8 @@ class ProcessManagerPage(
             setPadding(0, Ui.dp(8, d), 0, 0)
         }
         summaryCpu = buildMetric("CPU", "--", Ui.buttonPrimary(activity), d)
-        summaryMem = buildMetric("内存", "--", Ui.buttonSecondary(activity), d)
-        summaryRunning = buildMetric("进程", "--", Ui.buttonSuccess(activity), d)
+        summaryMem = buildMetric(Lang.t("内存"), "--", Ui.buttonSecondary(activity), d)
+        summaryRunning = buildMetric(Lang.t("进程"), "--", Ui.buttonSuccess(activity), d)
         metricRow.addView(summaryCpu, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         metricRow.addView(summaryMem, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = Ui.dp(6, d) })
         metricRow.addView(summaryRunning, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = Ui.dp(6, d) })
@@ -164,7 +165,7 @@ class ProcessManagerPage(
         }
         overview.addView(summaryInfoText)
         overview.addView(TextView(activity).apply {
-            text = "提示：结束进程需 ROOT 权限，点击应用可查看详情并强制停止"
+            text = Lang.t("提示：结束进程需 ROOT 权限，点击应用可查看详情并强制停止")
             textSize = 10f
             setTextColor(Ui.secondaryText(activity))
             setPadding(0, Ui.dp(4, d), 0, 0)
@@ -184,13 +185,13 @@ class ProcessManagerPage(
             ).apply { bottomMargin = Ui.dp(10, d) }
         }
         permissionBanner?.addView(TextView(activity).apply {
-            text = "授予\"使用情况访问\"权限后可读取任务栏后台应用与前台识别"
+            text = Lang.t("授予\"使用情况访问\"权限后可读取任务栏后台应用与前台识别")
             textSize = 10f
             setTextColor(Ui.secondaryText(activity))
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
         permissionBanner?.addView(TextView(activity).apply {
-            text = "去授权"
+            text = Lang.t("去授权")
             textSize = 11f
             setTextColor(Ui.buttonText(activity))
             background = Ui.glassButton(activity, Ui.buttonPrimary(activity))
@@ -216,14 +217,14 @@ class ProcessManagerPage(
             setPadding(0, Ui.dp(10, d), 0, Ui.dp(6, d))
         }
         statusText = TextView(activity).apply {
-            text = "加载中..."
+            text = Lang.t("加载中...")
             textSize = 11f
             setTextColor(Ui.secondaryText(activity))
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
         statusBar.addView(statusText)
         refreshBtn = TextView(activity).apply {
-            text = "刷新"
+            text = Lang.t("刷新")
             textSize = 11f
             gravity = Gravity.CENTER
             setTextColor(Ui.buttonText(activity))
@@ -330,7 +331,7 @@ class ProcessManagerPage(
             )
             Ui.pressAnimation(this)
             addView(TextView(activity).apply {
-                text = "系统应用"
+                text = Lang.t("系统应用")
                 textSize = 10f
                 setTextColor(Ui.secondaryText(activity))
             })
@@ -387,7 +388,7 @@ class ProcessManagerPage(
     private fun loadData() {
         if (isLoading) return
         isLoading = true
-        statusText.text = "正在采样（约 1 秒）..."
+        statusText.text = Lang.t("正在采样（约 1 秒）...")
         refreshBtn.isEnabled = false
         refreshBtn.alpha = 0.5f
 
@@ -455,7 +456,7 @@ class ProcessManagerPage(
                             when {
                                 scan.recentPackages.isNotEmpty() -> append(" · 任务栏实测")
                                 scan.usageAccessGranted ->
-                                    append(" · 任务栏数据待刷新")
+                                    append(Lang.t(" · 任务栏数据待刷新"))
                                 else -> append(" · 降级为运行进程")
                             }
                         }
@@ -497,7 +498,7 @@ class ProcessManagerPage(
         (summaryMem as? LinearLayout)?.let { chip ->
             val pct = if (system.memTotalKb > 0) system.memUsedKb * 100f / system.memTotalKb else 0f
             (chip.getChildAt(0) as? TextView)?.text = ProcessScanner.formatMemory(system.memUsedKb)
-            (chip.getChildAt(1) as? TextView)?.text = "内存 · %.0f%%".format(pct)
+            (chip.getChildAt(1) as? TextView)?.text = Lang.t("内存 · %.0f%%").format(pct)
         }
         // 进程：系统真实进程总数 + 运行中应用数
         (summaryRunning as? LinearLayout)?.let { chip ->
@@ -505,7 +506,7 @@ class ProcessManagerPage(
             (chip.getChildAt(1) as? TextView)?.text = "进程 · $runningApps 应用"
         }
 
-        sourceBadge.text = if (usedRoot) "ROOT 实测" else "/proc 直读"
+        sourceBadge.text = if (usedRoot) Lang.t("ROOT 实测") else Lang.t("/proc 直读")
 
         // 各核心实时占用条
         coreBarsRow.removeAllViews()
@@ -553,7 +554,7 @@ class ProcessManagerPage(
 
         if (apps.isEmpty()) {
             listContainer.addView(TextView(activity).apply {
-                text = "暂无数据"
+                text = Lang.t("暂无数据")
                 textSize = 14f
                 gravity = Gravity.CENTER
                 setTextColor(Ui.secondaryText(activity))
@@ -716,16 +717,16 @@ class ProcessManagerPage(
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
         if (app.isOwnApp) {
-            tagContainer.addView(buildTag("本应用", Ui.buttonPrimary(activity), d))
+            tagContainer.addView(buildTag(Lang.t("本应用"), Ui.buttonPrimary(activity), d))
         } else if (app.isSystemApp) {
-            tagContainer.addView(buildTag("系统", Ui.secondaryText(activity), d, true))
+            tagContainer.addView(buildTag(Lang.t("系统"), Ui.secondaryText(activity), d, true))
         }
         if (app.isRunning) {
-            tagContainer.addView(buildTag("运行中", Ui.buttonSuccess(activity), d).apply {
+            tagContainer.addView(buildTag(Lang.t("运行中"), Ui.buttonSuccess(activity), d).apply {
                 (layoutParams as? LinearLayout.LayoutParams)?.marginStart = Ui.dp(4, d)
             })
         } else if (app.hasRunningService) {
-            tagContainer.addView(buildTag("服务中", Ui.buttonWarning(activity), d).apply {
+            tagContainer.addView(buildTag(Lang.t("服务中"), Ui.buttonWarning(activity), d).apply {
                 (layoutParams as? LinearLayout.LayoutParams)?.marginStart = Ui.dp(4, d)
             })
         }
@@ -734,7 +735,7 @@ class ProcessManagerPage(
             val isForeground = app.packageName == foregroundPackage
             tagContainer.addView(
                 buildTag(
-                    if (isForeground) "前台" else "后台",
+                    if (isForeground) Lang.t("前台") else Lang.t("后台"),
                     if (isForeground) Ui.buttonPrimary(activity) else Ui.buttonSuccess(activity),
                     d,
                 ).apply {
@@ -758,7 +759,7 @@ class ProcessManagerPage(
 
         // 详细信息按钮
         row2.addView(TextView(activity).apply {
-            text = "详情"
+            text = Lang.t("详情")
             textSize = 10f
             gravity = Gravity.CENTER
             setTextColor(Ui.secondaryText(activity))
@@ -774,7 +775,7 @@ class ProcessManagerPage(
         // 强制停止按钮（非本应用才显示）
         if (!app.isOwnApp) {
             row2.addView(TextView(activity).apply {
-                text = "结束"
+                text = Lang.t("结束")
                 textSize = 10f
                 gravity = Gravity.CENTER
                 setTextColor(Ui.buttonText(activity))
@@ -840,15 +841,15 @@ class ProcessManagerPage(
 
         // 详细数据（均为 /proc 实时采样）
         val details = listOf(
-            "运行状态" to if (app.isRunning) "正在运行" else if (app.hasRunningService) "服务运行中" else "未运行",
+            Lang.t("运行状态") to if (app.isRunning) Lang.t("正在运行") else if (app.hasRunningService) Lang.t("服务运行中") else Lang.t("未运行"),
             "进程数" to "${app.processCount} 个",
-            "实时 CPU 占用" to ProcessScanner.formatCpu(app.cpuPercent),
-            "累计 CPU 时间" to ProcessScanner.formatCpuTime(app.cpuTimeJiffies),
-            "耗电占比" to ProcessScanner.formatPower(app.powerSharePercent),
-            "内存占用" to ProcessScanner.formatMemory(app.memoryKb),
-            "前台运行" to ProcessScanner.formatForegroundTime(app.foregroundTimeMs),
-            "最后使用" to ProcessScanner.formatLastUsed(app.lastUsedTime),
-            "应用类型" to if (app.isSystemApp) "系统应用" else "用户应用",
+            Lang.t("实时 CPU 占用") to ProcessScanner.formatCpu(app.cpuPercent),
+            Lang.t("累计 CPU 时间") to ProcessScanner.formatCpuTime(app.cpuTimeJiffies),
+            Lang.t("耗电占比") to ProcessScanner.formatPower(app.powerSharePercent),
+            Lang.t("内存占用") to ProcessScanner.formatMemory(app.memoryKb),
+            Lang.t("前台运行") to ProcessScanner.formatForegroundTime(app.foregroundTimeMs),
+            Lang.t("最后使用") to ProcessScanner.formatLastUsed(app.lastUsedTime),
+            Lang.t("应用类型") to if (app.isSystemApp) Lang.t("系统应用") else Lang.t("用户应用"),
         )
 
         for ((label, value) in details) {
@@ -873,7 +874,7 @@ class ProcessManagerPage(
 
         val builder = AlertDialog.Builder(activity)
             .setView(view)
-            .setNegativeButton("关闭", null)
+            .setNegativeButton(Lang.t("关闭"), null)
 
         if (!app.isOwnApp) {
             builder.setPositiveButton("强制停止") { _, _ ->
@@ -896,7 +897,7 @@ class ProcessManagerPage(
     // ===== 结束进程确认 =====
     private fun showKillConfirm(app: AppProcessInfo) {
         AlertDialog.Builder(activity)
-            .setTitle("强制停止应用")
+            .setTitle(Lang.t("强制停止应用"))
             .setMessage(
                 "确定要强制停止「${app.appLabel}」吗？\n\n" +
                     "包名: ${app.packageName}\n" +
@@ -904,16 +905,16 @@ class ProcessManagerPage(
                     "实时 CPU: ${ProcessScanner.formatCpu(app.cpuPercent)}\n" +
                     "累计 CPU: ${ProcessScanner.formatCpuTime(app.cpuTimeJiffies)}\n" +
                     "内存: ${ProcessScanner.formatMemory(app.memoryKb)}\n\n" +
-                    "强制停止后，该应用的所有服务和后台进程将被终止。"
+                    Lang.t("强制停止后，该应用的所有服务和后台进程将被终止。")
             )
             .setPositiveButton("强制停止") { _, _ -> killApp(app) }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(Lang.t("取消"), null)
             .show()
     }
 
     private fun killApp(app: AppProcessInfo) {
         val loading = AlertDialog.Builder(activity)
-            .setTitle("正在停止")
+            .setTitle(Lang.t("正在停止"))
             .setMessage("正在停止 ${app.appLabel}...")
             .setCancelable(false)
             .show()
@@ -927,21 +928,21 @@ class ProcessManagerPage(
 
                 if (success) {
                     AlertDialog.Builder(activity)
-                        .setTitle("操作成功")
+                        .setTitle(Lang.t("操作成功"))
                         .setMessage("「${app.appLabel}」已强制停止。")
                         .setPositiveButton("确定") { _, _ -> loadData() }
                         .show()
                 } else {
                     val hasRoot = runCatching { RootShell.available() }.getOrDefault(false)
                     val msg = if (!hasRoot) {
-                        "操作失败，需要 ROOT 权限才能强制停止应用。"
+                        Lang.t("操作失败，需要 ROOT 权限才能强制停止应用。")
                     } else {
-                        "操作失败，该应用可能无法被终止或已自动重启。"
+                        Lang.t("操作失败，该应用可能无法被终止或已自动重启。")
                     }
                     AlertDialog.Builder(activity)
-                        .setTitle("操作失败")
+                        .setTitle(Lang.t("操作失败"))
                         .setMessage(msg)
-                        .setPositiveButton("确定", null)
+                        .setPositiveButton(Lang.t("确定"), null)
                         .show()
                 }
             }

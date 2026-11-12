@@ -16,6 +16,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import com.mcai.ubuntudsu.Lang
 
 /**
  * 顶部灵动岛（摄像头区域）。
@@ -88,7 +89,7 @@ class DynamicIsland(
         collapsed.addView(ring)
 
         labelText = TextView(activity).apply {
-            text = "下载中"
+            text = Lang.t("下载中")
             textSize = 12f
             setTextColor(Color.WHITE)
             setTypeface(typeface, Typeface.BOLD)
@@ -118,7 +119,7 @@ class DynamicIsland(
             setPadding(Ui.dp(16, d), 0, Ui.dp(16, d), Ui.dp(14, d))
         }
         titleText = TextView(activity).apply {
-            text = "下载中"
+            text = Lang.t("下载中")
             textSize = 15f
             setTextColor(Color.WHITE)
             setTypeface(typeface, Typeface.BOLD)
@@ -154,7 +155,7 @@ class DynamicIsland(
         expandBox.addView(statusText)
 
         actionBtn = TextView(activity).apply {
-            text = "取消"
+            text = Lang.t("取消")
             textSize = 12f
             gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)

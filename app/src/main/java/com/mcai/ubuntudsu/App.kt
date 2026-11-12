@@ -7,6 +7,8 @@ import com.mcai.ubuntudsu.core.RomCache
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
+        // v2.0.38：语言状态在冷启动时恢复（跟随系统 / 手动固定）
+        Lang.init(this)
         // 后台预热 ROM 缓存：进「ROM固件」页时直接命中内存，不必等网络
         runCatching { RomCache.warmUp(this) }
         // 手机重启后内核模块是空的（Android 没有 init.d，gunyah-host-share 不会自己回来），

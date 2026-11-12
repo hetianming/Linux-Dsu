@@ -17,6 +17,7 @@ import com.mcai.ubuntudsu.ui.Ui
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import com.mcai.ubuntudsu.Lang
 
 class HomePage(
     private val activity: MainActivity,
@@ -103,7 +104,7 @@ class HomePage(
             setPadding(0, 0, 0, Ui.dp(10, d))
         }
         titleRow.addView(TextView(activity).apply {
-            text = "首页"
+            text = Lang.t("首页")
             textSize = 24f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
@@ -154,7 +155,7 @@ class HomePage(
         }
         val head = content.lineSequence().take(6).joinToString("\n")
         card.addView(TextView(activity).apply {
-            text = "上次异常退出"
+            text = Lang.t("上次异常退出")
             textSize = 14f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(android.graphics.Color.parseColor("#EF454A"))
@@ -167,7 +168,7 @@ class HomePage(
         })
         val buttons = LinearLayout(activity)
         buttons.addView(TextView(activity).apply {
-            text = "复制完整日志"
+            text = Lang.t("复制完整日志")
             textSize = 12f
             gravity = Gravity.CENTER
             setTextColor(Ui.buttonText(activity))
@@ -177,11 +178,11 @@ class HomePage(
             setOnClickListener {
                 val clipboard = activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("crash", content))
-                android.widget.Toast.makeText(activity, "已复制崩溃日志", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(activity, Lang.t("已复制崩溃日志"), android.widget.Toast.LENGTH_SHORT).show()
             }
         })
         buttons.addView(TextView(activity).apply {
-            text = "清除"
+            text = Lang.t("清除")
             textSize = 12f
             gravity = Gravity.CENTER
             setTextColor(Ui.buttonText(activity))
@@ -217,7 +218,7 @@ class HomePage(
             setPadding(0, 0, 0, Ui.dp(6, d))
         }
         head.addView(TextView(activity).apply {
-            text = "实时状态"
+            text = Lang.t("实时状态")
             textSize = 14f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
@@ -254,7 +255,7 @@ class HomePage(
         card.addView(gauges)
 
         // 存储 / 内存：横向进度条
-        val storageRow = metricBar("存储", Ui.buttonPrimary(activity))
+        val storageRow = metricBar(Lang.t("存储"), Ui.buttonPrimary(activity))
         storageValue = storageRow.value
         storageDetail = storageRow.detail
         storageBar = storageRow.bar
@@ -262,7 +263,7 @@ class HomePage(
             storageRow.root,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
         )
-        val memoryRow = metricBar("内存", Ui.buttonWarning(activity))
+        val memoryRow = metricBar(Lang.t("内存"), Ui.buttonWarning(activity))
         memoryValue = memoryRow.value
         memoryDetail = memoryRow.detail
         memoryBar = memoryRow.bar
@@ -332,7 +333,7 @@ class HomePage(
             )
         }
         card.addView(TextView(activity).apply {
-            text = "运行环境"
+            text = Lang.t("运行环境")
             textSize = 14f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
@@ -349,7 +350,7 @@ class HomePage(
         rootLabel = rootLine.value
         card.addView(rootLine.row)
 
-        val gsiLine = statusLine("GSI 系统")
+        val gsiLine = statusLine(Lang.t("GSI 系统"))
         gsiDot = gsiLine.dot
         gsiText = gsiLine.value
         card.addView(gsiLine.row)
@@ -359,7 +360,7 @@ class HomePage(
         ubuntuText = ubuntuLine.value
         card.addView(ubuntuLine.row)
 
-        val desktopLine = statusLine("桌面环境")
+        val desktopLine = statusLine(Lang.t("桌面环境"))
         desktopDot = desktopLine.dot
         desktopText = desktopLine.value
         card.addView(desktopLine.row)
@@ -383,7 +384,7 @@ class HomePage(
             }
         }
         val value = TextView(activity).apply {
-            text = "检测中…"
+            text = Lang.t("检测中…")
             textSize = 12f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             gravity = Gravity.END
@@ -497,7 +498,7 @@ class HomePage(
                     }
                     tempStatePill?.let { pill ->
                         val hot = battery.temp != null && battery.temp > 40.0
-                        pill.text = if (hot) "过热" else "正常"
+                        pill.text = if (hot) Lang.t("过热") else Lang.t("正常")
                         pill.background = Ui.rounded(
                             if (hot) Color.argb(235, 226, 68, 56) else Color.argb(235, 46, 170, 108),
                             9f,
@@ -573,7 +574,7 @@ class HomePage(
     private fun detailMetric(title: String, color: Int): Triple<TextView, TextView, View> {
         val d = activity.resources.displayMetrics.density
         val valueView = TextView(activity).apply {
-            text = "读取中..."
+            text = Lang.t("读取中...")
             textSize = 15f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
@@ -849,10 +850,10 @@ class HomePage(
         if (released || activity.isFinishing || activity.isDestroyed) return
         statusGeneration.incrementAndGet()
         val grayText = Ui.secondaryText(activity)
-        gsiText.text = "检测中…"; gsiText.setTextColor(grayText)
-        ubuntuText.text = "检测中…"; ubuntuText.setTextColor(grayText)
-        desktopText.text = "检测中…"; desktopText.setTextColor(grayText)
-        rootLabel.text = "检测中…"; rootLabel.setTextColor(grayText)
+        gsiText.text = Lang.t("检测中…"); gsiText.setTextColor(grayText)
+        ubuntuText.text = Lang.t("检测中…"); ubuntuText.setTextColor(grayText)
+        desktopText.text = Lang.t("检测中…"); desktopText.setTextColor(grayText)
+        rootLabel.text = Lang.t("检测中…"); rootLabel.setTextColor(grayText)
         fun grayDot(view: View) {
             view.background = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.OVAL
@@ -911,11 +912,11 @@ class HomePage(
                                     else -> idleColor
                                 },
                             )
-                            ubuntuText.text = if (linuxInstalled) "已安装" else "未安装"
+                            ubuntuText.text = if (linuxInstalled) Lang.t("已安装") else Lang.t("未安装")
                             ubuntuText.setTextColor(if (linuxInstalled) okColor else idleColor)
                             desktopText.text = desktopLabel
                             desktopText.setTextColor(if (hasDesktop) okColor else idleColor)
-                            rootLabel.text = if (rootOk) "已授权" else "未授权"
+                            rootLabel.text = if (rootOk) Lang.t("已授权") else Lang.t("未授权")
                             rootLabel.setTextColor(if (rootOk) okColor else idleColor)
                             rootDot.background = dotColor(if (rootOk) "#3DDC84" else "#FF756F")
                             // GSI 点：运行/安装/启用=绿，停用=琥珀，未安装/未知=灰
@@ -1021,7 +1022,7 @@ class HomePage(
         }
         leftCol.addView(batteryIcon)
         chargeStateText = TextView(activity).apply {
-            text = "读取中"
+            text = Lang.t("读取中")
             textSize = 9f
             setTextColor(Color.argb(225, 255, 255, 255))
             gravity = Gravity.CENTER
@@ -1052,7 +1053,7 @@ class HomePage(
         tempRow.addView(tempValueText)
         rightCol.addView(tempRow)
         tempStatePill = TextView(activity).apply {
-            text = "正常"
+            text = Lang.t("正常")
             textSize = 9f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Color.WHITE)
@@ -1094,7 +1095,7 @@ class HomePage(
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
         heroSubtitle = TextView(activity).apply {
-            text = "口袋里的 Linux 工作站 · 天明研发版"
+            text = Lang.t("口袋里的 Linux 工作站 · 天明研发版")
             textSize = 11f
             setPadding(0, Ui.dp(2, d), 0, 0)
         }
@@ -1104,7 +1105,7 @@ class HomePage(
 
         // 右下「更换背景」玻璃胶囊：唤起系统图片选择器
         val chip = TextView(activity).apply {
-            text = "更换背景（视频/图）"
+            text = Lang.t("更换背景（视频/图）")
             textSize = 11f
             gravity = Gravity.CENTER
             setPadding(Ui.dp(12, d), Ui.dp(6, d), Ui.dp(12, d), Ui.dp(6, d))
@@ -1126,9 +1127,9 @@ class HomePage(
             val uimg = Env.background(activity)
             if (uv.exists() || uimg.exists()) {
                 resetHeroBackground()
-                Toast.makeText(activity, "已恢复默认动态背景", Toast.LENGTH_SHORT).show()
+                Toast.makeText(activity, Lang.t("已恢复默认动态背景"), Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(activity, "当前已是默认动态背景", Toast.LENGTH_SHORT).show()
+                Toast.makeText(activity, Lang.t("当前已是默认动态背景"), Toast.LENGTH_SHORT).show()
             }
             true
         }
@@ -1263,7 +1264,7 @@ class HomePage(
             }.getOrDefault(false)
             activity.runOnUiThread {
                 if (!copied) {
-                    Toast.makeText(activity, "背景读取失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(activity, Lang.t("背景读取失败"), Toast.LENGTH_SHORT).show()
                     return@runOnUiThread
                 }
                 if (isVideo) {
@@ -1283,7 +1284,7 @@ class HomePage(
                         heroScrim?.visibility = View.VISIBLE
                         applyHeroTextColors(true)
                     } else {
-                        Toast.makeText(activity, "图片读取失败", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(activity, Lang.t("图片读取失败"), Toast.LENGTH_SHORT).show()
                     }
                 }
             }

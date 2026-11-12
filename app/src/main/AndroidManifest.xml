@@ -86,13 +86,6 @@
         <activity android:name=".PayloadOnlineActivity"
             android:exported="false"
             android:theme="@style/Theme.App" />
-        <activity android:name=".TvActivity"
-            android:exported="false"
-            android:theme="@style/Theme.App" />
-        <activity android:name=".TvPlayerActivity"
-            android:exported="false"
-            android:theme="@style/Theme.App.Terminal"
-            android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".GunyahVMActivity"
             android:exported="false"
             android:theme="@style/Theme.App.Gunyah"

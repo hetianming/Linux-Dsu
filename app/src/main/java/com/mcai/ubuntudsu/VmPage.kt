@@ -9,6 +9,9 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -26,7 +29,7 @@ import kotlin.concurrent.thread
  *
  * 由 [GunyahVMActivity] 逐行抽出（UI / 状态刷新 / 3s 轮询 / 启动停止动作全部原样保留，
  * 仅把 Activity 上下文 `this` 换成宿主 [act]），使同一套界面能同时用于两处：
- *  1. [MainActivity] 底部第 3 格「VMiOS」——内嵌 tab 页，能停留 / 横滑，点或滑到就用（showBack=false）
+ *  1. [MainActivity] 底部第 3 格「TmVM」——内嵌 tab 页，能停留 / 横滑，点或滑到就用（showBack=false）
  *  2. [GunyahVMActivity] 独立薄壳——供子页面 saveAndGoHome()/返回栈使用（showBack=true）
  *
  * 边界：GunyahManager / 启动脚本 / 子页面 / crosvm / 启动盘一律未动。
@@ -51,9 +54,13 @@ class VmPage(private val act: AppCompatActivity, private val showBack: Boolean) 
     /** 上次点「启动」的时间：挡住连点/双击造成的两份启动脚本 */
     private var lastStartAt = 0L
 
-    /** 启动方式 chip（PCI / MMIO），onResume 时按磁盘配置重绘 */
-    private var chipPci: TextView? = null
-    private var chipMmio: TextView? = null
+    /** 启动方式两行（PCI / MMIO），onResume 时按磁盘配置重绘 */
+    private var rowPci: LinearLayout? = null
+    private var rowMmio: LinearLayout? = null
+    private var labelPci: TextView? = null
+    private var labelMmio: TextView? = null
+    private var dotPci: View? = null
+    private var dotMmio: View? = null
 
     /** 构建并返回整页根 View。宿主负责 setContentView 或塞进 tab 页容器（不再自己 setContentView）。 */
     fun build(): View {
@@ -87,16 +94,16 @@ class VmPage(private val act: AppCompatActivity, private val showBack: Boolean) 
             setPadding(GunTheme.dp(14, d), GunTheme.dp(2, d), GunTheme.dp(14, d), GunTheme.dp(12, d))
         }
         buildEnvCard(content)
-        cardToolchain = entryCard(content, "🔗", "① 工具链", "crosvm · edk2 固件 · libc++ · 内核模块包") {
+        cardToolchain = entryCard(content, "🔗", Lang.t("① 工具链"), Lang.t("crosvm · edk2 固件 · libc++ · 内核模块包")) {
             open(GunyahToolchainActivity::class.java)
         }
-        cardConfig = entryCard(content, "⚙", "② 启动配置", "内存 / CPU / 保护模式 / GPU / VNC") {
+        cardConfig = entryCard(content, "⚙", Lang.t("② 启动配置"), Lang.t("内存 / CPU / 保护模式 / GPU / VNC")) {
             open(GunyahBootConfigActivity::class.java)
         }
-        cardImage = entryCard(content, "💾", "③ 镜像映射", "启动盘 / 光盘 / 系统盘 / 数据盘 · raw / qcow2 可写挂载") {
+        cardImage = entryCard(content, "💾", Lang.t("③ 镜像映射"), Lang.t("启动盘 / 光盘 / 系统盘 / 数据盘 · raw / qcow2 可写挂载")) {
             open(GunyahImageActivity::class.java)
         }
-        cardModule = entryCard(content, "🧩", "④ 内核模块", "大页内存模块（开机预留 2MB 大页池）") {
+        cardModule = entryCard(content, "🧩", Lang.t("④ 内核模块"), Lang.t("大页内存模块（开机预留 2MB 大页池）")) {
             open(GunyahModuleActivity::class.java)
         }
         scroll.addView(content)
@@ -112,35 +119,21 @@ class VmPage(private val act: AppCompatActivity, private val showBack: Boolean) 
                 setMargins(GunTheme.dp(14, d), GunTheme.dp(2, d), GunTheme.dp(14, d), GunTheme.dp(10, d))
             }
         }
-        // 上排：启动方式标签 + 两个严格等大的模式 chip
+        // 启动方式：两个模式各占独立一行，每行左 LOGO + 中模式名 + 右选中圆点（互斥，paintMode 绘选中态）
         // PCI 走已调通的 virtio-pci（Windows / Debian），MMIO 走 virtio-mmio（macOS / XNU）
-        val modeBar = LinearLayout(act).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+        val modeSec = LinearLayout(act).apply {
+            orientation = LinearLayout.VERTICAL
         }
-        modeBar.addView(TextView(act).apply {
-            text = "启动方式"; textSize = 9f; setTypeface(null, Typeface.BOLD)
+        modeSec.addView(TextView(act).apply {
+            text = Lang.t("启动方式"); textSize = 9f; setTypeface(null, Typeface.BOLD)
             setTextColor(GunTheme.MUTED)
-            setPadding(0, 0, GunTheme.dp(6, d), 0)
+            setPadding(0, 0, 0, GunTheme.dp(6, d))
         })
-        val pChip = modeChip("PCI · Win/Debian")
-        val mChip = modeChip("MMIO · macOS/XNU")
-        chipPci = pChip
-        chipMmio = mChip
-        pChip.setOnClickListener {
-            GunyahManager.setMmio(act, false)
-            paintMode()
-            Toast.makeText(act, "启动方式：PCI（Windows / Debian）", Toast.LENGTH_SHORT).show()
-        }
-        mChip.setOnClickListener {
-            GunyahManager.setMmio(act, true)
-            paintMode()
-            Toast.makeText(act, "启动方式：MMIO（macOS / XNU）", Toast.LENGTH_SHORT).show()
-        }
-        modeBar.addView(pChip)
-        modeBar.addView(dockSpace())
-        modeBar.addView(mChip)
-        opCard.addView(modeBar)
+        rowPci = modeRow(false)
+        rowMmio = modeRow(true)
+        modeSec.addView(rowPci)
+        modeSec.addView(rowMmio)
+        opCard.addView(modeSec)
         // 细分隔线
         opCard.addView(View(act).apply {
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, maxOf(1, GunTheme.dp(1, d))).apply {
@@ -153,13 +146,13 @@ class VmPage(private val act: AppCompatActivity, private val showBack: Boolean) 
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        dock.addView(dockButton("启动", primary = true) { doStart() })
+        dock.addView(dockButton(Lang.t("启动"), primary = true) { doStart() })
         dock.addView(dockSpace())
-        dock.addView(dockButton("停止") { doStop() })
+        dock.addView(dockButton(Lang.t("停止")) { doStop() })
         dock.addView(dockSpace())
-        dock.addView(dockButton("显示器") { openDisplay() })
+        dock.addView(dockButton(Lang.t("显示器")) { openDisplay() })
         dock.addView(dockSpace())
-        dock.addView(dockButton("日志") { showLog() })
+        dock.addView(dockButton(Lang.t("日志")) { showLog() })
         opCard.addView(dock)
         root.addView(opCard)
         paintMode()
@@ -194,36 +187,79 @@ class VmPage(private val act: AppCompatActivity, private val showBack: Boolean) 
             GunTheme.pressAnimation(this)
         }
 
-    /** 按磁盘上的真实配置重绘启动方式 chip，避免界面状态与配置脱节。 */
+    /** 按磁盘上的真实配置重绘启动方式两行，避免界面状态与配置脱节。 */
     private fun paintMode() {
         val mmio = GunyahManager.loadConfig(act).mmio
-        chipPci?.apply {
-            setTextColor(if (mmio) GunTheme.TEXT2 else GunTheme.ON_ACCENT)
-            background =
-                if (mmio) GunTheme.iconTile(d, GunTheme.CHIP, 15f) else GunTheme.primaryButton(d)
-        }
-        chipMmio?.apply {
-            setTextColor(if (mmio) GunTheme.ON_ACCENT else GunTheme.TEXT2)
-            background =
-                if (mmio) GunTheme.primaryButton(d) else GunTheme.iconTile(d, GunTheme.CHIP, 15f)
-        }
+        applyModeState(rowPci, labelPci, dotPci, !mmio)
+        applyModeState(rowMmio, labelMmio, dotMmio, mmio)
     }
 
     /**
-     * 启动方式选择 chip（PCI / MMIO 互斥，选中态由 paintMode 绘制）。
-     * v2.0.31：宽度 weight=1f 等分、高度固定 34dp —— 两个 chip 像素级同尺寸，
-     * 不再因文字长短 / WRAP_CONTENT 出现一大一小。文字单行居中，过长尾部省略。
+     * 启动方式独立行（PCI / MMIO 互斥）。
+     * 左 LOGO（透明底直接显示，不包裹）+ 中模式名 + 右选中圆点；选中态由 [applyModeState] 绘制。
+     * 点击切换 setMmio 并重绘，逻辑与旧 chip 完全一致，仅展示形态从「一行两 chip」改为「两行各自一行」。
      */
-    private fun modeChip(text: String): TextView = TextView(act).apply {
-        this.text = text
-        textSize = 10.5f
-        setTypeface(null, Typeface.BOLD)
-        maxLines = 1
-        ellipsize = TextUtils.TruncateAt.END
-        gravity = Gravity.CENTER
-        setPadding(GunTheme.dp(4, d), GunTheme.dp(8, d), GunTheme.dp(4, d), GunTheme.dp(8, d))
-        layoutParams = LinearLayout.LayoutParams(0, GunTheme.dp(34, d), 1f)
-        GunTheme.pressAnimation(this)
+    private fun modeRow(isMmio: Boolean): LinearLayout {
+        val iconRes = if (isMmio) R.drawable.mode_mmio else R.drawable.mode_pci
+        val label = if (isMmio) Lang.t("MMIO · macOS/XNU") else Lang.t("PCI · Win/Debian")
+        val row = LinearLayout(act).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(GunTheme.dp(10, d), GunTheme.dp(10, d), GunTheme.dp(10, d), GunTheme.dp(10, d))
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+                topMargin = GunTheme.dp(6, d)
+            }
+            setOnClickListener {
+                GunyahManager.setMmio(act, isMmio)
+                paintMode()
+                Toast.makeText(act,
+                    Lang.t(if (isMmio) "启动方式：MMIO（macOS / XNU）" else "启动方式：PCI（Windows / Debian）"),
+                    Toast.LENGTH_SHORT).show()
+            }
+            GunTheme.pressAnimation(this)
+        }
+        // 左：LOGO（透明底，直接显示，不包裹）
+        row.addView(ImageView(act).apply {
+            setImageResource(iconRes)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            layoutParams = LinearLayout.LayoutParams(GunTheme.dp(34, d), GunTheme.dp(34, d)).apply {
+                marginEnd = GunTheme.dp(10, d)
+            }
+        })
+        // 中：模式名（占满剩余宽度）
+        row.addView(TextView(act).apply {
+            text = label
+            textSize = 13f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(GunTheme.TEXT2)
+            layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
+        }.also { if (isMmio) labelMmio = it else labelPci = it })
+        // 右：选中圆点（● 实心 / ○ 空心，由 applyModeState 切换）
+        row.addView(View(act).apply {
+            val s = GunTheme.dp(12, d)
+            layoutParams = LinearLayout.LayoutParams(s, s)
+        }.also { if (isMmio) dotMmio = it else dotPci = it })
+        return row
+    }
+
+    /** 选中圆点 drawable：选中=实心强调色，未选=空心描边。 */
+    private fun dotDrawable(selected: Boolean): Drawable = GradientDrawable().apply {
+        shape = GradientDrawable.OVAL
+        if (selected) setColor(GunTheme.ON_ACCENT)
+        else {
+            setColor(0x00000000)
+            setStroke((1.5f * d).toInt().coerceAtLeast(1), GunTheme.MUTED)
+        }
+    }
+
+    /** 给某一行套用选中/未选视觉：整行背景 + 文字色 + 圆点。 */
+    private fun applyModeState(row: LinearLayout?, label: TextView?, dot: View?, selected: Boolean) {
+        if (row == null) return
+        // 未选中：主题透明底（透出 opCard 玻璃），不再用实心浅色块；选中：蓝渐变。
+        row.background = if (selected) GunTheme.primaryButton(d)
+        else android.graphics.drawable.ColorDrawable(0x00000000)
+        label?.setTextColor(if (selected) GunTheme.ON_ACCENT else GunTheme.TEXT2)
+        dot?.background = dotDrawable(selected)
     }
 
     private fun <T : AppCompatActivity> open(cls: Class<T>) {
@@ -323,12 +359,12 @@ class VmPage(private val act: AppCompatActivity, private val showBack: Boolean) 
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, 0, 0, GunTheme.dp(6, d))
             addView(TextView(act).apply {
-                text = "虚拟机环境检测"; textSize = 12.5f; setTypeface(null, Typeface.BOLD)
+                text = Lang.t("虚拟机环境检测"); textSize = 12.5f; setTypeface(null, Typeface.BOLD)
                 setTextColor(GunTheme.TEXT)
                 layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
             })
             addView(TextView(act).apply {
-                text = "6 项"; textSize = 9f; setTypeface(null, Typeface.BOLD)
+                text = Lang.t("6 项"); textSize = 9f; setTypeface(null, Typeface.BOLD)
                 setTextColor(GunTheme.TEXT2)
                 gravity = Gravity.CENTER
                 background = GunTheme.pill(d, GunTheme.CARD_ALT)
@@ -343,16 +379,16 @@ class VmPage(private val act: AppCompatActivity, private val showBack: Boolean) 
         val row2 = LinearLayout(act).apply {
             orientation = LinearLayout.HORIZONTAL; setBaselineAligned(false)
         }
-        envKernel = envCell(row1, "内核版本")
+        envKernel = envCell(row1, Lang.t("内核版本"))
         gridVLine(row1, divColor)
-        envSoc = envCell(row1, "处理器")
+        envSoc = envCell(row1, Lang.t("处理器"))
         gridVLine(row1, divColor)
-        envMem = envCell(row1, "物理内存")
-        envGunyah = envCell(row2, "gunyah 设备")
+        envMem = envCell(row1, Lang.t("物理内存"))
+        envGunyah = envCell(row2, Lang.t("gunyah 设备"))
         gridVLine(row2, divColor)
-        envModules = envCell(row2, "内核模块")
+        envModules = envCell(row2, Lang.t("内核模块"))
         gridVLine(row2, divColor)
-        envVm = envCell(row2, "虚拟机")
+        envVm = envCell(row2, Lang.t("虚拟机"))
         grid.addView(row1)
         grid.addView(View(act).apply {
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, maxOf(1, GunTheme.dp(1, d)))
@@ -384,7 +420,7 @@ class VmPage(private val act: AppCompatActivity, private val showBack: Boolean) 
             ellipsize = TextUtils.TruncateAt.END
         })
         val v = TextView(act).apply {
-            text = "检测中…"; textSize = 10.5f; setTypeface(null, Typeface.BOLD)
+            text = Lang.t("检测中…"); textSize = 10.5f; setTypeface(null, Typeface.BOLD)
             setTextColor(GunTheme.TEXT)
             setPadding(0, GunTheme.dp(1, d), 0, 0)
             maxLines = 1
@@ -417,7 +453,7 @@ class VmPage(private val act: AppCompatActivity, private val showBack: Boolean) 
         thread {
             val ok = GunyahManager.gunyahDevReady()
             act.runOnUiThread {
-                setEnv(envGunyah, if (ok) "可用 ✓" else "未检测到 ✗",
+                setEnv(envGunyah, if (ok) Lang.t("可用 ✓") else Lang.t("未检测到 ✗"),
                     if (ok) GunTheme.ACCENT else GunTheme.DANGER)
             }
         }
@@ -459,26 +495,26 @@ class VmPage(private val act: AppCompatActivity, private val showBack: Boolean) 
         thread {
             val log = File(GunyahManager.privateDir(act), "boot.log")
             val text = if (log.exists()) BootLog.readClean(log).takeLast(8000)
-            else "暂无日志（先启动一次虚拟机）"
+            else Lang.t("暂无日志（先启动一次虚拟机）")
             act.runOnUiThread {
                 val dlg = AlertDialog.Builder(act)
-                    .setTitle("启动日志 boot.log")
+                    .setTitle(Lang.t("启动日志 boot.log"))
                     .setMessage(text)
-                    .setPositiveButton("关闭", null)
+                    .setPositiveButton(Lang.t("关闭"), null)
                     .setNegativeButton("复制") { _, _ ->
                         runCatching {
                             val cm = act.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
                                     as android.content.ClipboardManager
                             cm.setPrimaryClip(android.content.ClipData.newPlainText("boot.log", text))
                         }
-                        Toast.makeText(act, "日志已复制，可直接粘贴发送", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(act, Lang.t("日志已复制，可直接粘贴发送"), Toast.LENGTH_SHORT).show()
                     }
                     .setNeutralButton("清空") { _, _ ->
                         runCatching {
                             log.writeText("")
                             log.parentFile?.let { File(it, BootLog.ROTATED_TAIL).delete() }
                         }
-                        Toast.makeText(act, "日志已清空", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(act, Lang.t("日志已清空"), Toast.LENGTH_SHORT).show()
                     }
                     .show()
                 Ui.styleDialog(act, dlg)
@@ -490,7 +526,7 @@ class VmPage(private val act: AppCompatActivity, private val showBack: Boolean) 
 
     private fun doStart() {
         if (!GunyahManager.isToolchainReady(act)) {
-            Toast.makeText(act, "请先在「工具链」页下载", Toast.LENGTH_SHORT).show()
+            Toast.makeText(act, Lang.t("请先在「工具链」页下载"), Toast.LENGTH_SHORT).show()
             open(GunyahToolchainActivity::class.java)
             return
         }
@@ -499,14 +535,14 @@ class VmPage(private val act: AppCompatActivity, private val showBack: Boolean) 
         // 表现就是虚拟机反复重启、VNC 端口开开关关（连上就是 Connection refused）。
         val now = System.currentTimeMillis()
         if (now - lastStartAt < 8000) {
-            Toast.makeText(act, "正在启动中，请稍候…（重复点击会互相打断启动）", Toast.LENGTH_SHORT).show()
+            Toast.makeText(act, Lang.t("正在启动中，请稍候…（重复点击会互相打断启动）"), Toast.LENGTH_SHORT).show()
             return
         }
         lastStartAt = now
         val cfg = GunyahManager.loadConfig(act)
         Toast.makeText(
             act,
-            if (cfg.mmio) "正在启动（MMIO / virtio-mmio）…" else "正在启动（PCI / virtio-pci）…",
+            if (cfg.mmio) Lang.t("正在启动（MMIO / virtio-mmio）…") else Lang.t("正在启动（PCI / virtio-pci）…"),
             Toast.LENGTH_SHORT
         ).show()
         thread {
@@ -517,10 +553,10 @@ class VmPage(private val act: AppCompatActivity, private val showBack: Boolean) 
             if (GunyahManager.isVmRunning() || st0.isBooting) {
                 act.runOnUiThread {
                     if (st0.isBooting) {
-                        Toast.makeText(act, "启动流程还在进行中，打开控制台看进度", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(act, Lang.t("启动流程还在进行中，打开控制台看进度"), Toast.LENGTH_SHORT).show()
                         act.startActivity(Intent(act, GunyahBootActivity::class.java))
                     } else {
-                        Toast.makeText(act, "虚拟机已在运行，如需重启用「停止」再启动", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(act, Lang.t("虚拟机已在运行，如需重启用「停止」再启动"), Toast.LENGTH_SHORT).show()
                     }
                 }
                 return@thread
@@ -592,7 +628,7 @@ class VmPage(private val act: AppCompatActivity, private val showBack: Boolean) 
                     when {
                         st.kind == "failed" -> {
                             vmMissCount = 0
-                            setEnv(envVm, "启动失败", GunTheme.DANGER)
+                            setEnv(envVm, Lang.t("启动失败"), GunTheme.DANGER)
                             val reason = st.reason
                             if (reason.isNotBlank() && reason != lastFailReason) {
                                 lastFailReason = reason
@@ -609,22 +645,22 @@ class VmPage(private val act: AppCompatActivity, private val showBack: Boolean) 
                         }
                         st.kind == "running" && running -> {
                             vmMissCount = 0
-                            setEnv(envVm, "crosvm 运行中", GunTheme.ACCENT)
+                            setEnv(envVm, Lang.t("crosvm 运行中"), GunTheme.ACCENT)
                         }
                         st.kind == "running" && !running -> {
                             // 状态说 running 但进程不见了：可能是刚崩、脚本还没写到失败，
                             // 连续 3 次（约 9 秒）都探不到才改显示「未运行」
                             vmMissCount++
-                            if (vmMissCount >= 3) setEnv(envVm, "未运行", GunTheme.TEXT2)
-                            else setEnv(envVm, "crosvm 运行中", GunTheme.ACCENT)
+                            if (vmMissCount >= 3) setEnv(envVm, Lang.t("未运行"), GunTheme.TEXT2)
+                            else setEnv(envVm, Lang.t("crosvm 运行中"), GunTheme.ACCENT)
                         }
                         running -> {
                             vmMissCount = 0
-                            setEnv(envVm, "crosvm 运行中", GunTheme.ACCENT)
+                            setEnv(envVm, Lang.t("crosvm 运行中"), GunTheme.ACCENT)
                         }
                         else -> {
                             vmMissCount = 0
-                            setEnv(envVm, "未运行", GunTheme.TEXT2)
+                            setEnv(envVm, Lang.t("未运行"), GunTheme.TEXT2)
                         }
                     }
                 }
@@ -640,7 +676,7 @@ class VmPage(private val act: AppCompatActivity, private val showBack: Boolean) 
             val ready = GunyahManager.isToolchainReady(act)
             act.runOnUiThread {
                 val tv = stateView(cardToolchain)
-                tv.text = if (ready) "已就绪" else "未下载"
+                tv.text = if (ready) Lang.t("已就绪") else Lang.t("未下载")
                 tv.setTextColor(if (ready) GunTheme.ON_ACCENT else GunTheme.ON_WARN)
                 tv.background = GunTheme.pill(d, if (ready) GunTheme.ACCENT else GunTheme.WARN)
             }

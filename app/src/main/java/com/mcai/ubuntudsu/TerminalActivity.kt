@@ -75,13 +75,13 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         TerminalSessionStore.setTarget(this)
-        title = "Linux - Dsu 终端"
+        title = Lang.t("Linux - Dsu 终端")
         window.statusBarColor = Color.BLACK
         window.navigationBarColor = Color.BLACK
         window.decorView.systemUiVisibility = window.decorView.systemUiVisibility and
             (View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR).inv()
         if (!Env.ubuntuInstalled(this)) {
-            Toast.makeText(this, "请先安装 Ubuntu rootfs，请回到主页 Linux 页签完成安装", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, Lang.t("请先安装 Ubuntu rootfs，请回到主页 Linux 页签完成安装"), Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -247,10 +247,10 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
             }
         }
         actionRow.addView(
-            actionPill("菜单", Color.rgb(96, 108, 134), Color.rgb(58, 68, 92)) { showTerminalMenu(it) },
+            actionPill(Lang.t("菜单"), Color.rgb(96, 108, 134), Color.rgb(58, 68, 92)) { showTerminalMenu(it) },
         )
-        actionRow.addView(actionPill("安装桌面", Color.rgb(200, 70, 70), Color.rgb(150, 45, 45)) { installVncDesktop() })
-        actionRow.addView(actionPill("启动桌面", Color.rgb(70, 165, 150), Color.rgb(45, 125, 110)) { startVnc() })
+        actionRow.addView(actionPill(Lang.t("安装桌面"), Color.rgb(200, 70, 70), Color.rgb(150, 45, 45)) { installVncDesktop() })
+        actionRow.addView(actionPill(Lang.t("启动桌面"), Color.rgb(70, 165, 150), Color.rgb(45, 125, 110)) { startVnc() })
         rows.addView(actionRow)
         // 分隔线：隔开功能排与按键排
         val divider = View(this).apply {
@@ -326,8 +326,8 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
     private fun installVncDesktop() {
         Ui.showGlassChoiceDialog(
             this,
-            "安装桌面环境",
-            "选择要安装的桌面，安装完成后即可启动 VNC",
+            Lang.t("安装桌面环境"),
+            Lang.t("选择要安装的桌面，安装完成后即可启动 VNC"),
             desktopOptions.map { it.name },
             onPick = { which -> installVncDesktop(desktopOptions[which]) },
         )
@@ -343,8 +343,8 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
     private fun startVnc() {
         Ui.showGlassChoiceDialog(
             this,
-            "启动 VNC 桌面",
-            "选择桌面环境",
+            Lang.t("启动 VNC 桌面"),
+            Lang.t("选择桌面环境"),
             desktopOptions.map { it.name },
             onPick = { which -> chooseVncResolution(desktopOptions[which]) },
         )
@@ -353,9 +353,9 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
     private fun chooseVncResolution(option: DesktopOption) {
         Ui.showGlassChoiceDialog(
             this,
-            "VNC 分辨率",
+            Lang.t("VNC 分辨率"),
             option.name,
-            listOf("竖屏：720x1584", "横屏：1584x720", "自定义分辨率"),
+            listOf(Lang.t("竖屏：720x1584"), Lang.t("横屏：1584x720"), Lang.t("自定义分辨率")),
             onPick = { which ->
                 when (which) {
                     0 -> startVnc(720, 1584, "portrait", option)
@@ -378,19 +378,19 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
             )
         }
         panel.addView(TextView(this).apply {
-            text = "自定义 VNC 分辨率"
+            text = Lang.t("自定义 VNC 分辨率")
             textSize = 15f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Ui.primaryText(this@TerminalActivity))
         })
         panel.addView(TextView(this).apply {
-            text = "输入宽度和高度（像素），如 1920 x 1080"
+            text = Lang.t("输入宽度和高度（像素），如 1920 x 1080")
             textSize = 11f
             setTextColor(Ui.secondaryText(this@TerminalActivity))
             setPadding(0, 0, 0, Ui.dp(8, density))
         })
         val widthInput = android.widget.EditText(this).apply {
-            hint = "宽度"
+            hint = Lang.t("宽度")
             textSize = 14f
             setTextColor(Ui.primaryText(this@TerminalActivity))
             setHintTextColor(Ui.secondaryText(this@TerminalActivity))
@@ -404,7 +404,7 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
             android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { bottomMargin = Ui.dp(8, density) })
         val heightInput = android.widget.EditText(this).apply {
-            hint = "高度"
+            hint = Lang.t("高度")
             textSize = 14f
             setTextColor(Ui.primaryText(this@TerminalActivity))
             setHintTextColor(Ui.secondaryText(this@TerminalActivity))
@@ -421,7 +421,7 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
             setCanceledOnTouchOutside(true)
         }
         val okBtn = TextView(this).apply {
-            text = "确定"
+            text = Lang.t("确定")
             textSize = 13f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             gravity = android.view.Gravity.CENTER
@@ -434,7 +434,7 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
                 val w = widthInput.text.toString().toIntOrNull() ?: 0
                 val h = heightInput.text.toString().toIntOrNull() ?: 0
                 if (w < 320 || h < 200 || w > 3840 || h > 2160) {
-                    android.widget.Toast.makeText(this@TerminalActivity, "分辨率范围 320x200 ~ 3840x2160", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(this@TerminalActivity, Lang.t("分辨率范围 320x200 ~ 3840x2160"), android.widget.Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
                 dialog.dismiss()
@@ -447,7 +447,7 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
             android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { topMargin = Ui.dp(10, density) })
         val cancelBtn = TextView(this).apply {
-            text = "取消"
+            text = Lang.t("取消")
             textSize = 12f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             gravity = android.view.Gravity.CENTER
@@ -490,7 +490,7 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
             }
             runOnUiThread {
                  if (!ready) {
-                    Toast.makeText(this, "VNC 服务未监听 5901 端口，请查看终端错误信息", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, Lang.t("VNC 服务未监听 5901 端口，请查看终端错误信息"), Toast.LENGTH_LONG).show()
                     return@runOnUiThread
                  }
                  val profile = com.gaurav.avnc.model.ServerProfile(
@@ -567,8 +567,8 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
             })
         }
         var popup: PopupWindow? = null
-        item("唤醒锁") { window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); popup?.dismiss() }
-        item("结束") {
+        item(Lang.t("唤醒锁")) { window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); popup?.dismiss() }
+        item(Lang.t("结束")) {
             popup?.dismiss()
             val s = activeSession ?: return@item
             // 先标记为主动关闭：shell 若在宽限期内自己退出，不弹「会话已结束」Toast
@@ -580,9 +580,9 @@ class TerminalActivity : AppCompatActivity(), TerminalSessionClient, TerminalVie
                 if (TerminalSessionStore.sessions.any { it === s }) closeSession(s)
             }, 1200)
         }
-        item("重置") { activeSession?.reset(); terminalView.onScreenUpdated(); popup?.dismiss() }
-        item("粘贴") { onPasteTextFromClipboard(activeSession); popup?.dismiss() }
-        item("后台运行") {
+        item(Lang.t("重置")) { activeSession?.reset(); terminalView.onScreenUpdated(); popup?.dismiss() }
+        item(Lang.t("粘贴")) { onPasteTextFromClipboard(activeSession); popup?.dismiss() }
+        item(Lang.t("后台运行")) {
             popup?.dismiss()
             finish()
         }

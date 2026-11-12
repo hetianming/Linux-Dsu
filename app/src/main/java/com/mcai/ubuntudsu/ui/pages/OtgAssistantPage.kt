@@ -25,6 +25,7 @@ import androidx.appcompat.app.AlertDialog
 import com.mcai.ubuntudsu.core.OtgAssistantCore
 import com.mcai.ubuntudsu.ui.Haptics
 import com.mcai.ubuntudsu.ui.Ui
+import com.mcai.ubuntudsu.Lang
 
 /**
  * OTG 刷机助手 - 单屏卡片式布局
@@ -50,7 +51,7 @@ class OtgAssistantPage(
     private var parsedPartitions = emptyList<OtgAssistantCore.PartitionInfo>()
     private var selectedPartition: String? = null
     private var fullImages = mutableListOf<OtgAssistantCore.ImageInfo>()
-    private val confirmationPhrase = "我确认固件包匹配当前设备，并允许清除全部用户数据"
+    private val confirmationPhrase = Lang.t("我确认固件包匹配当前设备，并允许清除全部用户数据")
 
     private data class RebootMode(
         val title: String,
@@ -79,15 +80,15 @@ class OtgAssistantPage(
     }
 
     private fun singleImageLauncher() {
-        launchBuiltInPicker(singleImageRequest, "选择单分区镜像", extAll = false, ext = ".img,.bin,.dat")
+        launchBuiltInPicker(singleImageRequest, Lang.t("选择单分区镜像"), extAll = false, ext = ".img,.bin,.dat")
     }
 
     private fun otaLauncher() {
-        launchBuiltInPicker(otaRequest, "选择 OTA 全量包（payload.bin / zip）")
+        launchBuiltInPicker(otaRequest, Lang.t("选择 OTA 全量包（payload.bin / zip）"))
     }
 
     private fun adbPushLauncher() {
-        launchBuiltInPicker(adbPushRequest, "选择要推送的文件")
+        launchBuiltInPicker(adbPushRequest, Lang.t("选择要推送的文件"))
     }
 
     /** 宿主 Activity.onActivityResulT 派发到本类，取内置选择器返回的本地文件路径 */
@@ -123,9 +124,9 @@ class OtgAssistantPage(
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED ->
-                    postUi { appendLog("\n[自动] 检测到设备接入\n"); refreshDevices() }
+                    postUi { appendLog(Lang.t("\n[自动] 检测到设备接入\n")); refreshDevices() }
                 android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED ->
-                    postUi { appendLog("\n[自动] 检测到设备断开\n"); refreshDevices() }
+                    postUi { appendLog(Lang.t("\n[自动] 检测到设备断开\n")); refreshDevices() }
             }
         }
     }
@@ -144,7 +145,7 @@ class OtgAssistantPage(
 
         // 初始化：清理旧 OTA + 加载工具
         OtgAssistantCore.deleteOtaDirectory(activity.applicationContext)
-        logView.text = "正在初始化...\n"
+        logView.text = Lang.t("正在初始化...\n")
         refreshDevices()
 
         return page
@@ -164,7 +165,7 @@ class OtgAssistantPage(
             setPadding(0, 0, 0, Ui.dp(12, d))
         }
         row.addView(TextView(activity).apply {
-            text = "OTG 刷机助手"
+            text = Lang.t("OTG 刷机助手")
             textSize = 18f
             setTypeface(Ui.typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
@@ -176,7 +177,7 @@ class OtgAssistantPage(
             )
         })
         btnRefreshDevice = TextView(activity).apply {
-            text = "刷新"
+            text = Lang.t("刷新")
             textSize = 12f
             setTextColor(Ui.buttonText(activity))
             background = Ui.neuSolidButton(softButtonColors(Ui.buttonSecondary(activity)).first, softButtonColors(Ui.buttonSecondary(activity)).second, 10f, activity)
@@ -210,13 +211,13 @@ class OtgAssistantPage(
             ).apply { bottomMargin = Ui.dp(10, d) }
         }
         card.addView(TextView(activity).apply {
-            text = "设备状态"
+            text = Lang.t("设备状态")
             textSize = 13f
             setTypeface(Ui.typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
         })
         deviceListText = Ui.logTextView(activity).apply {
-            text = "等待 USB 设备连接..."
+            text = Lang.t("等待 USB 设备连接...")
             setPadding(0, Ui.dp(6, d), 0, 0)
         }
         card.addView(deviceListText)
@@ -245,13 +246,13 @@ class OtgAssistantPage(
             ).apply { bottomMargin = Ui.dp(10, d) }
         }
         card.addView(TextView(activity).apply {
-            text = "输入命令"
+            text = Lang.t("输入命令")
             textSize = 13f
             setTypeface(Ui.typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
         })
         commandInput = EditText(activity).apply {
-            hint = "例如：adb devices / fastboot getvar all"
+            hint = Lang.t("例如：adb devices / fastboot getvar all")
             textSize = 12f
             inputType = android.text.InputType.TYPE_CLASS_TEXT
             background = Ui.neuInset(activity, 12f)
@@ -263,7 +264,7 @@ class OtgAssistantPage(
         }
         card.addView(commandInput)
         btnExecute = TextView(activity).apply {
-            text = "执行命令"
+            text = Lang.t("执行命令")
             textSize = 13f
             setTypeface(Ui.typeface, Typeface.BOLD)
             setTextColor(solidButtonText())
@@ -294,12 +295,12 @@ class OtgAssistantPage(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply { bottomMargin = Ui.dp(10, d) }
         }
-        btnPartitions = actionBtn("读取分区表", Ui.buttonSecondary(activity)) { readPartitions() }
-        btnSingleFlash = actionBtn("单分区刷写", Ui.buttonWarning(activity)) { chooseSinglePartition() }
-        btnFullFlash = actionBtn("全量包刷写", Ui.buttonDanger(activity)) { chooseFirmwareDirectory() }
-        btnReboot = actionBtn("高级重启", Ui.buttonSuccess(activity)) { showRebootMenu() }
-        btnAdbPush = actionBtn("ADB 推送", Ui.buttonSecondary(activity)) { chooseAdbPushFile() }
-        btnAdbInfo = actionBtn("ADB 设备信息", Ui.buttonPrimary(activity)) { showAdbDeviceInfo() }
+        btnPartitions = actionBtn(Lang.t("读取分区表"), Ui.buttonSecondary(activity)) { readPartitions() }
+        btnSingleFlash = actionBtn(Lang.t("单分区刷写"), Ui.buttonWarning(activity)) { chooseSinglePartition() }
+        btnFullFlash = actionBtn(Lang.t("全量包刷写"), Ui.buttonDanger(activity)) { chooseFirmwareDirectory() }
+        btnReboot = actionBtn(Lang.t("高级重启"), Ui.buttonSuccess(activity)) { showRebootMenu() }
+        btnAdbPush = actionBtn(Lang.t("ADB 推送"), Ui.buttonSecondary(activity)) { chooseAdbPushFile() }
+        btnAdbInfo = actionBtn(Lang.t("ADB 设备信息"), Ui.buttonPrimary(activity)) { showAdbDeviceInfo() }
 
         grid.addView(gridRow(btnPartitions, btnSingleFlash))
         grid.addView(gridRow(btnFullFlash, btnReboot))
@@ -347,7 +348,7 @@ class OtgAssistantPage(
             )
         }
         card.addView(TextView(activity).apply {
-            text = "输出日志"
+            text = Lang.t("输出日志")
             textSize = 13f
             setTypeface(Ui.typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
@@ -361,7 +362,7 @@ class OtgAssistantPage(
             isNestedScrollingEnabled = false
         }
         logView = Ui.logTextView(activity).apply {
-            text = "日志将显示在这里...\n"
+            text = Lang.t("日志将显示在这里...\n")
             setPadding(0, 0, 0, 0)
         }
         logScroll.addView(logView)
@@ -391,15 +392,15 @@ class OtgAssistantPage(
     private fun refreshDevices() {
         if (refreshing) return
         refreshing = true
-        appendLog("\n正在扫描设备...\n")
+        appendLog(Lang.t("\n正在扫描设备...\n"))
         Thread {
             if (!alive) return@Thread
             val devices = OtgAssistantCore.listUsbDevices(ctx)
             val protocol = OtgAssistantCore.detectProtocolDevices(ctx)
             postUi {
                 if (devices.isEmpty()) {
-                    deviceListText.text = "未找到 USB 设备"
-                    appendLog("未发现设备\n")
+                    deviceListText.text = Lang.t("未找到 USB 设备")
+                    appendLog(Lang.t("未发现设备\n"))
                 } else {
                     val shown = devices.take(8)
                     val text = shown.joinToString("\n") { deviceInfoString(it) }
@@ -424,7 +425,7 @@ class OtgAssistantPage(
     private fun executeCommand() {
         val command = commandInput.text.toString().trim()
         if (command.isEmpty()) {
-            toast("请输入命令")
+            toast(Lang.t("请输入命令"))
             return
         }
         appendLog("\n>$command\n")
@@ -462,12 +463,12 @@ class OtgAssistantPage(
     private fun chooseSinglePartition() {
         if (operationActive) return
         if (parsedPartitions.isEmpty()) {
-            toast("请先读取分区表")
+            toast(Lang.t("请先读取分区表"))
             return
         }
         val names = parsedPartitions.map { it.name }.toTypedArray()
         AlertDialog.Builder(activity)
-            .setTitle("选择目标分区")
+            .setTitle(Lang.t("选择目标分区"))
             .setItems(names) { _, which ->
                 selectedPartition = names[which]
                 singleImageLauncher()
@@ -484,9 +485,9 @@ class OtgAssistantPage(
                 val size = file.length()
                 postUi {
                     AlertDialog.Builder(activity)
-                        .setTitle("确认单分区刷写")
+                        .setTitle(Lang.t("确认单分区刷写"))
                         .setMessage("分区: $partition\n文件: $name\n大小: ${formatBytes(size)}\nSHA-256: $digest")
-                        .setNegativeButton("取消", null)
+                        .setNegativeButton(Lang.t("取消"), null)
                         .setPositiveButton("刷写") { _, _ -> Haptics.perform(activity.window.decorView); flashSingle(file, partition, name) }
                         .show()
                 }
@@ -519,13 +520,13 @@ class OtgAssistantPage(
 
     private fun extractAndScanOta(file: java.io.File) {
         val progressAnimal = TextView(activity).apply {
-            text = "已完成 0%\n准备读取 BIN/ZIP..."
+            text = Lang.t("已完成 0%\n准备读取 BIN/ZIP...")
             textSize = 13f
             setTextColor(Ui.primaryText(activity))
             gravity = Gravity.CENTER
         }
         val hint = TextView(activity).apply {
-            text = "解包速度取决于设备性能与存储速度，通常需要 2-5 分钟。"
+            text = Lang.t("解包速度取决于设备性能与存储速度，通常需要 2-5 分钟。")
             textSize = 12f
             setTextColor(Ui.secondaryText(activity))
             setPadding(0, Ui.dp(10, d), 0, 0)
@@ -538,7 +539,7 @@ class OtgAssistantPage(
             addView(hint)
         }
         val progressDialog = AlertDialog.Builder(activity)
-            .setTitle("正在解包 OTA")
+            .setTitle(Lang.t("正在解包 OTA"))
             .setView(content)
             .setCancelable(false)
             .create()
@@ -559,7 +560,7 @@ class OtgAssistantPage(
                     progressDialog.dismiss()
                     fullImages = images.toMutableList()
                     if (images.isEmpty()) {
-                        appendLog("OTA 包中没有可用的 .img 镜像\n")
+                        appendLog(Lang.t("OTA 包中没有可用的 .img 镜像\n"))
                         OtgAssistantCore.deleteOtaDirectory(ctx)
                     } else {
                         showImageSelection()
@@ -594,7 +595,7 @@ class OtgAssistantPage(
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(300, d).toInt())
         }
         val nextBtn = TextView(activity).apply {
-            text = "下一步：进入 FastbootD"
+            text = Lang.t("下一步：进入 FastbootD")
             textSize = 14f
             setTypeface(Ui.typeface, Typeface.BOLD)
             setTextColor(solidButtonText())
@@ -620,21 +621,21 @@ class OtgAssistantPage(
             addView(nextBtn)
         }
         val dialog = AlertDialog.Builder(activity)
-            .setTitle("选择 OTA 全量包分区（默认全选）")
+            .setTitle(Lang.t("选择 OTA 全量包分区（默认全选）"))
             .setView(content)
             .setNegativeButton("取消") { _, _ ->
                 OtgAssistantCore.deleteOtaDirectory(ctx)
-                appendLog("已取消选择并清理 files/ota 目录\n")
+                appendLog(Lang.t("已取消选择并清理 files/ota 目录\n"))
             }
             .create()
         dialog.setOnCancelListener {
             OtgAssistantCore.deleteOtaDirectory(ctx)
-            appendLog("已取消选择并清理 files/ota 目录\n")
+            appendLog(Lang.t("已取消选择并清理 files/ota 目录\n"))
         }
         nextBtn.setOnClickListener {
             val selected = fullImages.filter { it.selected }
             if (selected.isEmpty()) {
-                toast("至少选择一个分区")
+                toast(Lang.t("至少选择一个分区"))
                 return@setOnClickListener
             }
             dialog.dismiss()
@@ -645,7 +646,7 @@ class OtgAssistantPage(
 
     private fun showFullFlashConfirmation(selected: List<OtgAssistantCore.ImageInfo>) {
         if (selected.isEmpty()) {
-            toast("至少选择一个分区")
+            toast(Lang.t("至少选择一个分区"))
             return
         }
         val summary = selected.joinToString("\n") { "${it.partition}: ${it.name}" }
@@ -659,7 +660,7 @@ class OtgAssistantPage(
             orientation = LinearLayout.VERTICAL
             setPadding(Ui.dp(24, d), Ui.dp(8, d), Ui.dp(24, d), Ui.dp(8, d))
             addView(TextView(activity).apply {
-                text = "重要警告：必须确认固件包匹配当前设备型号、地区、版本与存储规格。" +
+                text = Lang.t("重要警告：必须确认固件包匹配当前设备型号、地区、版本与存储规格。") +
                     "刷写成功后将执行 fastboot -w，全部用户数据会被清除。\n\n待刷分区:\n$summary\n\n请输入确认短语："
                 textSize = 12f
                 setTextColor(Ui.primaryText(activity))
@@ -668,17 +669,17 @@ class OtgAssistantPage(
             addView(input)
         }
         val dialog = AlertDialog.Builder(activity)
-            .setTitle("确认全量包刷写")
+            .setTitle(Lang.t("确认全量包刷写"))
             .setView(box)
             .setNegativeButton("取消") { _, _ ->
                 OtgAssistantCore.deleteOtaDirectory(ctx)
-                appendLog("已取消刷写并清理 files/ota 目录\n")
+                appendLog(Lang.t("已取消刷写并清理 files/ota 目录\n"))
             }
-            .setPositiveButton("开始刷写", null)
+            .setPositiveButton(Lang.t("开始刷写"), null)
             .create()
         dialog.setOnCancelListener {
             OtgAssistantCore.deleteOtaDirectory(ctx)
-            appendLog("已取消刷写并清理 files/ota 目录\n")
+            appendLog(Lang.t("已取消刷写并清理 files/ota 目录\n"))
         }
         dialog.setOnShowListener {
             dialog.getAlertDialogPositive()?.setOnClickListener {
@@ -687,7 +688,7 @@ class OtgAssistantPage(
                     Haptics.perform(activity.window.decorView)
                     flashFullPackage(selected)
                 } else {
-                    toast("确认短语不匹配")
+                    toast(Lang.t("确认短语不匹配"))
                 }
             }
         }
@@ -701,7 +702,7 @@ class OtgAssistantPage(
             try {
                 for (image in images) {
                     postUi { appendLog("\n开始刷写 ${image.partition}: ${image.name}\n") }
-                    val file = image.file ?: throw IllegalStateException("镜像文件不存在")
+                    val file = image.file ?: throw IllegalStateException(Lang.t("镜像文件不存在"))
                     val result = runFastbootBlocking("fastboot flash ${image.partition} ${file.absolutePath}")
                     if (result.exitCode != 0) {
                         success = false
@@ -710,7 +711,7 @@ class OtgAssistantPage(
                     }
                 }
                 if (success) {
-                    postUi { appendLog("全部分区刷写成功，开始执行 fastboot -w\n") }
+                    postUi { appendLog(Lang.t("全部分区刷写成功，开始执行 fastboot -w\n")) }
                     val wipe = runFastbootBlocking("fastboot -w")
                     postUi { appendLog(if (wipe.exitCode == 0) "数据清除成功\n" else "数据清除失败，退出码 ${wipe.exitCode}\n") }
                 }
@@ -719,7 +720,7 @@ class OtgAssistantPage(
             } finally {
                 OtgAssistantCore.deleteOtaDirectory(ctx)
                 postUi {
-                    appendLog("已清理 files/ota 目录\n")
+                    appendLog(Lang.t("已清理 files/ota 目录\n"))
                     setOperationActive(false)
                 }
             }
@@ -734,12 +735,12 @@ class OtgAssistantPage(
             postUi {
                 setOperationActive(false)
                 if (result.exitCode == 0) {
-                    appendLog("设备正在进入 FastbootD，请等待设备重新枚举\n")
+                    appendLog(Lang.t("设备正在进入 FastbootD，请等待设备重新枚举\n"))
                     handler.postDelayed({
                         if (alive) showFullFlashConfirmation(images)
                     }, 1500)
                 } else {
-                    appendLog("进入 FastbootD 失败，请检查设备连接和当前模式\n")
+                    appendLog(Lang.t("进入 FastbootD 失败，请检查设备连接和当前模式\n"))
                 }
             }
         }.start()
@@ -761,17 +762,17 @@ class OtgAssistantPage(
             setPadding(Ui.dp(10, d), Ui.dp(8, d), Ui.dp(10, d), Ui.dp(8, d))
         }
         AlertDialog.Builder(activity)
-            .setTitle("ADB 推送文件")
+            .setTitle(Lang.t("ADB 推送文件"))
             .setMessage("文件: $name\n请输入设备上的目标路径")
             .setView(destination)
-            .setNegativeButton("取消", null)
+            .setNegativeButton(Lang.t("取消"), null)
             .setPositiveButton("推送") { _, _ -> adbPush(file, destination.text.toString().trim()) }
             .show()
     }
 
     private fun adbPush(sourceFile: java.io.File, destination: String) {
         if (destination.isEmpty()) {
-            toast("请输入目标路径")
+            toast(Lang.t("请输入目标路径"))
             return
         }
         setOperationActive(true)
@@ -820,14 +821,14 @@ class OtgAssistantPage(
 
     private fun showRebootMenu() {
         val topItems = listOf(
-            RebootMode("正常重启", "返回 Android 系统", "reboot", com.mcai.ubuntudsu.R.drawable.ic_reboot_normal, Ui.buttonSuccess(activity)),
-            RebootMode("正常关机", "通过 ADB 关闭电源", "reboot poweroff", com.mcai.ubuntudsu.R.drawable.ic_reboot_power_off, Ui.buttonWarning(activity)),
+            RebootMode(Lang.t("正常重启"), Lang.t("返回 Android 系统"), "reboot", com.mcai.ubuntudsu.R.drawable.ic_reboot_normal, Ui.buttonSuccess(activity)),
+            RebootMode(Lang.t("正常关机"), Lang.t("通过 ADB 关闭电源"), "reboot poweroff", com.mcai.ubuntudsu.R.drawable.ic_reboot_power_off, Ui.buttonWarning(activity)),
         )
         val fullItems = listOf(
-            RebootMode("热重启", "重启系统界面而不重新引导系统", "reboot", com.mcai.ubuntudsu.R.drawable.ic_reboot_hot, Ui.buttonSuccess(activity)),
-            RebootMode("Recovery", "重启到 Recovery 模式（卡刷模式）", "reboot recovery", com.mcai.ubuntudsu.R.drawable.ic_reboot_recovery, Ui.buttonSecondary(activity)),
-            RebootMode("Fastboot", "重启到 Fastboot 模式（USB 线刷模式）", "reboot bootloader", com.mcai.ubuntudsu.R.drawable.ic_reboot_fastboot, Ui.buttonSecondary(activity)),
-            RebootMode("9008 (EDL)", "重启到 9008 模式（仅限骁龙设备）", "reboot edl", com.mcai.ubuntudsu.R.drawable.ic_reboot_9008, Ui.buttonSecondary(activity)),
+            RebootMode(Lang.t("热重启"), Lang.t("重启系统界面而不重新引导系统"), "reboot", com.mcai.ubuntudsu.R.drawable.ic_reboot_hot, Ui.buttonSuccess(activity)),
+            RebootMode("Recovery", Lang.t("重启到 Recovery 模式（卡刷模式）"), "reboot recovery", com.mcai.ubuntudsu.R.drawable.ic_reboot_recovery, Ui.buttonSecondary(activity)),
+            RebootMode("Fastboot", Lang.t("重启到 Fastboot 模式（USB 线刷模式）"), "reboot bootloader", com.mcai.ubuntudsu.R.drawable.ic_reboot_fastboot, Ui.buttonSecondary(activity)),
+            RebootMode("9008 (EDL)", Lang.t("重启到 9008 模式（仅限骁龙设备）"), "reboot edl", com.mcai.ubuntudsu.R.drawable.ic_reboot_9008, Ui.buttonSecondary(activity)),
         )
 
         val grid = LinearLayout(activity).apply {
@@ -839,7 +840,7 @@ class OtgAssistantPage(
 
         // "选择操作" 标题套进玻璃边框内
         grid.addView(TextView(activity).apply {
-            text = "选择操作"
+            text = Lang.t("选择操作")
             textSize = 18f
             setTypeface(Ui.typeface, Typeface.BOLD)
             setTextColor(Ui.primaryText(activity))
@@ -936,7 +937,7 @@ class OtgAssistantPage(
         }
 
         val cancelBtn = TextView(activity).apply {
-            text = "取消"
+            text = Lang.t("取消")
             textSize = 13f
             setTypeface(Ui.typeface, Typeface.BOLD)
             setTextColor(Ui.secondaryText(activity))
@@ -977,7 +978,7 @@ class OtgAssistantPage(
                     postUi {
                         appendLog("退出码: ${result.exitCode}\n")
                         if (result.exitCode == 0 && target.isNotEmpty()) {
-                            appendLog("设备正在切换启动模式，等待重新枚举\n")
+                            appendLog(Lang.t("设备正在切换启动模式，等待重新枚举\n"))
                             waitForUsbReenumeration()
                         }
                     }
@@ -1006,7 +1007,7 @@ class OtgAssistantPage(
             }
         }
         postUi {
-            appendLog("切换模式后 Fastboot 未发现设备，请检查连接与 fastboot 输出\n")
+            appendLog(Lang.t("切换模式后 Fastboot 未发现设备，请检查连接与 fastboot 输出\n"))
             refreshDevices()
         }
     }

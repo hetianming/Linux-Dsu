@@ -192,14 +192,20 @@ object GunyahManager {
          */
         var pciUseToolchainCrosvm: Boolean = true,
         /**
-         * 显示后端：vnc = 内置 AVNC（默认，全系统可用）；
-         * android = crosvm 的 Android 原生 Surface 后端（--android-display-service
-         * crosvm_display）。v2.0 起画面与输入全部由主程序内置的
-         * NativeDisplayActivity 完成，不需要另装任何显示器 APP。
-         * 脚本会先探测 crosvm 是否真的编了 android_display 后端，
-         * 不支持时自动保持 VNC 并在 boot.log 里说明，绝不会把 VM 弄挂。
+         * 显示后端：android = crosvm 的 Android 原生 Surface 后端（默认，
+         * --android-display-service crosvm_display），画面直接进 Surface，不走 VNC；
+         * vnc = 内置 AVNC，仅作为手动回退/极端兜底保留。
+         * v2.0.37 起 APP 内置的 crosvm-mmio 已同时编入 gfxstream 3D 后端、
+         * MMIO/Gunyah 与 android_display，MMIO（iOS 启动盘）也能走原生显示。
+         * 脚本仍会探测 crosvm 是否真的带 android-display-service、4 路输入桥是否就绪，
+         * 任一失败才回退 VNC 并在 boot.log 里写明原因，绝不会把 VM 弄挂或留下死局。
          */
-        var displayBackend: String = "vnc",
+        var displayBackend: String = "android",
+        /**
+         * v2.0.37 一次性迁移标记：老配置里存的是 vnc（当时 MMIO 只支持 VNC），
+         * 首次加载时自动切到原生显示。写进配置文件，用户之后手动切回 VNC 不再被覆盖。
+         */
+        var displayBackendMigrated: Boolean = false,
     )
 
     private lateinit var privDir: File
@@ -871,6 +877,7 @@ object GunyahManager {
             cfg.mmioSound = j.optBoolean("mmioSound", cfg.mmioSound)
             cfg.pciUseToolchainCrosvm = j.optBoolean("pciUseToolchainCrosvm", cfg.pciUseToolchainCrosvm)
             cfg.displayBackend = j.optString("displayBackend", cfg.displayBackend)
+            cfg.displayBackendMigrated = j.optBoolean("displayBackendMigrated", false)
             cfg.hugepageMB = j.optInt("hugepageMB", cfg.hugepageMB)
             cfg.hpAcquireMode = j.optInt("hpAcquireMode", cfg.hpAcquireMode)
             cfg.hpSystemReserveMB = j.optInt("hpSystemReserveMB", cfg.hpSystemReserveMB)
@@ -902,6 +909,16 @@ object GunyahManager {
                 ).forEach { (label, path) ->
                     if (path.isNotBlank()) cfg.extraDisks.add(ExtraDisk(label, path, ro = true))
                 }
+            }
+            // v2.0.37 一次性迁移：老配置默认 vnc（当时 MMIO 只支持 VNC），现在内置
+            // crosvm 已编 android_display，MMIO/iOS 启动盘也能走原生显示。
+            // 必须放在所有字段读完之后再回写，避免把后面还没读的字段覆盖成默认值。
+            // 只在「未迁移过且仍是 vnc」时切一次；保存写标记后，用户手动切回 VNC
+            // 不会被改回来，绝不覆盖用户选择。
+            if (!cfg.displayBackendMigrated && cfg.displayBackend == "vnc") {
+                cfg.displayBackend = "android"
+                cfg.displayBackendMigrated = true
+                runCatching { saveConfig(ctx, cfg) }
             }
         }
         return cfg
@@ -955,6 +972,7 @@ object GunyahManager {
             put("mmioSound", cfg.mmioSound)
             put("pciUseToolchainCrosvm", cfg.pciUseToolchainCrosvm)
             put("displayBackend", cfg.displayBackend)
+            put("displayBackendMigrated", true)
             put("hugepageMB", cfg.hugepageMB)
             put("hpAcquireMode", cfg.hpAcquireMode)
             put("hpSystemReserveMB", cfg.hpSystemReserveMB)
@@ -1156,16 +1174,33 @@ object GunyahManager {
         val touchArg = sh("multi-touch[path=$touchSock,width=$rw,height=$rh]")
         val touchOn = if (cfg.displayBackend != "android" && cfg.touchPassthrough && cfg.inputDev.isBlank()) 1 else 0
         // GPU: 按显示模式生成；custom 用用户手填的 gpuArg
-        val gpuDefault = "2d,vulkan=false,displays=[[mode=windowed[$rw,$rh],refresh-rate=60,dpi=[160,160]]]"
+        // v2.0.37：内置 crosvm-mmio 已重编，同时带 gfxstream 3D 后端 + MMIO/Gunyah +
+        // android_display。GpuMode 现在能解析 2d / gfxstream（virglrenderer 仍未编，不要给）。
+        // 字段依据 devices/src/virtio/gpu/parameters.rs 的 GpuParameters
+        // （deny_unknown_fields + kebab-case），下列字段全部合法，不会在解析阶段被拒：
+        //   backend / context-types / egl / gles / external-blob / vulkan / udmabuf /
+        //   displays / pci-bar-size / vram-limit / gunyah-pvm
+        // 官方真机参数来自 deploy/gfxstream/run_ubuntu_gfx.sh 与 CROSVM_3D_LAUNCH_REFERENCE.md。
+        // 保守起见不写死 pci-bar-size / vram-limit / udmabuf（与 Gunyah 大页池、MMIO 无 SHM
+        // aperture 有关），交给「自定义 GPU 参数」由用户按需加；预设只给最小可解析串。
+        val ios2d = "backend=2d,displays=[[mode=windowed[$rw,$rh]]]"
+        val iosGfx = "backend=gfxstream,context-types=gfxstream-vulkan," +
+            "egl=true,gles=true,external-blob=true,vulkan=true," +
+            "displays=[[mode=windowed[$rw,$rh]]],gunyah-pvm=true"
+        val gpuDefault = ios2d
         val gpuArgRaw = when (cfg.displayMode) {
-            "gpu2d" -> "2d,vulkan=false,displays=[[mode=windowed[$rw,$rh],refresh-rate=60,dpi=[160,160]]]"
-            "gpu3d" -> "3d,vulkan=true,displays=[[mode=windowed[$rw,$rh],refresh-rate=60,dpi=[160,160]]]"
+            // v2.0.37 恢复 iosgfx：3D 后端现已编入，不再降级到 2D。
+            "iosgfx" -> iosGfx
+            // iosvirgl / gpu2d / gpu3d 是历史预设，本机没有 virglrenderer，安全落到 2D
+            "ios2d", "iosvirgl", "gpu2d", "gpu3d" -> ios2d
             "custom" -> cfg.gpuArg.ifBlank { gpuDefault }
             else -> gpuDefault
         }
         val gpuArg = sh(gpuArgRaw)
         // 只有明确选了 GPU 模式才把 gpu 放在组合链前面；simplefb 模式全程 simplefb
-        val preferGpu = cfg.gpu && (cfg.displayMode == "gpu2d" || cfg.displayMode == "gpu3d" || cfg.displayMode == "custom")
+        val preferGpu = cfg.gpu && (cfg.displayMode == "gpu2d" || cfg.displayMode == "gpu3d" ||
+            cfg.displayMode == "custom" || cfg.displayMode == "iosvirgl" || cfg.displayMode == "iosgfx" ||
+            cfg.displayMode == "ios2d")
         // 盘位挂载标志在「生成期」就定好，绝不依赖手机 shell 的 od/cmp/head 是否齐全：
         // qcow2 一律可写打开 —— crosvm 打开 qcow2 会校验 refcount 表，镜像带 dirty 位 /
         // lazy_refcounts / 首 cluster refcount=0 时会重建并回写 header，只读 fd 写不了，
@@ -1301,7 +1336,9 @@ CROSVM=""
 # 用户反馈「换成我们自己的 crosvm 后网络不正常」。现在 PCI 默认回到工具链自带
 # 的 AOSP crosvm（UBC 包），也就是之前网络正常的那份；它同时带
 # --android-display-service 原生显示后端，v2.0 起由主程序内置显示器直接使用。
-# MMIO（Darwin/XNU, 即 iOS 启动盘）没有 PCI 宿主驱动，仍必须用内置自编版。
+# MMIO（Darwin/XNU, 即 iOS 启动盘）没有 PCI 宿主驱动，仍必须用内置自编版；
+# v2.0.37 起这份内置版也已编入 android_display + gfxstream，MMIO 下原生显示与
+# 3D 后端都可用，不再因为「只有工具链版有原生显示」而切到 PCI。
 if [ "@DMMIO" = "0" ] && [ -x "@DDVM/crosvm" ] && { [ "@DPCI_TOOLCHAIN" = "1" ] || [ "@DANDROID_DISP" = "1" ]; }; then
     CROSVM="@DDVM/crosvm"
     echo "[*] PCI 模式: 使用工具链 crosvm (AOSP 版, 网络栈正常)" >&2
@@ -2040,7 +2077,10 @@ net_setup() {
             >> "@DWORK/net.log" 2>&1 &
         DHCP_PID=@D!
         sleep 1
-        if kill -0 "@D{DHCP_PID:-0}" 2>/dev/null; then
+        # v2.0.38：gunydhcpd 会 daemonize，$! 记到的父进程可能已经退出，
+        # 单看 kill -0 会误报「DHCP 没起来」（真机实测 net.log 明明已
+        # "ready, 34 iface(s) bound"）。补 pidof 兜底，判活以真进程为准。
+        if kill -0 "@D{DHCP_PID:-0}" 2>/dev/null || pidof gunydhcpd3 >/dev/null 2>&1; then
             echo "[*] 网络就绪: @DNET_BR @DNET_GW/@DNET_PREFIX, DHCP 已启动 (pid @DDHCP_PID)"
             # 把 DHCP 自报的参数抄进 boot.log，确认 iface / 地址池没写错
             head -3 "@DWORK/net.log" 2>/dev/null | sed 's/^/    /'
@@ -2072,27 +2112,66 @@ net_setup() {
     return 0
 }
 
+# ---------- v2.0.38：crosvm 重建「裸 tap」后的自愈 ----------
+# 真机实测（MMIO + simplefb + 网络开）：CMD 里 --net tap-name=gunytap0 与
+# --virtio-mmio-net 都生效，crosvm 也枚举出 mmiovirtio-net，但 crosvm 用
+# TUNSETIFF 带 IFF_VNET_HDR / IFF_MULTI_QUEUE 打开 gunytap 预建的 persistent
+# tap 时，flag 不一致会让内核注销旧设备、重建一个同名「裸 tap」：
+#   down / mtu 1500 / 不在任何 bridge / MAC 随机
+# 表现：guest 一直在发帧，但 crosvm 写 tap 全部
+#   "failed to write frame to tap: I/O error (os error 5)"，
+#   gunydhcpd 的 discover=0，guest 永远拿不到 IP。
+# 旧版 ensure_tap_on_bridge 只在 try_start 第 5 秒查一次，正好撞上
+# 「旧设备已注销、新设备还没建好」的窗口，打印「tap 不存在」就 return 0，
+# 之后 TAP_DONE=1 再也不复查 —— 这就是这次断网的直接原因。
+#
+# 修复铁律：
+#   * 绝不 ip link del、绝不重新 TUNSETIFF。删设备会让 crosvm 手里的 tap fd
+#     立刻变 EBADFD(77)，之后每个包都写不出去（见 on_exit 上方注释）。
+#   * 只用 ip link set 改属性，幂等、可反复执行。
+#   * 由 watch_vm 后台每 2 秒兜底，覆盖「crosvm 第 8 秒才建好 tap」的时间窗。
+# 返回: 0=健康或无需修, 1=tap 还没出现 / 仍挂不上 bridge
+tap_heal_once() {
+    [ "@DNETON" = "1" ] || return 0
+    [ "@DNET_BR" = "@DNET_TAP" ] && return 0
+    [ -d "/sys/class/net/@DNET_TAP" ] || return 1
+    _had=0
+    [ -e "/sys/class/net/@DNET_TAP/master" ] && _had=1
+    # bridge 只补建、不删
+    if [ ! -d "/sys/class/net/@DNET_BR" ]; then
+        ip link add name "@DNET_BR" type bridge 2>/dev/null
+        ip addr add "@DNET_GW/@DNET_PREFIX" dev "@DNET_BR" 2>/dev/null
+        ip link set "@DNET_BR" type bridge stp_state 0 forward_delay 0 2>/dev/null
+    fi
+    ip link set "@DNET_BR" up 2>/dev/null
+    # tap 的 MAC 必须与 guest 网卡不同，否则 DHCP OFFER 会被 guest 当回环帧丢掉
+    ip link set "@DNET_TAP" address "@DNET_TAP_MAC" 2>/dev/null
+    [ "@D_had" = "1" ] || ip link set "@DNET_TAP" master "@DNET_BR" 2>/dev/null
+    ip link set "@DNET_TAP" mtu 1400 2>/dev/null
+    ip link set "@DNET_TAP" up 2>/dev/null
+    if [ -e "/sys/class/net/@DNET_TAP/master" ]; then
+        if [ "@D_had" = "0" ]; then
+            echo "[✓] 网络自愈: tap @DNET_TAP 已挂回 @DNET_BR (up / mtu1400 / MAC @DNET_TAP_MAC)"
+            echo "    crosvm 重建的裸 tap 已修好；guest 的 DHCP 重试很快就该拿到地址"
+        fi
+        return 0
+    fi
+    return 1
+}
+
 # crosvm 启动后再确认一次 tap 在 bridge 里。
-# 有些情况下 crosvm 打开 tap 失败会自己重建一个同名设备，新 tap 不在 bridge 上——
-# 表现就是 guest 里网卡、MAC 全对，但 DHCP 永远等不到，Windows 一直「正在识别…」。
 ensure_tap_on_bridge() {
     [ "@DNETON" = "1" ] || return 0
-    # tap 直连模式没有 bridge，不需要（也不能）挂
     [ "@DNET_BR" = "@DNET_TAP" ] && return 0
-    [ -d "/sys/class/net/@DNET_TAP" ] || {
-        echo "[!] crosvm 启动后 tap @DNET_TAP 不存在（crosvm 可能没建网卡）"; return 0; }
-    if [ ! -e "/sys/class/net/@DNET_TAP/master" ]; then
-        echo "[!] crosvm 启动后 tap 不在 bridge 里，重新挂载..."
-        ip link set "@DNET_TAP" master "@DNET_BR" 2>/dev/null
-        ip link set "@DNET_TAP" up 2>/dev/null
-        if [ -e "/sys/class/net/@DNET_TAP/master" ]; then
-            echo "[✓] tap 已挂回 @DNET_BR"
-        else
-            echo "[!!] tap 仍挂不上 @DNET_BR（bridge 被 SELinux 限制？）"
-        fi
+    if [ ! -d "/sys/class/net/@DNET_TAP" ]; then
+        # 第 5 秒常撞上 crosvm 正在重建 tap 的窗口：不是没建网卡，交给后台自愈。
+        echo "[*] 网络自愈: tap @DNET_TAP 此刻尚未出现（crosvm 正在建设备），交给后台观察继续修"
+        return 0
     fi
-    # DHCP 进程要是被杀了也顺手拉起来
-    if { [ -z "@D{DHCP_PID:-}" ] || ! kill -0 "@D{DHCP_PID:-0}" 2>/dev/null; } && [ -x "@DDHCP_BIN" ]; then
+    tap_heal_once
+    # DHCP 进程要是被杀了也顺手拉起来；gunydhcpd 会 daemonize，$! 未必是存活
+    # pid，一律用 pidof 判活，避免「进程明明在跑却打印『DHCP 没起来』」的误判。
+    if ! pidof gunydhcpd3 >/dev/null 2>&1 && [ -x "@DDHCP_BIN" ]; then
         echo "[!] DHCP 进程已不在，重新拉起"
         "@DDHCP_BIN" -a "@DNET_GW/@DNET_PREFIX" \
             -r "@DNET_DHCP_START-@DNET_DHCP_END" -d 223.5.5.5,114.114.114.114 -l 86400 \
@@ -2136,10 +2215,12 @@ case "@D(echo "@DCD_ROM @DSYSTEM_DISK" 2>/dev/null | tr 'A-Z' 'a-z')" in
 esac
 
 # ---------- 4.6 显示后端能力探测（必须在起输入桥之前） ----------
-# 内置 crosvm-mmio（MMIO / iOS 启动盘）没有编 android_display 后端，只有 UBC
-# 工具链那份 AOSP crosvm 有。必须先判清楚再决定起「4 路」还是「1 路」输入桥：
-# 否则原生显示不支持时回退 VNC，7788 已被 4 路桥占住，VNC 平板触摸桥就起不来，
-# 等于又回到「能看不能点」。这里判完直接把 ANDROID_DISP 改回 0，让 4.7 走 VNC 分支。
+# v2.0.37：内置 crosvm-mmio 已重编为 3D(gfxstream) + MMIO/Gunyah + android_display
+# 合体版，MMIO / iOS 启动盘也能走原生显示；PCI 与 MMIO 用同一份二进制。
+# 仍保留真能力探测（不假检测）：万一投放失败、回退到工具链旧版或用户手动替换了
+# 不带该 flag 的 crosvm，才兜底回退 VNC，并在 boot.log 写明原因。
+# 必须先判清楚再决定起「4 路」还是「1 路」输入桥：否则回退 VNC 时 7788 已被
+# 4 路桥占住，VNC 平板触摸桥就起不来，等于「能看不能点」。
 have_flag() { grep -aq -- "--@D1" "@DCROSVM" 2>/dev/null; }
 # v2.0.14：absolute-mouse 是 --input 的【子类型】（help 里形如 absolute-mouse[path=...]，
 # 不带 -- 前缀），不能用 have_flag。直接查二进制里有没有这个解析器：没有就回退相对 mouse，
@@ -2152,7 +2233,7 @@ if [ "@DANDROID_DISP" = "1" ]; then
     if have_flag android-display-service; then
         NATIVE_ACTIVE=1
     else
-        echo "[!] 当前 crosvm 未编 android_display 后端 (MMIO/iOS 启动盘常见) -> 自动回退 VNC（保留原有 VNC 输入桥）" >&2
+        echo "[!] 当前 crosvm 未编 android-display-service -> 兜底回退 VNC（保留原有 VNC 输入桥）; 检查 assets 投放是否被覆盖" >&2
         ANDROID_DISP=0
         VNC=1
         # 回退后行为要和「一开始就选 VNC」完全一致：touchOn 在生成期是按
@@ -2444,15 +2525,19 @@ ${cfg.extraDisks.mapIndexed { i, d ->
         VNC_ARG="host=@D{VNC_HOST:-127.0.0.1},port=@D{VNC_PORT:-5905},view-only=false,screen=@DSCREEN${vncCap}"
         C="@DC --vnc-server @DVNC_ARG"
     fi
-    # v2.0 Android 原生显示后端（主程序内置，不再需要任何独立显示器 APP）：
-    # crosvm 注册名为 crosvm_display 的 binder 服务，NativeDisplayActivity 通过
-    # 主程序自有 root 服务拿到 ICrosvmAndroidDisplayService 并 setSurface，
-    # 画面直接进 Android Surface，零 VNC 编码开销。只有带 android_display 后端
-    # 的 crosvm（UBC 工具链 AOSP 版）才有这个 flag；内置自编 crosvm-mmio 没有
-    # -> 4.6 段已提前判定并回退 VNC，绝不会因为一个不认识的参数把 VM 弄挂。
+    # v2.0.37 Android 原生显示后端（主程序内置，不再需要任何独立显示器 APP）：
+    # 内置 crosvm-mmio 已编入 android_display，自己用 NDK libbinder_ndk 直接
+    # AServiceManager_addService 注册名为 crosvm_display 的 binder 服务（不依赖
+    # 普通 root 手机没有的 AVF/IVirtualizationServiceInternal），
+    # NativeDisplayActivity 通过主程序自有 root 服务拿到
+    # ICrosvmAndroidDisplayService 并 setSurface，画面直接进 Android Surface，
+    # 零 VNC 编码开销。PCI 与 MMIO 用同一份二进制，MMIO/iOS 启动盘同样生效。
+    # 4.6 段已做真能力探测，不支持才兜底回退 VNC，不会因不认识的参数把 VM 弄挂。
+    # 不写 screen=：crosvm 会把未指定 screen 的 exporter 绑到实际存在的屏
+    # （有 --gpu → gpu-0，否则 → simplefb），simplefb 与 GPU 模式都自动对。
     if [ "@DNATIVE_ACTIVE" = "1" ]; then
         C="@DC --android-display-service crosvm_display"
-        echo "[*] 显示后端: 内置原生 Surface (crosvm_display) 已启用" >&2
+        echo "[*] 显示后端: 内置原生 Surface (crosvm_display) 已启用, 不走 VNC" >&2
     fi
     # v2.0.10 原生显示：4 个 unix socket 由主程序 root 服务进程(InputSocketHost)在
     # crosvm 启动前 bind+listen 好（APP 侧 start() 同步等待），与本段 --input 的 path
@@ -2477,6 +2562,15 @@ ${cfg.extraDisks.mapIndexed { i, d ->
             echo "[!] 此 crosvm 无 absolute-mouse 子类型, 7790 回退相对 mouse (APP 自动改发相对事件)" >&2
         fi
         C="@DC --input switches[path=/data/local/tmp/gyah_input_7791.sock]"
+        # v2.0.37：MMIO（Darwin/XNU, iOS 启动盘）没有 PCI 宿主驱动，这 4 路输入必须一起
+        # 挂到 virtio-mmio，否则原生显示有画面但触摸/键盘/鼠标全废（死局）。
+        # --virtio-mmio-input 是全局开关（cmdline.rs 的 argh switch），会把上面所有
+        # --input 设备统一改挂 MMIO（sys/linux.rs:1550 遍历所有 DeviceType::Input），
+        # 所以只需追加一次，不能每个 --input 各写一遍。
+        if [ "@DMMIO" = "1" ] && have_flag virtio-mmio-input; then
+            C="@DC --virtio-mmio-input"
+            echo "[*] 输入: 4 路已改挂 virtio-mmio (MMIO/Darwin 无 PCI 宿主驱动)" >&2
+        fi
     elif [ "@DSLIM" = "0" ] && have_flag input && [ -n "@DINPUT_DEV" ]; then
         # 同上: --virtio-mmio-input 只改传输, --input 才是设备本体
         if [ "@DMMIO" = "1" ] && have_flag virtio-mmio-input; then
@@ -2623,7 +2717,17 @@ net_verdict() {
     _rx=@D(cat "/sys/class/net/@DNET_TAP/statistics/rx_packets" 2>/dev/null)
     _tx=@D(cat "/sys/class/net/@DNET_TAP/statistics/tx_packets" 2>/dev/null)
     echo "[!] 120s 内 guest 仍未拿到 IP (tap rx=@D{_rx:-?} tx=@D{_tx:-?})"
-    if [ "@D{_rx:-0}" -eq 0 ] 2>/dev/null; then
+    # v2.0.38：先判「宿主 tap 写帧失败」。crosvm 打出
+    #   "net: tx: failed to write frame to tap: I/O error (os error 5)"
+    # 就说明 guest 已经在发帧、virtio-net 驱动也在，是宿主侧 tap 被重建后
+    # down / 没挂 bridge，帧根本进不了内核协议栈。旧版把 rx=0 一律归为
+    # 「guest 缺驱动」，会把人往 Windows NetKVM 上带，是彻底误判。
+    if grep -qa "failed to write frame to tap" "@DBOOTLOG" 2>/dev/null; then
+        echo "    诊断 H(宿主侧): crosvm 写 tap 全部失败(EIO) —— guest 在发包、驱动正常，"
+        echo "            是 crosvm 重建的裸 tap 处于 down / 没挂 bridge，帧进不了协议栈。"
+        echo "            看上面「网络自愈」日志：是否已把 tap 挂回 @DNET_BR 并置 up。"
+        echo "            若一直没修好，检查 SELinux 是否拦了 ip link set master。"
+    elif [ "@D{_rx:-0}" -eq 0 ] 2>/dev/null; then
         echo "    诊断 A: guest 一个以太网帧都没发出来 —— guest 里没有 virtio-net 驱动。"
         echo "            Windows: 设备管理器「以太网控制器」带感叹号 → 装驱动盘里的 NetKVM\\w11\\ARM64"
     elif grep -qa "\[dd\] DISCOVER" "@DWORK/net.log" 2>/dev/null; then
@@ -2660,7 +2764,13 @@ net_selftest() {
     echo "  neigh=@D(ip -4 neigh show dev "@DNET_BR" 2>/dev/null | head -2 | tr '\n' ';')"
     tail -n 6 "@DWORK/net.log" 2>/dev/null | sed 's/^/  dhcp| /'
     _rx=@D(cat /sys/class/net/@DNET_TAP/statistics/rx_packets 2>/dev/null || echo 0)
-    if [ "@D{_rx:-0}" -eq 0 ] 2>/dev/null; then
+    # v2.0.38：rx_packets=0 有两种完全不同的成因，先看 crosvm 有没有写帧报错。
+    # EIO = guest 发了帧但宿主 tap 拒收（重建的裸 tap down / 没挂 bridge），
+    # 绝不是「guest 没驱动」。旧版一律打印缺驱动，会把排错方向彻底带偏。
+    if grep -qa "failed to write frame to tap" "@DBOOTLOG" 2>/dev/null; then
+        echo "  => 宿主 tap 写帧失败(EIO)：guest 在发包、驱动正常，是 tap 被重建后 down/没挂 bridge"
+        echo "     看上面 master/state/mtu，以及日志里的「网络自愈」；不是缺 virtio-net 驱动"
+    elif [ "@D{_rx:-0}" -eq 0 ] 2>/dev/null; then
         echo "  => guest 一帧都没发：网卡没被 guest 识别（缺 virtio-net 驱动，或 crosvm 没带上 --net）"
     elif ! grep -qa "DISCOVER" "@DWORK/net.log" 2>/dev/null; then
         echo "  => guest 在发包但没有 DISCOVER：guest 的 DHCP Client 服务没跑"
@@ -2702,6 +2812,12 @@ watch_vm() {
         sleep 2
         _i=@D((_i + 1))
         kill -0 "@DPID" 2>/dev/null || return 0
+        # v2.0.38：crosvm 大约在启动第 8 秒才用 TUNSETIFF 建（或重建）tap，
+        # 晚于 try_start 第 5 秒那次 ensure_tap_on_bridge。旧版只查一次就
+        # TAP_DONE=1 再不复查，于是被重建的裸 tap 永远 down / 不在 bridge。
+        # 这里后台每 2 秒幂等复查：函数内部只在状态真变化时打印，健康时静默，
+        # 不刷屏、不重启 crosvm、不动启动链。
+        if [ "@DNETON" = "1" ] && [ "@DCUR_NET" = "1" ]; then tap_heal_once; fi
         if [ "@D_i" -ge 4 ] && shim_dead; then
             echo "[!!] Gunyah shim @D((_i * 2))s 后崩溃 (guest 没起来, 画面会是空的)"
             log_since | grep -aE "SHIM DIED|gave up|refused MEM_ACCEPT" | head -3
